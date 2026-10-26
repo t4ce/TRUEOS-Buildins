@@ -11,7 +11,6 @@ use std::path::PathBuf;
 
 use anyhow::{Context, bail};
 use indoc::writedoc;
-use rayon::prelude::*;
 
 use crate::rules::{JOIN_RULES_GRAPHEME_CLUSTER, JOIN_RULES_LINE_BREAK};
 
@@ -1022,7 +1021,7 @@ fn build_best_trie(
     }
 
     tasks
-        .par_iter()
+        .iter()
         .map(|shifts| build_trie(uncompressed.to_vec(), shifts))
         .min_by_key(|t| t.total_size)
         .unwrap()

@@ -315,7 +315,7 @@ impl TextBuffer {
             language: None,
             ruler: 0,
             encoding: "UTF-8",
-            newlines_are_crlf: cfg!(windows), // Windows users want CRLF
+            newlines_are_crlf: false,
             insert_final_newline: false, // NOTE: Even with POSIX, single-line buffers need this to be false
             overtype: false,
 
@@ -805,7 +805,7 @@ impl TextBuffer {
             }
 
             // We'll assume CRLF if more than half of the lines end in CRLF. If there is only a single line, we'll use the platform default.
-            let newlines_are_crlf = if lines == 0 { cfg!(windows) } else { crlf_count > lines / 2 };
+            let newlines_are_crlf = lines > 0 && crlf_count > lines / 2;
 
             // We'll assume tabs if there are more lines starting with tabs than with spaces.
             let indent_with_tabs = tab_indentations > space_indentations;

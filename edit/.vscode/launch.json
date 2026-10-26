@@ -2,18 +2,6 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Launch edit (Windows)",
-            "preLaunchTask": "rust: cargo build",
-            "type": "cppvsdbg",
-            "request": "launch",
-            "console": "externalTerminal",
-            "program": "${workspaceFolder}/target/debug/edit",
-            "cwd": "${workspaceFolder}",
-            "args": [
-                "${workspaceFolder}/assets/highlighting-tests/markdown.md"
-            ],
-        },
-        {
             "name": "Launch edit (GDB, Linux)",
             "preLaunchTask": "rust: cargo build",
             "type": "cppdbg",

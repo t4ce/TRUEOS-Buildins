@@ -3,7 +3,6 @@
 
 //! Unix-specific platform code.
 //!
-//! Read the `windows` module for reference.
 //! TODO: This reminds me that the sys API should probably be a trait.
 
 use std::ffi::{c_char, c_int, c_void};

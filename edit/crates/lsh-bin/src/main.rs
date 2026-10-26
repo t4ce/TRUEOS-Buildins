@@ -5,8 +5,6 @@ use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, IsTerminal, Write as _, stdin, stdout};
 #[cfg(unix)]
 use std::os::unix::io::{AsRawFd, FromRawFd};
-#[cfg(windows)]
-use std::os::windows::io::{AsRawHandle, FromRawHandle};
 use std::path::{Path, PathBuf};
 use std::process::exit;
 
@@ -199,10 +197,6 @@ fn run_render(
         #[cfg(unix)]
         unsafe {
             File::from_raw_fd(stdin().as_raw_fd())
-        }
-        #[cfg(windows)]
-        unsafe {
-            File::from_raw_handle(stdin().as_raw_handle())
         }
     };
     let reader = BufReader::with_capacity(128 * 1024, file);

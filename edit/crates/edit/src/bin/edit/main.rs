@@ -317,7 +317,7 @@ fn handle_args(state: &mut State) -> apperr::Result<bool> {
                 goto_next = true;
                 continue;
             }
-            if arg == "-h" || arg == "--help" || (cfg!(windows) && arg == "/?") {
+            if arg == "-h" || arg == "--help" {
                 print_help();
                 return Ok(true);
             }

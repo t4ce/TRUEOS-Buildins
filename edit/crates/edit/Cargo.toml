@@ -18,10 +18,6 @@ entry-abi = "argv-v1"
 name = "edit"
 path = "src/bin/edit/main.rs"
 
-[[bench]]
-name = "lib"
-harness = false
-
 [features]
 # Display editor latency in the top-right corner
 debug-latency = []
@@ -42,22 +38,3 @@ lsh.workspace = true
 # The default toml crate bundles its dependencies with bad compile times. Thanks.
 # Thankfully toml-span exists. FWIW the alternative is yaml-rust (without the 2 suffix).
 toml-span = { version = "=0.7.1", default-features = false }
-
-[target.'cfg(windows)'.build-dependencies]
-winresource = { version = "0.1", default-features = false }
-
-[target.'cfg(windows)'.dependencies.windows-sys]
-version = "0.61"
-features = [
-    "Win32_Globalization",
-    "Win32_Security",
-    "Win32_Storage_FileSystem",
-    "Win32_System_Console",
-    "Win32_System_IO",
-    "Win32_System_LibraryLoader",
-    "Win32_System_Threading",
-]
-
-[dev-dependencies]
-criterion = { version = "0.8", features = ["html_reports"] }
-zstd = { version = "0.13", default-features = false }
