@@ -1,0 +1,32 @@
+┯─ᗰ ☰ ＮＵ╾─┤🯀
+│Use ⌨   Tab╰─╮
+├─Mount      ╾┤
+│🯰   first    │
+│             │
+├─View       ╾┤ 
+│🯰 ☩ center   ╽
+│🯱   depth   ▇╮       		-> adjust to cycle from 0 to 7, in steps of 1
+│🯲   space   ▂┥		-> adjust just name i guess
+│🯳   line    █┥
+│🯴   layout  ▁╯  		-> layout: toggle tree or radial
+│             ╿
+├─Act        ╾┤ 
+│🯰   new 🖿    │
+│🯱   new 🖹    │
+│🯲   del ␡    │	
+│🯳   sha ＃   │	
+│🯴   .z7 🗜    │	
+│🯵   esc ␛    │ 			-> with current logic only Act and Clip change in length, and all use same 🯰🯱🯲🯳🯴🯵🯶🯷🯸🯹 for entries, makes it simple.  
+│             │
+├─Clip 🖈     ╾┤			-> can start with a "0 Empty" placeholder
+│🯱   next     │		
+│🯰   first    │
+╰─────────────╯
+
+Toggle, up to 8 Toggles, can adjust to skip for eg, 2 state only need ▁ and  █ ::::: ▁ → ▂ → ▃ → ▄ → ▅ → ▆ → ▇ → █
+⚚	9882	269A	STAFF OF HERMES	
+
+│🯱   depth  ╭▇╮
+│🯲   space  ┝▂┥
+│🯳   line   ┝█┥
+│🯴   layout ╰▁╯

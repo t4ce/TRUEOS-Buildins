@@ -1,0 +1,16 @@
+{
+  "buildins": [
+    "apps",
+    "commander",
+    "hull",
+    "hyper",
+    "ssh",
+    "img",
+    "os",
+    "backup",
+    "termdir",
+    "edit",
+    "share",
+    "paper"
+  ]
+}

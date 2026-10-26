@@ -1,0 +1,69 @@
+🞃🞁🞃🞁🞃🞁🞃🞁🞃🞁🞃🞁 Text 🞃🞁🞃🞁🞃🞁🞃 🗺  ┯─╼ Menu ╾──╮
+🖿 ⎛00000000000000000000000000│  Mount    │
+  ⎜00000000000000000000000000│		 │
+🖿 ⎜00000000000000000000000000│		 │
+🖹 ⎜00000000000000000000000000│		 │
+🖿 ⎜00000000000000000000000000│		 │
+🖿 ⎜00000000000000000000000000│		 │
+  ⎝00000000000000000000000000│		 │
+🗑 🞁🞃🞁🞃🞁🞃🞁🞃🞁🞃 Text 🞁🞃🞁🞃🞁🞃🞁🞃🞁🞃🞁╰───────────╯
+⇝ Async delete started.
+⇝ Async delete completed.
+⇝ Async move started/completed/failed.
+⇝ Reason: "Out of Storage".
+⇝ File/Folder renamed.
+...
+
+Drag box for Testfile.txt and Folder
+  ╾──────╮
+╿Testfile│
+╰────────🖹
+  ╾──────╮
+╿Testfold│
+╰────────🖿
+
+MainMenu	
+┯─╼ Menu ╾──╮
+│mount      │
+│🯰 ☩ disc1  │
+│🯱   disc2  │
+│view       │ 
+│🯰   layout │ 
+│🯱   space  │ 
+│exit (esc) │ 
+╰───────────╯
+
+SelectionMenuFolder
+┯🖿 Foldername ╾──╮
+│path:           │
+│apps/Foldername │
+Actions
+│🯰 ☩ sha256      │
+│🯱   zip         │
+│🯲   remove      │
+│🯳               │
+│🯴               │ 🖿 🖹
+╰────────────────╯
+
+SelectionMenuFile
+┯🖹 Filename ╾──╮
+│ 1.2 MB       │
+Actions
+│🯰 ☩ sha256    │
+│🯱   zip       │
+│🯲             │
+│🯳             │
+│🯴             │
+╰──────────────╯
+
+╒══╗ Confirm  ╔══╕
+│  ╚══════════╝  │
+│ 3Row Maximum   │
+│ custom Messag  │
+│ custom Messag  │ 
+├╌╌╌╌╌╌╌╌┬╌╌╌╌╌╌╌┤
+╞═⫸ yes ═╪═⫸ no ═╡
+╘════════╧═══════╛
+
+🯰🯱🯲🯳🯴🯵🯶🯷🯸🯹
+⌨  ⎙	⎚

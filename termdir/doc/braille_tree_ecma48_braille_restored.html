@@ -1,0 +1,2168 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>12-Color Braille File Tree</title>
+<style>
+:root{
+  color-scheme:dark;
+  --bg:#ffffff;
+  --panel:#ffffff;
+  --line:#d7dce2;
+  --text:#111827;
+  --muted:#6b7280;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--text);
+  font:14px/1.4 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+}
+.app{width:min(100%,1180px);margin:0 auto;padding:18px}
+.top{display:flex;flex-wrap:wrap;gap:12px;justify-content:flex-end;align-items:center;margin-bottom:12px}
+.title{font-weight:700}
+.muted{color:var(--muted)}
+.controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+
+.combo{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  color:#4b5563;
+  font:12px/1 ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;
+}
+.combo select{
+  min-width:150px;
+  border:1px solid var(--line);
+  background:#fff;
+  color:#111827;
+  border-radius:9px;
+  padding:8px 28px 8px 9px;
+  font:12px/1 ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;
+  cursor:pointer;
+}
+.combo select:hover,.combo select:focus{
+  border-color:#9ca3af;
+  outline:none;
+}
+button,.select-menu>summary{
+  border:1px solid var(--line);
+  background:var(--panel);
+  color:var(--text);
+  border-radius:9px;
+  padding:8px 11px;
+  cursor:pointer;
+  list-style:none;
+}
+button:hover,.select-menu>summary:hover{border-color:#9ca3af;background:#f9fafb}
+button:disabled{opacity:.4;cursor:not-allowed}
+.select-menu{position:relative}
+.select-menu>summary::-webkit-details-marker{display:none}
+.select-popover{
+  position:absolute;z-index:30;right:0;top:calc(100% + 6px);width:210px;padding:6px;
+  border:1px solid var(--line);border-radius:10px;background:#ffffff;
+  box-shadow:0 12px 30px rgba(0,0,0,.35)
+}
+.select-popover button{
+  width:100%;border:0;background:transparent;text-align:left;padding:8px 9px;border-radius:7px
+}
+.select-popover button:hover{background:#f3f4f6}
+.select-popover .divider{height:1px;background:var(--line);margin:5px 3px}
+.stats{
+  display:flex;gap:14px;flex-wrap:wrap;margin-bottom:10px;color:var(--muted);
+  font:12px/1.3 ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace
+}
+.shell{
+  overflow:auto;border:1px solid #20262e;border-radius:12px;background:#070a0d
+}
+.stage{
+  position:relative;
+  width:max-content;
+  min-width:max-content;
+  background:#070a0d;
+}
+#terminal{
+  position:relative;
+  z-index:2;
+  display:block;
+  margin:0;
+  padding:10px;
+  width:calc(120ch + 20px);
+  min-width:calc(120ch + 20px);
+  white-space:pre;
+  user-select:none;
+  touch-action:none;
+  cursor:default;
+  color:#cbd5df;
+  background:transparent;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;
+  font-size:12px;
+  line-height:15px;
+  font-variant-ligatures:none;
+}
+#terminal.dragging{cursor:grabbing}
+#terminal.panning{cursor:grabbing}
+#colorLayer{
+  position:absolute;
+  z-index:1;
+  inset:0 auto auto 0;
+  pointer-events:none;
+}
+
+.terminal-menu{
+  position:absolute;
+  z-index:8;
+  top:10px;
+  left:50%;
+  transform:translateX(-50%);
+  display:flex;
+  align-items:flex-start;
+  gap:1ch;
+  height:15px;
+  color:#cbd5df;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;
+  font-size:12px;
+  line-height:15px;
+  white-space:nowrap;
+}
+.terminal-menu-group{
+  position:relative;
+}
+.terminal-menu-trigger{
+  display:block;
+  height:15px;
+  margin:0;
+  padding:0;
+  border:0;
+  border-radius:0;
+  background:transparent;
+  color:transparent;
+  font:inherit;
+  line-height:15px;
+  cursor:pointer;
+}
+.terminal-menu-trigger:hover,
+.terminal-menu-trigger:focus,
+.terminal-menu-trigger[aria-expanded="true"]{
+  background:transparent;
+  color:transparent;
+  outline:none;
+}
+.terminal-menu-trigger strong{
+  font-weight:800;
+  color:transparent;
+}
+.terminal-dropdown{
+  position:absolute;
+  top:17px;
+  left:50%;
+  transform:translateX(-50%);
+  min-width:18ch;
+  max-height:540px;
+  overflow:auto;
+  padding:3px;
+  border:1px solid #3b4652;
+  border-radius:0;
+  background:#070a0d;
+  box-shadow:0 8px 24px rgba(0,0,0,.4);
+}
+.terminal-menu-group[data-menu="layout"] .terminal-dropdown{
+  min-width:32ch;
+}
+.terminal-menu-group[data-menu="edit"] .terminal-dropdown{
+  min-width:20ch;
+}
+.terminal-menu-item{
+  display:block;
+  width:100%;
+  margin:0;
+  padding:2px 1ch;
+  border:0;
+  border-radius:0;
+  background:#070a0d;
+  color:#cbd5df;
+  font:inherit;
+  line-height:18px;
+  text-align:left;
+  white-space:nowrap;
+  cursor:pointer;
+}
+.terminal-menu-item:hover,
+.terminal-menu-item:focus{
+  background:#202833;
+  color:#ffffff;
+  outline:none;
+}
+.terminal-menu-item.active{
+  background:#313b47;
+  color:#ffffff;
+}
+.foot{margin-top:10px;color:var(--muted);font-size:12px}
+code{color:#b7c9dc}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="top">
+    <div class="controls">
+      <button id="pasteBtn" disabled>Paste into folder</button>
+      <button id="resetBtn">Reset</button>
+    </div>
+  </div>
+
+  <div class="stats">
+    <span id="fps">fps 30</span>
+    <span id="clipboard">clipboard empty</span>
+    <span>MMB drag / arrows pan · Home centers</span>
+  </div>
+
+  <div class="shell" id="shell">
+    <div class="stage" id="stage">
+      <pre id="terminal" tabindex="0" aria-label="interactive multicolor Braille UTF-8 filesystem tree"></pre>
+      <canvas id="colorLayer" aria-hidden="true"></canvas>
+
+      <nav class="terminal-menu" id="terminalMenu" aria-label="Terminal menu">
+        <div class="terminal-menu-group" data-menu="mount">
+          <button class="terminal-menu-trigger" type="button" data-menu-trigger="mount" aria-expanded="false">[<strong>M</strong>ount]</button>
+          <div class="terminal-dropdown" id="mountMenu" hidden></div>
+        </div>
+        <div class="terminal-menu-group" data-menu="layout">
+          <button class="terminal-menu-trigger" type="button" data-menu-trigger="layout" aria-expanded="false">[<strong>L</strong>ayout]</button>
+          <div class="terminal-dropdown" id="layoutMenu" hidden></div>
+        </div>
+        <div class="terminal-menu-group" data-menu="space">
+          <button class="terminal-menu-trigger" type="button" data-menu-trigger="space" aria-expanded="false">[<strong>S</strong>pace]</button>
+          <div class="terminal-dropdown" id="spaceMenu" hidden></div>
+        </div>
+        <div class="terminal-menu-group" data-menu="edit">
+          <button class="terminal-menu-trigger" type="button" data-menu-trigger="edit" aria-expanded="false">[<strong>E</strong>dit]</button>
+          <div class="terminal-dropdown" id="editMenu" hidden></div>
+        </div>
+      </nav>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(() => {
+  const COLS=120;
+  const ROWS=46;
+  const DOT_W=COLS*2;
+  const DOT_H=ROWS*4;
+  const FPS=30;
+  const FRAME_MS=1000/FPS;
+
+  // User-selectable spacing scale; defaults to 80%.
+  const DEFAULT_TREE_SPACING=0.80;
+
+  // 12 deliberately distinct hues. We index these; paths never store raw colors.
+  const PALETTE=[
+    '#ff6b6b', '#ffd166', '#06d6a0', '#4cc9f0',
+    '#4895ef', '#9b5de5', '#f15bb5', '#f77f00',
+    '#90be6d', '#00b4d8', '#c77dff', '#e9c46a'
+  ];
+
+  const terminal=document.getElementById('terminal');
+  const colorLayer=document.getElementById('colorLayer');
+  const colorCtx=colorLayer.getContext('2d',{alpha:true});
+  const shell=document.getElementById('shell');
+  const stage=document.getElementById('stage');
+
+  const fpsEl=document.getElementById('fps');
+  const clipboardEl=document.getElementById('clipboard');
+
+  const terminalMenu=document.getElementById('terminalMenu');
+  const mountMenu=document.getElementById('mountMenu');
+  const layoutMenu=document.getElementById('layoutMenu');
+  const spaceMenu=document.getElementById('spaceMenu');
+  const editMenu=document.getElementById('editMenu');
+
+  const pasteBtn=document.getElementById('pasteBtn');
+
+
+  const workspaceDemo=[
+    {id:'root',parent:null,folder:true,name:'workspace/'},
+
+    {id:'src',parent:'root',folder:true,name:'src/'},
+    {id:'server',parent:'root',folder:true,name:'server/'},
+    {id:'docs',parent:'root',folder:true,name:'docs/'},
+    {id:'tests',parent:'root',folder:true,name:'tests/'},
+    {id:'public',parent:'root',folder:true,name:'public/'},
+    {id:'pkg',parent:'root',folder:false,name:'package.json'},
+    {id:'readme',parent:'root',folder:false,name:'README.md'},
+
+    {id:'components',parent:'src',folder:true,name:'components/'},
+    {id:'lib',parent:'src',folder:true,name:'lib/'},
+    {id:'hooks',parent:'src',folder:true,name:'hooks/'},
+    {id:'index',parent:'src',folder:false,name:'index.ts'},
+
+    {id:'radial',parent:'components',folder:false,name:'RadialTree.ts'},
+    {id:'term',parent:'components',folder:false,name:'Terminal.ts'},
+    {id:'inspect',parent:'components',folder:false,name:'Inspector.ts'},
+
+    {id:'watcher',parent:'lib',folder:false,name:'watcher.ts'},
+    {id:'layout',parent:'lib',folder:false,name:'radial-layout.ts'},
+    {id:'fs',parent:'lib',folder:false,name:'filesystem.ts'},
+
+    {id:'useevents',parent:'hooks',folder:false,name:'useFileEvents.ts'},
+    {id:'usetree',parent:'hooks',folder:false,name:'useTree.ts'},
+
+    {id:'api',parent:'server',folder:true,name:'api/'},
+    {id:'events',parent:'api',folder:false,name:'events.ts'},
+    {id:'treeapi',parent:'api',folder:false,name:'tree.ts'},
+    {id:'watch',parent:'server',folder:false,name:'watch.ts'},
+
+    {id:'arch',parent:'docs',folder:true,name:'architecture/'},
+    {id:'rendererMd',parent:'arch',folder:false,name:'renderer.md'},
+    {id:'layoutMd',parent:'arch',folder:false,name:'layout.md'},
+    {id:'guide',parent:'docs',folder:false,name:'moving-files.md'},
+
+    {id:'unit',parent:'tests',folder:true,name:'unit/'},
+    {id:'treeTest',parent:'unit',folder:false,name:'tree.test.ts'},
+    {id:'dragTest',parent:'unit',folder:false,name:'drag.test.ts'},
+    {id:'setup',parent:'tests',folder:false,name:'setup.ts'},
+
+    {id:'grid',parent:'public',folder:false,name:'grid.txt'},
+    {id:'icon',parent:'public',folder:false,name:'folder.txt'}
+  ];
+
+  const audioDemo=[
+    {id:'root',parent:null,folder:true,name:'audio-library/'},
+
+    {id:'artists',parent:'root',folder:true,name:'artists/'},
+    {id:'albums',parent:'root',folder:true,name:'albums/'},
+    {id:'playlists',parent:'root',folder:true,name:'playlists/'},
+    {id:'field',parent:'root',folder:true,name:'field-recordings/'},
+    {id:'artwork',parent:'root',folder:true,name:'artwork/'},
+    {id:'librarydb',parent:'root',folder:false,name:'library.json'},
+
+    {id:'neon',parent:'artists',folder:true,name:'Neon Harbor/'},
+    {id:'mira',parent:'artists',folder:true,name:'Mira Vale/'},
+    {id:'loop',parent:'artists',folder:true,name:'Loop State/'},
+
+    {id:'neon1',parent:'neon',folder:false,name:'Night Transit.flac'},
+    {id:'neon2',parent:'neon',folder:false,name:'Blue Terminal.flac'},
+    {id:'mira1',parent:'mira',folder:false,name:'Glass Rooms.wav'},
+    {id:'mira2',parent:'mira',folder:false,name:'Slow Signal.wav'},
+    {id:'loop1',parent:'loop',folder:false,name:'Clock Divide.aiff'},
+    {id:'loop2',parent:'loop',folder:false,name:'Vector Bloom.aiff'},
+
+    {id:'album1',parent:'albums',folder:true,name:'City After Rain/'},
+    {id:'album2',parent:'albums',folder:true,name:'Soft Machines/'},
+    {id:'album3',parent:'albums',folder:true,name:'North Window/'},
+    {id:'a1t1',parent:'album1',folder:false,name:'01 Arrival.flac'},
+    {id:'a1t2',parent:'album1',folder:false,name:'02 Platforms.flac'},
+    {id:'a1t3',parent:'album1',folder:false,name:'03 Last Train.flac'},
+    {id:'a2t1',parent:'album2',folder:false,name:'01 Wake.wav'},
+    {id:'a2t2',parent:'album2',folder:false,name:'02 Servo.wav'},
+    {id:'a3t1',parent:'album3',folder:false,name:'01 Snowline.flac'},
+    {id:'a3t2',parent:'album3',folder:false,name:'02 Kitchen Light.flac'},
+
+    {id:'focus',parent:'playlists',folder:true,name:'Focus/'},
+    {id:'late',parent:'playlists',folder:true,name:'Late Night/'},
+    {id:'focus1',parent:'focus',folder:false,name:'Night Transit.m3u'},
+    {id:'focus2',parent:'focus',folder:false,name:'Glass Rooms.m3u'},
+    {id:'late1',parent:'late',folder:false,name:'Blue Terminal.m3u'},
+
+    {id:'city',parent:'field',folder:true,name:'city/'},
+    {id:'nature',parent:'field',folder:true,name:'nature/'},
+    {id:'city1',parent:'city',folder:false,name:'metro-platform.wav'},
+    {id:'city2',parent:'city',folder:false,name:'crosswalk-rain.wav'},
+    {id:'nature1',parent:'nature',folder:false,name:'pine-wind.wav'},
+    {id:'nature2',parent:'nature',folder:false,name:'shoreline.wav'},
+
+    {id:'cover1',parent:'artwork',folder:false,name:'city-after-rain.png'},
+    {id:'cover2',parent:'artwork',folder:false,name:'soft-machines.jpg'},
+    {id:'cover3',parent:'artwork',folder:false,name:'north-window.jpg'}
+  ];
+
+  const DEMO_SETS={
+    workspace:{label:'Workspace',data:workspaceDemo},
+    audio:{label:'Audio library',data:audioDemo}
+  };
+
+  const LINE_OPTIONS=[
+    {value:'softArc',label:'Soft arc'},
+    {value:'straight',label:'Straight'},
+    {value:'sCurve',label:'S-curve'},
+    {value:'elbow',label:'Elbow'},
+    {value:'radialSpline',label:'Radial spline'}
+  ];
+
+  const LAYOUT_OPTIONS=[
+    {value:'radialWeighted',label:'Radial · weighted'},
+    {value:'radialBalanced',label:'Radial · balanced'},
+    {value:'treeTidy',label:'Tree · tidy L→R'},
+    {value:'treeOutline',label:'Tree · outline'},
+    {value:'fan',label:'Fan · hybrid'}
+  ];
+
+  const SPACE_OPTIONS=Array.from({length:11},(_,i)=>50+i*10);
+
+  let currentMount='workspace';
+  let currentLineAlgorithm='softArc';
+  let currentLayoutAlgorithm='radialWeighted';
+  let currentSpacing=80;
+
+  let nodes=workspaceDemo.map(n=>({...n}));
+  let selectedId=null;
+  let selectedIds=new Set();
+  let clipboardIds=[];
+  let lastFrame=0;
+  let fpsHistory=[];
+  let drag=null;
+  let press=null;
+  let panDrag=null;
+  let cameraX=0;
+  let cameraY=0;
+  let layoutCache=new Map();
+  let operationText='spacing · 80%';
+
+  // 12 independent masks per cell:
+  // colorMasks[color][cell] = Braille dot mask for that color in that cell.
+  let colorMasks=Array.from({length:12},()=>new Uint8Array(COLS*ROWS));
+  let blockedCells=new Uint8Array(COLS*ROWS);
+
+  // Prewarmed atlas: one 16x16 glyph sheet per palette color.
+  // 256 Braille masks × 12 colors = 3072 cached glyph tiles.
+  let atlas=[];
+  let atlasMetrics=null;
+
+  function nodeById(id){return nodes.find(n=>n.id===id)}
+  function children(id){return nodes.filter(n=>n.parent===id)}
+  function displayName(n){
+    return n.folder ? n.name.replace(/\/$/,'') : n.name;
+  }
+
+  function dragGhostName(n){
+    const name=displayName(n);
+    if(n.folder) return name;
+
+    // Hide only the final file extension in the temporary drag box.
+    // e.g. RadialTree.ts -> RadialTree, tree.test.ts -> tree.test
+    const dot=name.lastIndexOf('.');
+    return dot>0 ? name.slice(0,dot) : name;
+  }
+
+  function dragMoveIds(anchorId,anchorWasSelected){
+    if(anchorWasSelected){
+      return selectedRoots().filter(id=>id!=='root'&&nodeById(id));
+    }
+    return anchorId==='root' ? [] : [anchorId];
+  }
+
+  function dragGhostLines(ids){
+    const names=ids
+      .map(id=>nodeById(id))
+      .filter(Boolean)
+      .slice(0,3)
+      .map(dragGhostName);
+
+    if(ids.length>3) names.push('...');
+    return names;
+  }
+
+  function label(n){return displayName(n)}
+
+  function nodeVisualWidth(n){
+    if(n.folder && !n.parent) return displayName(n).length;
+    return label(n).length;
+  }
+
+  function rootBoxLines(text){
+    // Root width should match the label width exactly.
+    // The cap/foot use corner glyphs within that same width.
+    const width=Math.max(2,text.length);
+    const top='┌' + '─'.repeat(Math.max(0,width-2)) + '┐';
+    const mid=text;
+    const bot='└' + '─'.repeat(Math.max(0,width-2)) + '┘';
+    return {top,mid,bot,width,height:3};
+  }
+
+  function subtreeWeight(id){
+    const kids=children(id);
+    if(!kids.length)return 1;
+    return kids.reduce((s,k)=>s+subtreeWeight(k.id),0);
+  }
+
+  // Stable sibling color assignment:
+  // each parent enumerates its direct children in tree order; index % 12.
+  function edgeColorIndex(child){
+    if(!child.parent)return 0;
+    const siblings=children(child.parent);
+    const i=siblings.findIndex(n=>n.id===child.id);
+    return Math.max(0,i)%PALETTE.length;
+  }
+
+  // ----- Braille masks -----
+
+  function resetMasks(){
+    for(const a of colorMasks)a.fill(0);
+    blockedCells.fill(0);
+  }
+
+  function brailleBit(localX,localY){
+    const table=[
+      [0,3],
+      [1,4],
+      [2,5],
+      [6,7]
+    ];
+    return 1<<table[localY][localX];
+  }
+
+  function setDot(color,x,y){
+    x=Math.round(x); y=Math.round(y);
+    if(x<0||x>=DOT_W||y<4||y>=DOT_H-4)return;
+    const cx=Math.floor(x/2);
+    const cy=Math.floor(y/4);
+    const idx=cy*COLS+cx;
+    colorMasks[color][idx] |= brailleBit(x&1,y&3);
+  }
+
+  function unionMaskAt(idx){
+    let mask=0;
+    for(let c=0;c<PALETTE.length;c++)mask |= colorMasks[c][idx];
+    return mask;
+  }
+
+  function bitCount8(v){
+    v = v - ((v >> 1) & 0x55);
+    v = (v & 0x33) + ((v >> 2) & 0x33);
+    return (((v + (v >> 4)) & 0x0f));
+  }
+
+  // Remove accidental isolated 1-dot cells. Real path endpoints remain because
+  // they touch a neighboring occupied cell; atlas/raster crumbs do not.
+  function pruneIsolatedDots(){
+    const occupied=new Uint8Array(COLS*ROWS);
+    for(let i=0;i<occupied.length;i++) occupied[i]=unionMaskAt(i)?1:0;
+
+    for(let c=0;c<PALETTE.length;c++){
+      const layer=colorMasks[c];
+      for(let y=1;y<ROWS-1;y++){
+        for(let x=1;x<COLS-1;x++){
+          const i=y*COLS+x;
+          const mask=layer[i];
+          if(!mask || bitCount8(mask)!==1) continue;
+
+          let neighbors=0;
+          for(let yy=y-1;yy<=y+1;yy++){
+            for(let xx=x-1;xx<=x+1;xx++){
+              if(xx===x && yy===y) continue;
+              neighbors += occupied[yy*COLS+xx];
+            }
+          }
+          if(neighbors===0) layer[i]=0;
+        }
+      }
+    }
+  }
+
+  function brailleChar(mask){
+    return mask ? String.fromCodePoint(0x2800+mask) : ' ';
+  }
+
+  function drawLine(color,x0,y0,x1,y1){
+    x0=Math.round(x0); y0=Math.round(y0);
+    x1=Math.round(x1); y1=Math.round(y1);
+    let dx=Math.abs(x1-x0), sx=x0<x1?1:-1;
+    let dy=-Math.abs(y1-y0), sy=y0<y1?1:-1;
+    let err=dx+dy;
+
+    while(true){
+      setDot(color,x0,y0);
+      if(x0===x1&&y0===y1)break;
+      const e2=2*err;
+      if(e2>=dy){err+=dy;x0+=sx}
+      if(e2<=dx){err+=dx;y0+=sy}
+    }
+  }
+
+  function sampleQuadratic(color,a,c,b){
+    let prev=a;
+    const distance=Math.hypot(b.x-a.x,b.y-a.y);
+    const steps=Math.max(8,Math.ceil(distance/2.1));
+    for(let i=1;i<=steps;i++){
+      const t=i/steps, mt=1-t;
+      const p={
+        x:mt*mt*a.x + 2*mt*t*c.x + t*t*b.x,
+        y:mt*mt*a.y + 2*mt*t*c.y + t*t*b.y
+      };
+      drawLine(color,prev.x,prev.y,p.x,p.y);
+      prev=p;
+    }
+  }
+
+  function sampleCubic(color,a,c1,c2,b){
+    let prev=a;
+    const distance=Math.hypot(b.x-a.x,b.y-a.y);
+    const steps=Math.max(10,Math.ceil(distance/1.9));
+    for(let i=1;i<=steps;i++){
+      const t=i/steps, mt=1-t;
+      const p={
+        x:mt*mt*mt*a.x + 3*mt*mt*t*c1.x + 3*mt*t*t*c2.x + t*t*t*b.x,
+        y:mt*mt*mt*a.y + 3*mt*mt*t*c1.y + 3*mt*t*t*c2.y + t*t*t*b.y
+      };
+      drawLine(color,prev.x,prev.y,p.x,p.y);
+      prev=p;
+    }
+  }
+
+  // 1/5 — direct shortest line.
+  function connectorStraight(color,a,b){
+    drawLine(color,a.x,a.y,b.x,b.y);
+  }
+
+  // 2/5 — gentle quadratic curve.
+  function connectorSoftArc(color,a,b){
+    const dx=b.x-a.x;
+    const dy=b.y-a.y;
+    const distance=Math.hypot(dx,dy);
+    const bend=Math.min(18,Math.max(4,distance*.15));
+    const len=Math.max(1,distance);
+    const nx=-dy/len;
+    const ny=dx/len;
+    const sign=(a.x+b.x)<DOT_W ? -1 : 1;
+    sampleQuadratic(color,a,{
+      x:(a.x+b.x)/2 + nx*bend*sign,
+      y:(a.y+b.y)/2 + ny*bend*sign
+    },b);
+  }
+
+  // 3/5 — smooth cubic, aligned with the dominant axis.
+  function connectorSCurve(color,a,b){
+    const dx=b.x-a.x;
+    const dy=b.y-a.y;
+    if(Math.abs(dx)>=Math.abs(dy)){
+      sampleCubic(
+        color,a,
+        {x:a.x+dx*.42,y:a.y},
+        {x:b.x-dx*.42,y:b.y},
+        b
+      );
+    }else{
+      sampleCubic(
+        color,a,
+        {x:a.x,y:a.y+dy*.42},
+        {x:b.x,y:b.y-dy*.42},
+        b
+      );
+    }
+  }
+
+  // 4/5 — orthogonal trunk/elbow routing.
+  function connectorElbow(color,a,b){
+    const dx=b.x-a.x;
+    const dy=b.y-a.y;
+    if(Math.abs(dx)>=Math.abs(dy)){
+      const mx=Math.round((a.x+b.x)/2);
+      drawLine(color,a.x,a.y,mx,a.y);
+      drawLine(color,mx,a.y,mx,b.y);
+      drawLine(color,mx,b.y,b.x,b.y);
+    }else{
+      const my=Math.round((a.y+b.y)/2);
+      drawLine(color,a.x,a.y,a.x,my);
+      drawLine(color,a.x,my,b.x,my);
+      drawLine(color,b.x,my,b.x,b.y);
+    }
+  }
+
+  // 5/5 — cubic controls point along radial directions from the viewport center.
+  function connectorRadialSpline(color,a,b){
+    const center={x:DOT_W/2,y:(ROWS-1)*2};
+    const al=Math.max(1,Math.hypot(a.x-center.x,a.y-center.y));
+    const bl=Math.max(1,Math.hypot(b.x-center.x,b.y-center.y));
+    const au={x:(a.x-center.x)/al,y:(a.y-center.y)/al};
+    const bu={x:(b.x-center.x)/bl,y:(b.y-center.y)/bl};
+    const distance=Math.hypot(b.x-a.x,b.y-a.y);
+    const reach=Math.max(5,distance*.36);
+    sampleCubic(
+      color,a,
+      {x:a.x+au.x*reach,y:a.y+au.y*reach},
+      {x:b.x-bu.x*reach,y:b.y-bu.y*reach},
+      b
+    );
+  }
+
+  function drawConnector(color,a,b){
+    switch(currentLineAlgorithm){
+      case 'straight': connectorStraight(color,a,b); break;
+      case 'sCurve': connectorSCurve(color,a,b); break;
+      case 'elbow': connectorElbow(color,a,b); break;
+      case 'radialSpline': connectorRadialSpline(color,a,b); break;
+      default: connectorSoftArc(color,a,b);
+    }
+  }
+
+  // ----- rigid layout -----
+
+  // Layout lives in unbounded world-space now.
+  // The 120×46 terminal is only a viewport/camera and never pushes nodes back in.
+  function clampNodeX(x,n){
+    return Math.round(x);
+  }
+
+  function clampNodeY(y){
+    return Math.round(y);
+  }
+
+  function maxDepth(){
+    let max=0;
+    for(const n of nodes){
+      let d=0,p=n;
+      while(p&&p.parent){d++;p=nodeById(p.parent)}
+      max=Math.max(max,d);
+    }
+    return max;
+  }
+
+  // Layout 1/5 — radial sectors weighted by subtree leaf count.
+  function layoutRadialWeighted(){
+    const map=new Map();
+    const root=nodeById('root');
+    if(!root)return map;
+    const cx=COLS/2, cy=(ROWS-2)/2;
+
+    map.set(root.id,{x:clampNodeX(cx-nodeVisualWidth(root)/2,root),y:clampNodeY(cy),angle:0,depth:0});
+
+    const top=children(root.id);
+    const total=Math.max(1,top.reduce((s,n)=>s+subtreeWeight(n.id),0));
+    let cursor=-Math.PI/2;
+
+    function place(node,start,end,depth){
+      const angle=(start+end)/2;
+      const radial=5.8+depth*6.7;
+      const rawX=cx+Math.cos(angle)*radial*2.22;
+      const rawY=cy+Math.sin(angle)*radial*.88;
+      map.set(node.id,{
+        x:clampNodeX(rawX-label(node).length/2,node),
+        y:clampNodeY(rawY),
+        angle,depth
+      });
+
+      const kids=children(node.id);
+      if(!kids.length)return;
+      const total=Math.max(1,kids.reduce((s,n)=>s+subtreeWeight(n.id),0));
+      let c=start;
+      for(const kid of kids){
+        const span=(subtreeWeight(kid.id)/total)*(end-start);
+        place(kid,c,c+span,depth+1);
+        c+=span;
+      }
+    }
+
+    for(const child of top){
+      const span=(subtreeWeight(child.id)/total)*Math.PI*2;
+      place(child,cursor,cursor+span,1);
+      cursor+=span;
+    }
+    return map;
+  }
+
+  // Layout 2/5 — radial but every sibling receives an equal angular slice.
+  function layoutRadialBalanced(){
+    const map=new Map();
+    const root=nodeById('root');
+    if(!root)return map;
+    const cx=COLS/2, cy=(ROWS-2)/2;
+
+    map.set(root.id,{x:clampNodeX(cx-nodeVisualWidth(root)/2,root),y:clampNodeY(cy),angle:0,depth:0});
+
+    function place(node,start,end,depth){
+      const angle=(start+end)/2;
+      const radial=5.4+depth*6.9;
+      const rawX=cx+Math.cos(angle)*radial*2.2;
+      const rawY=cy+Math.sin(angle)*radial*.9;
+      map.set(node.id,{
+        x:clampNodeX(rawX-label(node).length/2,node),
+        y:clampNodeY(rawY),
+        angle,depth
+      });
+
+      const kids=children(node.id);
+      if(!kids.length)return;
+      const span=(end-start)/kids.length;
+      kids.forEach((kid,i)=>place(kid,start+i*span,start+(i+1)*span,depth+1));
+    }
+
+    const top=children(root.id);
+    const span=(Math.PI*2)/Math.max(1,top.length);
+    top.forEach((child,i)=>{
+      const start=-Math.PI/2+i*span;
+      place(child,start,start+span,1);
+    });
+    return map;
+  }
+
+  // Layout 3/5 — tidy layered tree, left to right.
+  function layoutTreeTidy(){
+    const map=new Map();
+    const root=nodeById('root');
+    if(!root)return map;
+
+    const leaves=[];
+    function gather(id){
+      const kids=children(id);
+      if(!kids.length){leaves.push(id);return}
+      kids.forEach(k=>gather(k.id));
+    }
+    gather(root.id);
+
+    const yById=new Map();
+    const topY=3;
+    const bottomY=ROWS-4;
+    leaves.forEach((id,i)=>{
+      const y=leaves.length===1 ? (topY+bottomY)/2 : topY+i*(bottomY-topY)/(leaves.length-1);
+      yById.set(id,y);
+    });
+
+    function assignY(id){
+      if(yById.has(id))return yById.get(id);
+      const kids=children(id);
+      const ys=kids.map(k=>assignY(k.id));
+      const y=ys.reduce((a,b)=>a+b,0)/Math.max(1,ys.length);
+      yById.set(id,y);
+      return y;
+    }
+    assignY(root.id);
+
+    const depthMax=Math.max(1,maxDepth());
+    function visit(n,depth){
+      const x=2+depth*((COLS-24)/depthMax);
+      map.set(n.id,{
+        x:clampNodeX(x,n),
+        y:clampNodeY(yById.get(n.id)),
+        angle:0,
+        depth
+      });
+      children(n.id).forEach(k=>visit(k,depth+1));
+    }
+    visit(root,0);
+    return map;
+  }
+
+  // Layout 4/5 — conventional depth-first outline/tree listing.
+  function layoutTreeOutline(){
+    const map=new Map();
+    const root=nodeById('root');
+    if(!root)return map;
+    const ordered=[];
+
+    function visit(n,depth){
+      ordered.push({n,depth});
+      children(n.id).forEach(k=>visit(k,depth+1));
+    }
+    visit(root,0);
+
+    const depthMax=Math.max(1,maxDepth());
+    const y0=2;
+    const y1=ROWS-3;
+
+    ordered.forEach((entry,i)=>{
+      const y=ordered.length===1 ? (y0+y1)/2 : y0+i*(y1-y0)/(ordered.length-1);
+      const x=2+entry.depth*((COLS-24)/depthMax);
+      map.set(entry.n.id,{
+        x:clampNodeX(x,entry.n),
+        y:clampNodeY(y),
+        angle:0,
+        depth:entry.depth
+      });
+    });
+
+    return map;
+  }
+
+  // Layout 5/5 — a 160° fan: tree-like depth, radial-like sibling spreading.
+  function layoutFan(){
+    const map=new Map();
+    const root=nodeById('root');
+    if(!root)return map;
+    const originX=10;
+    const originY=(ROWS-2)/2;
+
+    map.set(root.id,{
+      x:clampNodeX(originX,root),
+      y:clampNodeY(originY),
+      angle:0,
+      depth:0
+    });
+
+    function place(node,start,end,depth){
+      const angle=(start+end)/2;
+      const radius=depth*(COLS-25)/Math.max(1,maxDepth());
+      const rawX=originX+radius*Math.cos(angle)*1.0;
+      const rawY=originY+radius*Math.sin(angle)*.34;
+
+      map.set(node.id,{
+        x:clampNodeX(rawX,node),
+        y:clampNodeY(rawY),
+        angle,
+        depth
+      });
+
+      const kids=children(node.id);
+      if(!kids.length)return;
+      const total=Math.max(1,kids.reduce((s,k)=>s+subtreeWeight(k.id),0));
+      let cursor=start;
+      for(const kid of kids){
+        const span=(subtreeWeight(kid.id)/total)*(end-start);
+        place(kid,cursor,cursor+span,depth+1);
+        cursor+=span;
+      }
+    }
+
+    const top=children(root.id);
+    const start=-Math.PI*.44;
+    const end=Math.PI*.44;
+    const total=Math.max(1,top.reduce((s,k)=>s+subtreeWeight(k.id),0));
+    let cursor=start;
+    for(const kid of top){
+      const span=(subtreeWeight(kid.id)/total)*(end-start);
+      place(kid,cursor,cursor+span,1);
+      cursor+=span;
+    }
+    return map;
+  }
+
+  function computeLayout(){
+    switch(currentLayoutAlgorithm){
+      case 'radialBalanced': return layoutRadialBalanced();
+      case 'treeTidy': return layoutTreeTidy();
+      case 'treeOutline': return layoutTreeOutline();
+      case 'fan': return layoutFan();
+      default: return layoutRadialWeighted();
+    }
+  }
+
+  function edgeAnchor(n,toward){
+    const p=layoutCache.get(n.id);
+    const q=layoutCache.get(toward.id);
+    const w=nodeVisualWidth(n);
+    const cx=p.x+w/2;
+    const cy=p.y+.5;
+    const tx=q.x+label(toward).length/2;
+    const ty=q.y+.5;
+    const dx=tx-cx, dy=ty-cy;
+
+    if(Math.abs(dx)>Math.abs(dy)*1.7){
+      return {
+        x:(dx>0 ? p.x+w+.5 : p.x-.5)*2,
+        y:cy*4
+      };
+    }
+    return {
+      x:cx*2,
+      y:(dy>0 ? p.y+1.15 : p.y-.15)*4
+    };
+  }
+
+  function drawEdges(){
+    for(const child of nodes){
+      if(!child.parent)continue;
+      const parent=nodeById(child.parent);
+      if(!parent)continue;
+      const color=edgeColorIndex(child);
+      drawConnector(color,edgeAnchor(parent,child),edgeAnchor(child,parent));
+    }
+  }
+
+  // ----- text compositor -----
+
+  const STYLE_DEFAULT={fg:37,bg:40,bold:false};
+  const STYLE_BORDER={fg:37,bg:40,bold:false};
+  const STYLE_DELETE={fg:37,bg:41,bold:true};
+  const STYLE_FOLDER={fg:30,bg:47,bold:false};
+  const STYLE_SELECTED={fg:30,bg:43,bold:false};
+  const STYLE_DROP={fg:30,bg:46,bold:true};
+  const STYLE_MENU={fg:37,bg:40,bold:false};
+  const STYLE_MENU_BOLD={fg:37,bg:40,bold:true};
+
+  const ANSI_COLORS={
+    30:'#000000',31:'#aa0000',32:'#00aa00',33:'#aa5500',
+    34:'#0000aa',35:'#aa00aa',36:'#00aaaa',37:'#cbd5df',
+    40:'#070a0d',41:'#7f1d1d',42:'#14532d',43:'#eab308',
+    44:'#1e3a8a',45:'#701a75',46:'#155e75',47:'#ffffff'
+  };
+
+  let cellStyles=[];
+
+  function sameStyle(a,b){
+    return !!a && !!b && a.fg===b.fg && a.bg===b.bg && a.bold===b.bold;
+  }
+
+  function blankChars(){
+    cellStyles=Array.from(
+      {length:ROWS},
+      ()=>Array.from({length:COLS},()=>STYLE_DEFAULT)
+    );
+    return Array.from({length:ROWS},()=>Array(COLS).fill(' '));
+  }
+
+  function setCell(chars,x,y,ch,style=STYLE_DEFAULT,block=true){
+    if(x<0||x>=COLS||y<0||y>=ROWS)return;
+    chars[y][x]=ch;
+    cellStyles[y][x]=style;
+    if(block)blockedCells[y*COLS+x]=1;
+  }
+
+  function put(chars,x,y,text,block=true,style=STYLE_DEFAULT){
+    if(y<0||y>=ROWS)return;
+    const glyphs=[...text];
+    for(let i=0;i<glyphs.length;i++){
+      setCell(chars,x+i,y,glyphs[i],style,block);
+    }
+  }
+
+  function putTopMenu(chars){
+    const groups=[
+      {text:'[Mount]',bold:1},
+      {text:'[Layout]',bold:1},
+      {text:'[Space]',bold:1},
+      {text:'[Edit]',bold:1}
+    ];
+
+    const total=groups.reduce((n,g)=>n+g.text.length,0)+(groups.length-1);
+    let x=Math.floor((COLS-total)/2);
+
+    for(let gi=0;gi<groups.length;gi++){
+      const group=groups[gi];
+      for(let i=0;i<group.text.length;i++){
+        setCell(
+          chars,
+          x+i,
+          0,
+          group.text[i],
+          i===group.bold ? STYLE_MENU_BOLD : STYLE_MENU,
+          true
+        );
+      }
+      x+=group.text.length;
+      if(gi<groups.length-1){
+        setCell(chars,x,0,' ',STYLE_MENU,true);
+        x++;
+      }
+    }
+  }
+
+  function styleToSgr(style){
+    const parts=[0];
+    if(style.bold)parts.push(1);
+    parts.push(style.fg,style.bg);
+    return '\x1b['+parts.join(';')+'m';
+  }
+
+  function frameToAnsi(chars){
+    // ECMA-48/ANSI frame:
+    // ED 2 = erase display, CUP H = home, CUP each row, SGR for attributes.
+    let out='\x1b[2J\x1b[H';
+
+    for(let y=0;y<ROWS;y++){
+      out+='\x1b['+(y+1)+';1H';
+      let last=null;
+
+      for(let x=0;x<COLS;x++){
+        const style=cellStyles[y][x]||STYLE_DEFAULT;
+        if(!sameStyle(last,style)){
+          out+=styleToSgr(style);
+          last=style;
+        }
+        out+=chars[y][x];
+      }
+
+      out+='\x1b[0m';
+    }
+
+    out+='\x1b[0m';
+    return out;
+  }
+
+  function escapeHtml(text){
+    return text.replace(/[&<>"]/g,ch=>({
+      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'
+    })[ch]);
+  }
+
+  function renderCellsToPre(chars){
+    const lines=[];
+
+    for(let y=0;y<ROWS;y++){
+      let line='';
+      let runStyle=null;
+      let runText='';
+
+      const flush=()=>{
+        if(!runText)return;
+
+        const fg=ANSI_COLORS[runStyle.fg]||ANSI_COLORS[37];
+        // ECMA-48 bg=40 is the terminal's default black surface. In the browser
+        // preview we leave that transparent so the Braille canvas underneath is visible.
+        // Non-default SGR backgrounds (41..47) are still painted exactly.
+        const bg=runStyle.bg===40
+          ? 'transparent'
+          : (ANSI_COLORS[runStyle.bg]||ANSI_COLORS[40]);
+        const weight=runStyle.bold?'700':'400';
+
+        line+='<span style="color:'+fg+
+          ';background:'+bg+
+          ';font-weight:'+weight+'">'+
+          escapeHtml(runText)+
+          '</span>';
+
+        runText='';
+      };
+
+      for(let x=0;x<COLS;x++){
+        const style=cellStyles[y][x]||STYLE_DEFAULT;
+
+        if(runStyle && !sameStyle(runStyle,style)){
+          flush();
+          runStyle=null;
+        }
+
+        if(!runStyle){
+          runStyle=style;
+        }
+
+        runText+=chars[y][x];
+      }
+
+      flush();
+      lines.push(line);
+    }
+
+    terminal.innerHTML=lines.join('\n');
+  }
+
+  // ----- Braille-only extension layer -----
+  // All normal text/background state is ANSI. This canvas only preserves
+  // the multicolor Braille path experiment, which a conventional TTY cannot
+  // represent with multiple colors inside one character cell.
+
+  function currentFontSpec(){
+    const s=getComputedStyle(terminal);
+    const fontSize=parseFloat(s.fontSize)||12;
+    const lineHeight=parseFloat(s.lineHeight)||15;
+
+    // Measure one terminal-cell advance directly from the monospace font.
+    // This is stable regardless of how many ANSI spans exist in the PRE.
+    const probe=document.createElement('canvas');
+    const probeCtx=probe.getContext('2d');
+    probeCtx.font=s.font;
+    const cellW=probeCtx.measureText('M').width || fontSize*.6;
+
+    return {
+      font:s.font,
+      fontFamily:s.fontFamily,
+      fontSize,
+      lineHeight,
+      cellW,
+      cellH:lineHeight,
+      paddingLeft:parseFloat(s.paddingLeft)||0,
+      paddingTop:parseFloat(s.paddingTop)||0,
+      paddingRight:parseFloat(s.paddingRight)||0,
+      paddingBottom:parseFloat(s.paddingBottom)||0,
+      rect:terminal.getBoundingClientRect()
+    };
+  }
+
+  function ensureAtlas(){
+    const m=currentFontSpec();
+    const cellW=m.cellW;
+    const cellH=m.cellH;
+    const dpr=window.devicePixelRatio||1;
+
+    const tileW=Math.max(1,Math.ceil(cellW*dpr));
+    const tileH=Math.max(1,Math.ceil(cellH*dpr));
+    const gutter=2;
+    const strideW=tileW+gutter*2;
+    const strideH=tileH+gutter*2;
+
+    const signature=[
+      cellW,cellH,m.fontFamily,m.fontSize,dpr,tileW,tileH
+    ].join('|');
+
+    if(atlasMetrics && atlasMetrics.signature===signature)return;
+
+    atlasMetrics={
+      signature,cellW,cellH,dpr,
+      tileW,tileH,gutter,strideW,strideH
+    };
+
+    const cssW=m.paddingLeft + COLS*cellW + m.paddingRight;
+    const cssH=m.paddingTop + ROWS*cellH + m.paddingBottom;
+
+    colorLayer.style.width=cssW+'px';
+    colorLayer.style.height=cssH+'px';
+    colorLayer.width=Math.max(1,Math.round(cssW*dpr));
+    colorLayer.height=Math.max(1,Math.round(cssH*dpr));
+
+    colorCtx.setTransform(1,0,0,1,0,0);
+    colorCtx.imageSmoothingEnabled=false;
+
+    atlas=PALETTE.map(color=>{
+      const a=document.createElement('canvas');
+      a.width=strideW*16;
+      a.height=strideH*16;
+
+      const ctx=a.getContext('2d',{alpha:true});
+      ctx.clearRect(0,0,a.width,a.height);
+      ctx.imageSmoothingEnabled=false;
+      ctx.fillStyle=color;
+
+      const cssFont=getComputedStyle(terminal);
+      ctx.font=[
+        cssFont.fontStyle,
+        cssFont.fontWeight,
+        (m.fontSize*dpr)+'px',
+        cssFont.fontFamily
+      ].filter(Boolean).join(' ');
+      ctx.textBaseline='alphabetic';
+
+      const extraLeading=Math.max(0,cellH-m.fontSize);
+      const baseline=Math.round(
+        gutter + tileH - (extraLeading*.45*dpr)
+      );
+
+      for(let mask=1;mask<256;mask++){
+        const col=mask&15;
+        const row=mask>>4;
+        const gx=col*strideW+gutter;
+        const gy=row*strideH;
+        ctx.fillText(String.fromCodePoint(0x2800+mask),gx,gy+baseline);
+      }
+
+      return a;
+    });
+  }
+
+  function drawColorOverlay(){
+    ensureAtlas();
+
+    const m=currentFontSpec();
+    const {cellW,cellH,dpr}=atlasMetrics;
+
+    colorCtx.clearRect(0,0,colorLayer.width,colorLayer.height);
+
+    for(let y=0;y<ROWS;y++){
+      for(let x=0;x<COLS;x++){
+        const idx=y*COLS+x;
+
+        // ANSI text/border cells win over Braille.
+        if(blockedCells[idx])continue;
+
+        for(let c=0;c<PALETTE.length;c++){
+          const mask=colorMasks[c][idx];
+          if(!mask)continue;
+
+          const col=mask&15;
+          const row=mask>>4;
+          const sx=col*atlasMetrics.strideW+atlasMetrics.gutter;
+          const sy=row*atlasMetrics.strideH+atlasMetrics.gutter;
+          const sw=atlasMetrics.tileW;
+          const sh=atlasMetrics.tileH;
+
+          const dx=Math.round((m.paddingLeft+x*cellW)*dpr);
+          const dy=Math.round((m.paddingTop+y*cellH)*dpr);
+          const dw=Math.max(1,Math.round(cellW*dpr));
+          const dh=Math.max(1,Math.round(cellH*dpr));
+
+          colorCtx.drawImage(
+            atlas[c],
+            sx,sy,sw,sh,
+            dx,dy,dw,dh
+          );
+        }
+      }
+    }
+  }
+
+  // ----- selection -----
+
+  function selectedRoots(){
+    const ids=[...selectedIds].filter(id=>id!=='root'&&nodeById(id));
+
+    return ids.filter(id=>{
+      let p=nodeById(id);
+
+      while(p&&p.parent){
+        if(selectedIds.has(p.parent))return false;
+        p=nodeById(p.parent);
+      }
+
+      return true;
+    });
+  }
+
+  function refreshSelectionUI(){
+    const primary=selectedId ? nodeById(selectedId) : null;
+    pasteBtn.disabled=!(clipboardIds.length&&primary&&primary.folder);
+  }
+
+  function collectDescendantIds(id,set){
+    set.add(id);
+
+    for(const kid of children(id)){
+      collectDescendantIds(kid.id,set);
+    }
+  }
+
+  function toggleSelection(n){
+    // Root is structural only and can never be selected.
+    if(!n || n.id==='root'){
+      selectedId=null;
+      selectedIds.delete('root');
+      refreshSelectionUI();
+      return;
+    }
+
+    selectedId=n.id;
+
+    if(n.folder){
+      const subtree=new Set();
+      collectDescendantIds(n.id,subtree);
+
+      if(selectedIds.has(n.id)){
+        for(const id of subtree) selectedIds.delete(id);
+      }else{
+        for(const id of subtree) selectedIds.add(id);
+      }
+
+      if(!selectedIds.has(n.id)){
+        selectedId=selectedIds.size
+          ? [...selectedIds][selectedIds.size-1]
+          : null;
+      }
+    }else{
+      if(selectedIds.has(n.id)){
+        selectedIds.delete(n.id);
+
+        if(selectedIds.size===0){
+          selectedId=null;
+        }
+      }else{
+        selectedIds.add(n.id);
+      }
+    }
+
+    refreshSelectionUI();
+  }
+
+  function selectOnly(n){
+    if(!n || n.id==='root'){
+      selectedId=null;
+      selectedIds=new Set();
+      refreshSelectionUI();
+      return;
+    }
+
+    selectedId=n.id;
+    selectedIds=new Set([n.id]);
+    refreshSelectionUI();
+  }
+
+  function compactAroundRoot(map){
+    const root=map.get('root');
+    const scale=Math.max(
+      0.5,
+      Math.min(1.5,(Number(currentSpacing)||DEFAULT_TREE_SPACING*100)/100)
+    );
+
+    if(!root || scale===1) return map;
+
+    const rootCX=root.x + nodeVisualWidth(nodeById('root'))/2;
+    const rootCY=root.y;
+
+    for(const [id,p] of map){
+      if(id==='root') continue;
+      const n=nodeById(id);
+      const currentCX=p.x + nodeVisualWidth(n)/2;
+
+      const compactCX=rootCX + (currentCX-rootCX)*scale;
+      const compactY=rootCY + (p.y-rootCY)*scale;
+
+      p.x=clampNodeX(compactCX-nodeVisualWidth(n)/2,n);
+      p.y=clampNodeY(compactY);
+    }
+
+    return map;
+  }
+
+  function applyCamera(map){
+    if(cameraX===0 && cameraY===0) return map;
+    for(const p of map.values()){
+      p.x += cameraX;
+      p.y += cameraY;
+    }
+    return map;
+  }
+
+  function render(){
+    layoutCache=applyCamera(compactAroundRoot(computeLayout()));
+    resetMasks();
+    drawEdges();
+    pruneIsolatedDots();
+
+    const chars=blankChars();
+
+    // Outer frame is a real terminal-cell border.
+    for(let x=0;x<COLS;x++){
+      setCell(chars,x,0,'═',STYLE_BORDER,true);
+      setCell(chars,x,ROWS-1,'═',STYLE_BORDER,true);
+    }
+    for(let y=0;y<ROWS;y++){
+      setCell(chars,0,y,'║',STYLE_BORDER,true);
+      setCell(chars,COLS-1,y,'║',STYLE_BORDER,true);
+    }
+
+    setCell(chars,0,0,'╔',STYLE_BORDER,true);
+    setCell(chars,COLS-1,0,'╗',STYLE_BORDER,true);
+    setCell(chars,0,ROWS-1,'╚',STYLE_BORDER,true);
+    setCell(chars,COLS-1,ROWS-1,'╝',STYLE_BORDER,true);
+
+    // Delete target is INSIDE the terminal: the first vertical border cell
+    // becomes the down-arrow, and the remaining left-border vertical cells
+    // have a red SGR background.
+    setCell(chars,0,1,'▼',STYLE_DELETE,true);
+    for(let y=2;y<ROWS-1;y++){
+      setCell(chars,0,y,'║',STYLE_DELETE,true);
+    }
+
+    // Real terminal text in the top border. DOM buttons are invisible hit targets.
+    putTopMenu(chars);
+
+    // Live action text lives in the bottom border.
+    const borderStatus=String(operationText||'').trim();
+    if(borderStatus){
+      const maxStatusWidth=Math.max(0,COLS-8);
+      const visibleStatus=borderStatus.length>maxStatusWidth
+        ? borderStatus.slice(0,Math.max(0,maxStatusWidth-3))+'...'
+        : borderStatus;
+
+      const statusText=' '+visibleStatus+' ';
+      const statusX=Math.max(
+        2,
+        Math.min(
+          COLS-statusText.length-2,
+          Math.floor((COLS-statusText.length)/2)
+        )
+      );
+      put(chars,statusX,ROWS-1,statusText,true,STYLE_BORDER);
+    }
+
+    const dropTarget=drag&&!isDeleteDropZone(drag.pointerX,drag.pointerY)
+      ?findGroupDropTarget(drag.pointerX,drag.pointerY,drag.ids)
+      :null;
+
+    for(const n of nodes){
+      const p=layoutCache.get(n.id);
+      if(!p)continue;
+
+      const bare=label(n);
+      const isSelected=selectedIds.has(n.id);
+      const isRoot=!n.parent;
+
+      if(n.folder && isRoot){
+        const lines=rootBoxLines(bare);
+        put(chars,p.x,p.y-1,lines.top,true,STYLE_BORDER);
+        put(chars,p.x,p.y,lines.mid,true,STYLE_FOLDER);
+        put(chars,p.x,p.y+1,lines.bot,true,STYLE_BORDER);
+        continue;
+      }
+
+      let style=STYLE_DEFAULT;
+
+      if(n.folder){
+        style=isSelected ? STYLE_SELECTED : STYLE_FOLDER;
+        if(dropTarget && dropTarget.id===n.id)style=STYLE_DROP;
+      }else if(isSelected){
+        style=STYLE_SELECTED;
+      }
+
+      put(chars,p.x,p.y,bare,true,style);
+    }
+
+    if(drag){
+      const lines=dragGhostLines(drag.ids);
+      const innerWidth=Math.max(1,...lines.map(s=>s.length));
+      const boxWidth=innerWidth+4;
+      const x=Math.max(1,Math.min(COLS-boxWidth-1,drag.pointerX-Math.floor(boxWidth/2)));
+      const y=Math.max(2,Math.min(ROWS-(lines.length+3),drag.pointerY+1));
+
+      put(chars,x,y,'╭'+'─'.repeat(boxWidth-2)+'╮',true,STYLE_BORDER);
+
+      lines.forEach((name,i)=>{
+        const padded=' '+name.padEnd(innerWidth,' ')+' ';
+        put(chars,x,y+1+i,'│'+padded+'│',true,STYLE_BORDER);
+      });
+
+      put(chars,x,y+1+lines.length,'╰'+'─'.repeat(boxWidth-2)+'╯',true,STYLE_BORDER);
+    }
+
+    // Browser preview and TTY output share the same authoritative cell frame.
+    // The preview does NOT parse its own ANSI output; ANSI is exported separately.
+    renderCellsToPre(chars);
+
+    window.currentAnsiFrame=frameToAnsi(chars);
+
+    // Braille is the one deliberate extension beyond ordinary terminal SGR.
+    drawColorOverlay();
+  }
+
+  function metrics(){
+    const rect=terminal.getBoundingClientRect();
+    const m=currentFontSpec();
+    return {
+      rect,
+      pl:m.paddingLeft,
+      pt:m.paddingTop,
+      cellW:m.cellW,
+      cellH:m.cellH
+    };
+  }
+
+  function pointerCell(e){
+    const m=metrics();
+    return {
+      x:Math.max(0,Math.min(COLS-1,Math.floor((e.clientX-m.rect.left-m.pl+shell.scrollLeft)/m.cellW))),
+      y:Math.max(0,Math.min(ROWS-1,Math.floor((e.clientY-m.rect.top-m.pt)/m.cellH)))
+    };
+  }
+
+  function hitNode(x,y){
+    let best=null,bestScore=1e9;
+
+    for(const n of nodes){
+      const p=layoutCache.get(n.id);
+      if(!p)continue;
+
+      const left=p.x;
+      const w=nodeVisualWidth(n);
+
+      const yMin=(!n.parent&&n.folder)?(p.y-2):(p.y-1);
+      const yMax=(!n.parent&&n.folder)?(p.y+2):(p.y+1);
+      if(y>=yMin&&y<=yMax&&x>=left-1&&x<=left+w+1){
+        const score=Math.abs(y-p.y)*5+Math.abs(x-(left+w/2));
+        if(score<bestScore){best=n;bestScore=score}
+      }
+    }
+    return best;
+  }
+
+  function isDescendant(candidateId,parentId){
+    let p=nodeById(candidateId);
+    while(p&&p.parent){
+      if(p.parent===parentId)return true;
+      p=nodeById(p.parent);
+    }
+    return false;
+  }
+
+  function isDeleteDropZone(x,y){
+    // Exact terminal border cell: no external gutter / fake hit area.
+    return x===0 && y>=1 && y<ROWS-1;
+  }
+
+  function findGroupDropTarget(x,y,movingIds){
+    if(isDeleteDropZone(x,y))return null;
+
+    const n=hitNode(x,y);
+    if(!n||!n.folder)return null;
+
+    const moving=new Set(movingIds||[]);
+    if(moving.has(n.id))return null;
+
+    for(const movingId of moving){
+      if(isDescendant(n.id,movingId))return null;
+    }
+
+    return n;
+  }
+
+  terminal.addEventListener('pointerdown',e=>{
+    render();
+    const c=pointerCell(e);
+
+    // Middle mouse button = viewport pan.
+    if(e.button===1){
+      panDrag={
+        pointerId:e.pointerId,
+        startX:c.x,
+        startY:c.y,
+        startCameraX:cameraX,
+        startCameraY:cameraY
+      };
+      terminal.classList.add('panning');
+      terminal.setPointerCapture(e.pointerId);
+      operationText='PAN viewport';
+      e.preventDefault();
+      return;
+    }
+
+    if(e.button!==0) return;
+
+    const n=hitNode(c.x,c.y);
+    if(!n)return;
+
+    press={
+      id:n.id,
+      pointerId:e.pointerId,
+      startX:c.x,
+      startY:c.y,
+      wasSelected:selectedIds.has(n.id)
+    };
+
+    terminal.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+
+  terminal.addEventListener('pointermove',e=>{
+    const c=pointerCell(e);
+
+    if(panDrag){
+      cameraX=panDrag.startCameraX + (c.x-panDrag.startX);
+      cameraY=panDrag.startCameraY + (c.y-panDrag.startY);
+      operationText='PAN · x '+cameraX+' · y '+cameraY;
+      e.preventDefault();
+      return;
+    }
+
+    if(press && !drag){
+      const moved=Math.abs(c.x-press.startX)+Math.abs(c.y-press.startY);
+
+      if(moved>=1 && press.id!=='root'){
+        // Normal file-manager behavior:
+        // dragging a selected node moves the selected group;
+        // dragging an unselected node moves only that node.
+        if(!press.wasSelected){
+          const n=nodeById(press.id);
+          if(n) selectOnly(n);
+        }
+
+        const ids=dragMoveIds(press.id,press.wasSelected);
+
+        if(ids.length){
+          drag={
+            ids,
+            anchorId:press.id,
+            pointerX:c.x,
+            pointerY:c.y
+          };
+          terminal.classList.add('dragging');
+          operationText='DRAG · '+ids.length+' item'+(ids.length===1?'':'s');
+        }
+      }
+    }
+
+    if(drag){
+      drag.pointerX=c.x;
+      drag.pointerY=c.y;
+      e.preventDefault();
+    }
+  });
+
+  function finishDrag(e){
+    if(panDrag){
+      panDrag=null;
+      terminal.classList.remove('panning');
+      operationText='PAN complete · x '+cameraX+' · y '+cameraY;
+      try{
+        if(e&&terminal.hasPointerCapture(e.pointerId))terminal.releasePointerCapture(e.pointerId);
+      }catch{}
+      return;
+    }
+
+    // Click without drag = toggle selection.
+    if(press && !drag){
+      const n=nodeById(press.id);
+      if(n) toggleSelection(n);
+      operationText=n
+        ? (n.id==='root'
+            ? 'ROOT · structural anchor'
+            : (selectedIds.has(n.id)?'SELECT ':'DESELECT ')+displayName(n))
+        : 'idle';
+
+      press=null;
+      try{
+        if(e&&terminal.hasPointerCapture(e.pointerId))terminal.releasePointerCapture(e.pointerId);
+      }catch{}
+      return;
+    }
+
+    if(!drag){
+      press=null;
+      return;
+    }
+
+    if(isDeleteDropZone(drag.pointerX,drag.pointerY)){
+      const deleted=deleteNodeIds(drag.ids,'DROP DELETE');
+
+      drag=null;
+      press=null;
+      terminal.classList.remove('dragging');
+
+      try{
+        if(e&&terminal.hasPointerCapture(e.pointerId))terminal.releasePointerCapture(e.pointerId);
+      }catch{}
+
+      return;
+    }
+
+    const target=findGroupDropTarget(drag.pointerX,drag.pointerY,drag.ids);
+    let moved=0;
+
+    if(target){
+      for(const id of drag.ids){
+        const moving=nodeById(id);
+        if(!moving || moving.id==='root')continue;
+        if(moving.parent===target.id)continue;
+
+        moving.parent=target.id;
+        moved++;
+      }
+
+      operationText=moved
+        ? 'MOVE · '+moved+' item'+(moved===1?'':'s')+' → '+displayName(target)
+        : 'MOVE cancelled · already there';
+    }else{
+      operationText='MOVE cancelled · drop target must be a folder';
+    }
+
+    drag=null;
+    press=null;
+    terminal.classList.remove('dragging');
+
+    try{
+      if(e&&terminal.hasPointerCapture(e.pointerId))terminal.releasePointerCapture(e.pointerId);
+    }catch{}
+  }
+
+  terminal.addEventListener('pointerup',finishDrag);
+  terminal.addEventListener('pointercancel',finishDrag);
+
+  terminal.addEventListener('auxclick',e=>{
+    if(e.button===1)e.preventDefault();
+  });
+
+  terminal.addEventListener('wheel',e=>{
+    // Mouse wheel steps tree spacing in 10% increments, capped to 50–150%.
+    const direction=e.deltaY<0 ? 1 : -1;
+    const next=Math.max(50,Math.min(150,currentSpacing+direction*10));
+
+    if(next!==currentSpacing){
+      currentSpacing=next;
+      operationText='SPACE · '+next+'%';
+      syncMenuActiveState();
+      render();
+    }
+
+    e.preventDefault();
+  },{passive:false});
+
+  function createNewFolder(){
+    let parent=nodeById('root');
+    const primary=selectedId ? nodeById(selectedId) : null;
+
+    if(primary){
+      parent=primary.folder ? primary : (nodeById(primary.parent)||parent);
+    }
+
+    if(!parent || !parent.folder) parent=nodeById('root');
+
+    const raw=window.prompt('New folder name','New Folder');
+    if(raw===null)return;
+
+    const trimmed=raw.trim().replace(/\/+$/,'');
+    if(!trimmed){
+      operationText='NEW · cancelled';
+      return;
+    }
+
+    const desired=trimmed+'/';
+    const name=uniqueName(parent.id,desired);
+    const id='folder_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,7);
+
+    nodes.push({
+      id,
+      parent:parent.id,
+      folder:true,
+      name
+    });
+
+    selectedId=id;
+    selectedIds=new Set([id]);
+    operationText='NEW · '+displayName(nodeById(id))+' → '+displayName(parent);
+    refreshSelectionUI();
+  }
+
+  // ----- terminal border menu -----
+
+  function closeMenus(){
+    for(const menu of [mountMenu,layoutMenu,spaceMenu,editMenu]) menu.hidden=true;
+    for(const trigger of terminalMenu.querySelectorAll('[data-menu-trigger]')){
+      trigger.setAttribute('aria-expanded','false');
+    }
+  }
+
+  function toggleMenu(name){
+    const target={mount:mountMenu,layout:layoutMenu,space:spaceMenu,edit:editMenu}[name];
+    if(!target)return;
+
+    const shouldOpen=target.hidden;
+    closeMenus();
+
+    if(shouldOpen){
+      target.hidden=false;
+      const trigger=terminalMenu.querySelector(`[data-menu-trigger="${name}"]`);
+      trigger?.setAttribute('aria-expanded','true');
+      target.querySelector('.terminal-menu-item.active')?.focus({preventScroll:true});
+    }
+  }
+
+  function makeMenuItem(label,onClick){
+    const button=document.createElement('button');
+    button.type='button';
+    button.className='terminal-menu-item';
+    button.textContent=label;
+    button.addEventListener('click',()=>{
+      onClick();
+      syncMenuActiveState();
+      closeMenus();
+      terminal.focus({preventScroll:true});
+      render();
+    });
+    return button;
+  }
+
+  function buildMenus(){
+    mountMenu.replaceChildren();
+    for(const [key,demo] of Object.entries(DEMO_SETS)){
+      const item=makeMenuItem(demo.label,()=>mountDemo(key));
+      item.dataset.mount=key;
+      mountMenu.appendChild(item);
+    }
+
+    layoutMenu.replaceChildren();
+    for(const layout of LAYOUT_OPTIONS){
+      for(const line of LINE_OPTIONS){
+        const item=makeMenuItem(
+          layout.label+' · '+line.label,
+          ()=>{
+            currentLayoutAlgorithm=layout.value;
+            currentLineAlgorithm=line.value;
+            operationText='LAYOUT · '+layout.label+' · '+line.label;
+          }
+        );
+        item.dataset.layout=layout.value;
+        item.dataset.line=line.value;
+        layoutMenu.appendChild(item);
+      }
+    }
+
+    spaceMenu.replaceChildren();
+    for(const value of SPACE_OPTIONS){
+      const item=makeMenuItem(value+'%',()=>{
+        currentSpacing=value;
+        operationText='SPACE · '+value+'%';
+      });
+      item.dataset.space=String(value);
+      spaceMenu.appendChild(item);
+    }
+
+    editMenu.replaceChildren();
+
+    const newFolderItem=makeMenuItem('New folder',()=>{
+      // close first so the browser prompt is not layered under the dropdown
+      closeMenus();
+      createNewFolder();
+    });
+    editMenu.appendChild(newFolderItem);
+
+    const deleteItem=makeMenuItem('Delete selection',()=>{
+      deleteSelection();
+    });
+    editMenu.appendChild(deleteItem);
+
+    syncMenuActiveState();
+  }
+
+  function syncMenuActiveState(){
+    for(const item of mountMenu.querySelectorAll('.terminal-menu-item')){
+      item.classList.toggle('active',item.dataset.mount===currentMount);
+    }
+
+    for(const item of layoutMenu.querySelectorAll('.terminal-menu-item')){
+      item.classList.toggle(
+        'active',
+        item.dataset.layout===currentLayoutAlgorithm &&
+        item.dataset.line===currentLineAlgorithm
+      );
+    }
+
+    for(const item of spaceMenu.querySelectorAll('.terminal-menu-item')){
+      item.classList.toggle('active',Number(item.dataset.space)===currentSpacing);
+    }
+  }
+
+  function mountDemo(key){
+    const demo=DEMO_SETS[key];
+    if(!demo)return;
+
+    currentMount=key;
+    nodes=demo.data.map(n=>({...n}));
+    selectedId=null;
+    selectedIds=new Set();
+    clipboardIds=[];
+    clipboardEl.textContent='clipboard empty';
+    drag=null;
+    press=null;
+    panDrag=null;
+    cameraX=0;
+    cameraY=0;
+    terminal.classList.remove('dragging','panning');
+    operationText='MOUNT · '+demo.label;
+    refreshSelectionUI();
+  }
+
+  terminalMenu.addEventListener('click',e=>{
+    const trigger=e.target.closest('[data-menu-trigger]');
+    if(!trigger)return;
+    toggleMenu(trigger.dataset.menuTrigger);
+  });
+
+  document.addEventListener('pointerdown',e=>{
+    if(!terminalMenu.contains(e.target)) closeMenus();
+  });
+
+  document.addEventListener('keydown',e=>{
+    if(e.key==='Escape'){
+      closeMenus();
+      return;
+    }
+
+    if(e.ctrlKey||e.metaKey||e.altKey)return;
+    const key=e.key.toLowerCase();
+
+    if(key==='m'){
+      e.preventDefault();
+      toggleMenu('mount');
+    }else if(key==='l'){
+      e.preventDefault();
+      toggleMenu('layout');
+    }else if(key==='s'){
+      e.preventDefault();
+      toggleMenu('space');
+    }else if(key==='e'){
+      e.preventDefault();
+      toggleMenu('edit');
+    }
+  });
+
+  // ----- copy/paste/delete -----
+
+  function deleteNodeIds(rootIds,sourceLabel='DELETE'){
+    const roots=[...new Set(rootIds||[])]
+      .filter(id=>id!=='root'&&nodeById(id));
+
+    if(!roots.length){
+      operationText=sourceLabel+' · nothing to delete';
+      return 0;
+    }
+
+    const ids=new Set();
+
+    function collect(id){
+      if(ids.has(id))return;
+      ids.add(id);
+      for(const kid of children(id))collect(kid.id);
+    }
+
+    for(const id of roots)collect(id);
+
+    nodes=nodes.filter(n=>!ids.has(n.id));
+    clipboardIds=clipboardIds.filter(id=>!ids.has(id));
+    selectedIds=new Set([...selectedIds].filter(id=>!ids.has(id)));
+
+    if(selectedId && ids.has(selectedId)){
+      selectedId=selectedIds.size ? [...selectedIds][selectedIds.size-1] : null;
+    }
+
+    clipboardEl.textContent=clipboardIds.length
+      ? 'clipboard '+clipboardIds.length+' item'+(clipboardIds.length===1?'':'s')
+      : 'clipboard empty';
+
+    operationText=sourceLabel+' · '+ids.size+' node'+(ids.size===1?'':'s');
+    refreshSelectionUI();
+    return ids.size;
+  }
+
+  function copySelection(){
+    clipboardIds=selectedRoots();
+    const names=clipboardIds.map(id=>nodeById(id)?.name).filter(Boolean);
+
+    if(!clipboardIds.length){
+      clipboardEl.textContent='clipboard empty';
+      operationText='COPY · nothing selected';
+      refreshSelectionUI();
+      return;
+    }
+
+    clipboardEl.textContent=clipboardIds.length===1
+      ? 'clipboard '+names[0]
+      : 'clipboard '+clipboardIds.length+' items';
+
+    operationText='COPY '+(clipboardIds.length===1?names[0]:clipboardIds.length+' items')+' → clipboard';
+    refreshSelectionUI();
+  }
+
+  pasteBtn.addEventListener('click',()=>{
+    const destination=nodeById(selectedId);
+    if(!destination||!destination.folder||!clipboardIds.length)return;
+
+    const created=[];
+    for(const sourceId of clipboardIds){
+      if(nodeById(sourceId))created.push(cloneSubtree(sourceId,destination.id));
+    }
+
+    if(created.length){
+      selectedId=created[created.length-1].id;
+      selectedIds=new Set(created.map(n=>n.id));
+      operationText='PASTE '+created.length+' item'+(created.length===1?'':'s')+' → '+destination.name;
+    }
+    refreshSelectionUI();
+  });
+
+  function cloneSubtree(sourceId,newParentId){
+    const stamp=Math.random().toString(36).slice(2,8);
+
+    function cloneRec(id,parentId){
+      const src=nodeById(id);
+      const newId=id+'_'+stamp+'_'+Math.random().toString(36).slice(2,5);
+      const clone={
+        id:newId,
+        parent:parentId,
+        folder:src.folder,
+        name:uniqueName(parentId,src.name)
+      };
+      nodes.push(clone);
+      for(const kid of children(id))cloneRec(kid.id,newId);
+      return clone;
+    }
+
+    return cloneRec(sourceId,newParentId);
+  }
+
+  function uniqueName(parentId,name){
+    const siblings=children(parentId);
+    if(!siblings.some(n=>n.name===name))return name;
+
+    const slash=name.endsWith('/');
+    const raw=slash?name.slice(0,-1):name;
+    const dot=raw.lastIndexOf('.');
+    const stem=dot>0?raw.slice(0,dot):raw;
+    const ext=dot>0?raw.slice(dot):'';
+
+    for(let i=2;;i++){
+      const candidate=stem+' copy '+i+ext+(slash?'/':'');
+      if(!siblings.some(n=>n.name===candidate))return candidate;
+    }
+  }
+
+  function deleteSelection(){
+    return deleteNodeIds(selectedRoots(),'DELETE');
+  }
+
+  document.getElementById('resetBtn').addEventListener('click',()=>{
+    nodes=DEMO_SETS[currentMount].data.map(n=>({...n}));
+    selectedId=null;
+    selectedIds=new Set();
+    clipboardIds=[];
+    clipboardEl.textContent='clipboard empty';
+    drag=null;
+    panDrag=null;
+    cameraX=0;
+    cameraY=0;
+    terminal.classList.remove('panning');
+    operationText='RESET '+DEMO_SETS[currentMount].label+' · centered';
+    refreshSelectionUI();
+    syncMenuActiveState();
+  });
+
+  terminal.addEventListener('keydown',e=>{
+    const PAN_STEP=e.shiftKey?5:2;
+
+    if(e.key==='ArrowLeft'){
+      cameraX+=PAN_STEP;
+      operationText='PAN left · x '+cameraX+' · y '+cameraY;
+      e.preventDefault();
+      return;
+    }
+    if(e.key==='ArrowRight'){
+      cameraX-=PAN_STEP;
+      operationText='PAN right · x '+cameraX+' · y '+cameraY;
+      e.preventDefault();
+      return;
+    }
+    if(e.key==='ArrowUp'){
+      cameraY+=PAN_STEP;
+      operationText='PAN up · x '+cameraX+' · y '+cameraY;
+      e.preventDefault();
+      return;
+    }
+    if(e.key==='ArrowDown'){
+      cameraY-=PAN_STEP;
+      operationText='PAN down · x '+cameraX+' · y '+cameraY;
+      e.preventDefault();
+      return;
+    }
+    if(e.key==='Home'){
+      cameraX=0;
+      cameraY=0;
+      operationText='PAN reset · centered';
+      e.preventDefault();
+      return;
+    }
+
+    if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='c'){
+      e.preventDefault();copySelection();
+    }
+    if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='v'){
+      e.preventDefault();pasteBtn.click();
+    }
+    if(e.key==='Delete'||e.key==='Backspace'){
+      e.preventDefault();deleteSelection();
+    }
+  });
+
+  // Rebuild atlas on font/layout changes.
+  new ResizeObserver(()=>{
+    atlasMetrics=null;
+    render();
+  }).observe(terminal);
+
+  function loop(now){
+    requestAnimationFrame(loop);
+    if(now-lastFrame<FRAME_MS)return;
+
+    const dt=lastFrame?now-lastFrame:FRAME_MS;
+    lastFrame=now;
+
+    fpsHistory.push(1000/dt);
+    if(fpsHistory.length>45)fpsHistory.shift();
+    const avg=fpsHistory.reduce((a,b)=>a+b,0)/fpsHistory.length;
+    fpsEl.textContent='fps '+Math.round(avg||FPS);
+
+    render();
+  }
+
+  buildMenus();
+  refreshSelectionUI();
+  render();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
