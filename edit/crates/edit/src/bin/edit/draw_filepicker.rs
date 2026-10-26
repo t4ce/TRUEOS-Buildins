@@ -4,7 +4,7 @@
 use std::cmp::Ordering;
 #[cfg(not(target_os = "trueos"))]
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use edit::framebuffer::IndexedColor;
 use edit::helpers::*;

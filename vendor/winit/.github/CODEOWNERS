@@ -1,0 +1,11 @@
+# Shared event handling
+/winit-common/src/event_handler.rs  @madsmtm
+
+# XKB
+/winit-common/src/xkb               @kchibisov
+
+# Wayland
+/winit-wayland                      @kchibisov
+
+# X11
+/winit-x11                          @kchibisov

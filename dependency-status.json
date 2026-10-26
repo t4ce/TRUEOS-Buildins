@@ -1,0 +1,455 @@
+{
+  "scope": "Unique declared dependencies of the 12 built-ins, including nested build, test and development tools; transitive dependencies are not audited.",
+  "solved_definition": "No custom dependency source migration needs review for this entry. This does not assert a working build, correct Cargo path/patch wiring, transitive compatibility, or verification on TrueOS.",
+  "original_blueprints": {
+    "repository": "https://github.com/t4ce/TRUEOS-Blueprints",
+    "commit": "5b20b50d6a084b1cb9786e972c512da5435cb41e"
+  },
+  "solved": {
+    "already_in_kernel": [
+      {
+        "name": "crc32fast",
+        "required": [
+          "1.5.0"
+        ],
+        "path": "TRUEOS/vendor/crc32fast-1.5.0",
+        "version": "1.5.0"
+      },
+      {
+        "name": "futures-util",
+        "required": [
+          "0.3"
+        ],
+        "path": "TRUEOS/vendor/futures-util-0.3.32",
+        "version": "0.3.32"
+      },
+      {
+        "name": "httpdate",
+        "required": [
+          "=1.0.3"
+        ],
+        "path": "TRUEOS/vendor/httpdate-1.0.3",
+        "version": "1.0.3"
+      },
+      {
+        "name": "hyper",
+        "required": [
+          "=1.10.0"
+        ],
+        "path": "TRUEOS/vendor/hyper-1.10.0",
+        "version": "1.10.0"
+      }
+    ],
+    "upstream": [
+      {
+        "name": "anyhow",
+        "required": [
+          "*",
+          "1.0"
+        ],
+        "evidence": "Registry dependency; no custom replacement found in the original manifests or Blueprint vendor overlay list."
+      },
+      {
+        "name": "argh",
+        "required": [
+          "*"
+        ],
+        "evidence": "Registry dependency; no custom replacement found in the original manifests or Blueprint vendor overlay list."
+      },
+      {
+        "name": "bytes",
+        "required": [
+          "1"
+        ],
+        "evidence": "Original vendor/bytes-1.11.1: all 48 checked files match the published bytes 1.11.1 crate. Only the upstream archive Cargo.lock is omitted; .cargo-ok was ignored. Archive SHA256: 1e748733b7cbc798e1434b6ac524f0c1ff2ab456fe201501e6497c8417a4fc33."
+      },
+      {
+        "name": "chrono",
+        "required": [
+          "0.4"
+        ],
+        "evidence": "Registry dependency; no custom replacement found in the original manifests or Blueprint vendor overlay list."
+      },
+      {
+        "name": "cssparser",
+        "required": [
+          "0.37"
+        ],
+        "evidence": "Registry dependency; no custom replacement found in the original manifests or Blueprint vendor overlay list."
+      },
+      {
+        "name": "dav-server",
+        "required": [
+          "=0.11.0"
+        ],
+        "evidence": "Registry dependency; no custom replacement found in the original manifests or Blueprint vendor overlay list."
+      },
+      {
+        "name": "indoc",
+        "required": [
+          "2.0"
+        ],
+        "evidence": "Registry dependency; no custom replacement found in the original manifests or Blueprint vendor overlay list."
+      },
+      {
+        "name": "jpeg-encoder",
+        "required": [
+          "=0.7.1"
+        ],
+        "evidence": "Registry dependency; no custom replacement found in the original manifests or Blueprint vendor overlay list."
+      },
+      {
+        "name": "libfuzzer-sys",
+        "required": [
+          "0.4"
+        ],
+        "evidence": "Registry dependency; no custom replacement found in the original manifests or Blueprint vendor overlay list."
+      },
+      {
+        "name": "lightningcss",
+        "required": [
+          "=1.0.0-alpha.72"
+        ],
+        "evidence": "Registry dependency; no custom replacement found in the original manifests or Blueprint vendor overlay list."
+      },
+      {
+        "name": "miniz_oxide",
+        "required": [
+          "0.9.1"
+        ],
+        "evidence": "Registry dependency; no custom replacement found in the original manifests or Blueprint vendor overlay list."
+      },
+      {
+        "name": "parcel_selectors",
+        "required": [
+          "0.28.3"
+        ],
+        "evidence": "Registry dependency; no custom replacement found in the original manifests or Blueprint vendor overlay list."
+      },
+      {
+        "name": "pico-args",
+        "required": [
+          "0.5"
+        ],
+        "evidence": "Registry dependency; no custom replacement found in the original manifests or Blueprint vendor overlay list."
+      },
+      {
+        "name": "rand",
+        "required": [
+          "0.10"
+        ],
+        "evidence": "Registry dependency; no custom replacement found in the original manifests or Blueprint vendor overlay list."
+      },
+      {
+        "name": "roxmltree",
+        "required": [
+          "0.21"
+        ],
+        "evidence": "Registry dependency; no custom replacement found in the original manifests or Blueprint vendor overlay list."
+      },
+      {
+        "name": "russh",
+        "required": [
+          "=0.62.4"
+        ],
+        "evidence": "Registry dependency; no custom replacement found in the original manifests or Blueprint vendor overlay list."
+      },
+      {
+        "name": "serde_json",
+        "required": [
+          "1"
+        ],
+        "evidence": "Registry dependency; no custom replacement found in the original manifests or Blueprint vendor overlay list."
+      },
+      {
+        "name": "sha2",
+        "required": [
+          "=0.10.9"
+        ],
+        "evidence": "Registry dependency; no custom replacement found in the original manifests or Blueprint vendor overlay list."
+      },
+      {
+        "name": "static-self",
+        "required": [
+          "0.1.2"
+        ],
+        "evidence": "Registry dependency; no custom replacement found in the original manifests or Blueprint vendor overlay list."
+      },
+      {
+        "name": "tempfile",
+        "required": [
+          "3"
+        ],
+        "evidence": "Registry dependency; no custom replacement found in the original manifests or Blueprint vendor overlay list."
+      },
+      {
+        "name": "toml-span",
+        "required": [
+          "=0.7.1"
+        ],
+        "evidence": "Registry dependency; no custom replacement found in the original manifests or Blueprint vendor overlay list."
+      },
+      {
+        "name": "url",
+        "required": [
+          "2.5"
+        ],
+        "evidence": "Registry dependency; no custom replacement found in the original manifests or Blueprint vendor overlay list."
+      }
+    ],
+    "already_in_buildins": [
+      {
+        "name": "edit",
+        "required": [
+          "local/workspace"
+        ],
+        "path": "edit/crates/edit"
+      },
+      {
+        "name": "lsh",
+        "required": [
+          "local/workspace"
+        ],
+        "path": "edit/crates/lsh"
+      },
+      {
+        "name": "rp5",
+        "required": [
+          "local/workspace"
+        ],
+        "path": "hull/rp5"
+      },
+      {
+        "name": "stdext",
+        "required": [
+          "local/workspace"
+        ],
+        "path": "edit/crates/stdext"
+      },
+      {
+        "name": "unicode-gen",
+        "required": [
+          "local/workspace"
+        ],
+        "path": "edit/crates/unicode-gen"
+      }
+    ]
+  },
+  "remaining": [
+    {
+      "name": "crossterm",
+      "required": [
+        "local/workspace"
+      ],
+      "original_source": "vendor/crossterm-0.29.0-trueos",
+      "reason": "Custom TrueOS terminal and event support.",
+      "local_source": "vendor/crossterm-0.29.0-trueos",
+      "source_status": "copied and trimmed; Cargo wiring and transitive dependency audit pending",
+      "platform_review": {
+        "reviewer": "Luna: terminal and HTTP audit",
+        "result": "Removed isolated Windows backend; retained shared inline Windows branches and all Unix/TrueOS code.",
+        "removed": [
+          "Windows-only source modules: src/cursor/sys/windows.rs, src/event/source/windows.rs, src/event/sys/windows.rs and its parse.rs/poll.rs/waker.rs children, src/style/sys/windows.rs, src/terminal/sys/windows.rs, and src/ansi_support.rs",
+          "Windows module declarations/re-exports in src/cursor/sys.rs, src/event/source.rs, src/event/sys.rs, src/style/sys.rs, src/terminal/sys.rs, and src/lib.rs",
+          "The windows feature, its default-feature entry, and the cfg(windows) crossterm_winapi and winapi dependency tables from Cargo.toml",
+          "The compile error that required enabling the removed windows feature on Windows"
+        ],
+        "evidence": [
+          "Every deleted backend module was only declared or selected behind cfg(windows).",
+          "TrueOS terminal/event implementations remain in Unix modules selected with cfg(unix); the original TrueOS/zkvm cfg paths were not edited.",
+          "The removed manifest dependencies were confined to cfg(windows); Unix dependencies and feature wiring are unchanged."
+        ],
+        "limitations": [
+          "Shared inline cfg(windows) code remains and may still refer to removed backend items; Windows is intentionally outside the supported target set. Linux/TrueOS Unix code paths are unchanged."
+        ],
+        "file_changes": {
+          "modified_files": [
+            "Cargo.toml",
+            "src/cursor/sys.rs",
+            "src/event/source.rs",
+            "src/event/sys.rs",
+            "src/lib.rs",
+            "src/style/sys.rs",
+            "src/terminal/sys.rs"
+          ],
+          "removed_files": [
+            "src/ansi_support.rs",
+            "src/cursor/sys/windows.rs",
+            "src/event/source/windows.rs",
+            "src/event/sys/windows.rs",
+            "src/event/sys/windows/parse.rs",
+            "src/event/sys/windows/poll.rs",
+            "src/event/sys/windows/waker.rs",
+            "src/style/sys/windows.rs",
+            "src/terminal/sys/windows.rs"
+          ]
+        },
+        "validation": "Static Cargo manifest and Rust syntax checks; original shared Unix and explicit TrueOS/zkvm source files remain byte-identical. No package builds or target tests."
+      },
+      "local_changes": [
+        "Windows-only source modules: src/cursor/sys/windows.rs, src/event/source/windows.rs, src/event/sys/windows.rs and its parse.rs/poll.rs/waker.rs children, src/style/sys/windows.rs, src/terminal/sys/windows.rs, and src/ansi_support.rs",
+        "Windows module declarations/re-exports in src/cursor/sys.rs, src/event/source.rs, src/event/sys.rs, src/style/sys.rs, src/terminal/sys.rs, and src/lib.rs",
+        "The windows feature, its default-feature entry, and the cfg(windows) crossterm_winapi and winapi dependency tables from Cargo.toml",
+        "The compile error that required enabling the removed windows feature on Windows"
+      ]
+    },
+    {
+      "name": "http-body-util",
+      "required": [
+        "0.1"
+      ],
+      "original_source": "vendor/http-body-util-0.1.3",
+      "reason": "Custom no_std TrueOS implementation using trueos-io.",
+      "local_source": "vendor/http-body-util-0.1.3",
+      "source_status": "copied; Cargo wiring and transitive dependency audit pending",
+      "copied_file_count": 20,
+      "platform_review": {
+        "reviewer": "Luna: terminal and HTTP audit",
+        "result": "Retained unchanged",
+        "reason": "Contains TrueOS/zkvm no_std and trueos-io integration; no isolated irrelevant platform adapter was found.",
+        "validation": "Static Cargo manifest and Rust syntax checks; original shared Unix and explicit TrueOS/zkvm source files remain byte-identical. No package builds or target tests."
+      }
+    },
+    {
+      "name": "libc",
+      "required": [
+        "=0.2.186"
+      ],
+      "original_source": "vendor/libc-0.2.186",
+      "reason": "Custom TrueOS target support; preserve the =0.2.186 pin rather than substituting the kernel lock version.",
+      "local_source": "vendor/libc-0.2.186",
+      "source_status": "copied; Cargo wiring and transitive dependency audit pending",
+      "copied_file_count": 362,
+      "platform_review": {
+        "reviewer": "Luna: runtime and libc audit",
+        "status": "unchanged",
+        "reason": "TrueOS is intentionally routed through libc's Linux-like ABI and has explicit target_os=trueos branches; pruning Linux-like code or target wiring would risk TrueOS.",
+        "validation": "Static Cargo manifest and Rust syntax checks; original shared Unix and explicit TrueOS/zkvm source files remain byte-identical. No package builds or target tests."
+      }
+    },
+    {
+      "name": "reqwest",
+      "required": [
+        "=0.13.3"
+      ],
+      "original_source": "vendor/reqwest-0.13.3",
+      "reason": "Custom TrueOS networking and I/O changes.",
+      "local_source": "vendor/reqwest-0.13.3",
+      "source_status": "copied; Cargo wiring and transitive dependency audit pending",
+      "copied_file_count": 45,
+      "platform_review": {
+        "reviewer": "Luna: terminal and HTTP audit",
+        "result": "Retained unchanged",
+        "reason": "Its WASM/Windows adapters are more broadly connected to shared source and API selection than the bounded crossterm removal; retained unchanged. TrueOS cfg adaptations remain untouched.",
+        "validation": "Static Cargo manifest and Rust syntax checks; original shared Unix and explicit TrueOS/zkvm source files remain byte-identical. No package builds or target tests."
+      }
+    },
+    {
+      "name": "taffy",
+      "required": [
+        "=0.15.0"
+      ],
+      "original_source": "vendor/taffy-0.15.0-trueos",
+      "reason": "Custom CompactLength portability patch documented in TRUEOS-PATCH.md.",
+      "local_source": "vendor/taffy-0.15.0-trueos",
+      "source_status": "copied; Cargo wiring and transitive dependency audit pending",
+      "copied_file_count": 67,
+      "platform_review": {
+        "reviewer": "Luna: runtime and libc audit",
+        "status": "unchanged",
+        "reason": "No OS-specific cfg branches, platform adapter modules, or platform-only dependencies found; the crate is shared layout logic.",
+        "validation": "Static Cargo manifest and Rust syntax checks; original shared Unix and explicit TrueOS/zkvm source files remain byte-identical. No package builds or target tests."
+      }
+    },
+    {
+      "name": "tokio",
+      "required": [
+        "=1.54.1"
+      ],
+      "original_source": "vendor/tokio-1.54.1",
+      "reason": "Custom TrueOS runtime, filesystem and I/O support.",
+      "local_source": "vendor/tokio-1.54.1",
+      "source_status": "copied and trimmed; Cargo wiring and transitive dependency audit pending",
+      "platform_review": {
+        "reviewer": "Luna: runtime and libc audit",
+        "status": "trimmed isolated Windows APIs",
+        "removed": [
+          "src/net/windows/named_pipe.rs and module entry",
+          "src/signal/windows.rs and Windows sys/stub implementations",
+          "the cfg_net_windows helper",
+          "Windows named-pipe and signal windows-sys feature wiring",
+          "the net_named_pipe test target and source"
+        ],
+        "preserved": [
+          "Unix and Linux networking/signal/process implementations",
+          "shared TCP/UDP/process implementation and Windows process dependency wiring",
+          "TrueOS Unix credential cfg branches"
+        ],
+        "evidence": "Named pipes and Windows signals were isolated public modules. The only external vendor references found are in reqwest code guarded by target_os=windows; Linux and TrueOS do not compile those branches.",
+        "limitations": [
+          "Tokio's Windows named-pipe and Windows signal APIs are removed, so Windows consumers of these APIs no longer build. Reqwest contains Windows-only references to named pipes; its Windows cfg path is outside this task's TrueOS/Linux target scope."
+        ],
+        "file_changes": {
+          "modified_files": [
+            "Cargo.toml",
+            "src/macros/cfg.rs",
+            "src/net/mod.rs",
+            "src/signal/mod.rs"
+          ],
+          "removed_files": [
+            "src/net/windows/mod.rs",
+            "src/net/windows/named_pipe.rs",
+            "src/signal/windows.rs",
+            "src/signal/windows/stub.rs",
+            "src/signal/windows/sys.rs",
+            "tests/net_named_pipe.rs"
+          ]
+        },
+        "validation": "Static Cargo manifest and Rust syntax checks; original shared Unix and explicit TrueOS/zkvm source files remain byte-identical. No package builds or target tests."
+      },
+      "local_changes": [
+        "src/net/windows/named_pipe.rs and module entry",
+        "src/signal/windows.rs and Windows sys/stub implementations",
+        "the cfg_net_windows helper",
+        "Windows named-pipe and signal windows-sys feature wiring",
+        "the net_named_pipe test target and source"
+      ]
+    },
+    {
+      "name": "trueos",
+      "required": [
+        "local/workspace"
+      ],
+      "original_source": "api",
+      "reason": "Blueprint SDK API; explicit paths are currently missing and workspace dependencies still need configuration."
+    },
+    {
+      "name": "winit",
+      "required": [
+        "local/workspace"
+      ],
+      "original_source": "vendor/winit/winit",
+      "reason": "Fork submodule at 3e9a2e01186b3d6dde0bfcc69736284f2641dff3 with a winit-trueos backend.",
+      "local_source": "vendor/winit/winit",
+      "source_status": "copied; Cargo wiring and transitive dependency audit pending",
+      "local_changes": [
+        "Removed Android, AppKit, UIKit, Orbital/Redox, Web and Win32 backends and their dependencies.",
+        "Retained TrueOS UI4 and Linux X11/Wayland backends plus shared support crates."
+      ],
+      "retained_backends": [
+        "trueos",
+        "linux-x11",
+        "linux-wayland"
+      ]
+    }
+  ],
+  "notes": [
+    "Upstream means an ordinary declared version requirement or pin; this audit does not claim it is the newest published release.",
+    "The kernel vendor futures-util 0.3.32 satisfies the built-ins 0.3 requirement, but differs from kernel Cargo.lock 0.3.34. Wiring must select the intended source.",
+    "rand 0.10 is a normal upstream dependency. Kernel Cargo.lock rand 0.8.8 is not a substitute; both versions can coexist.",
+    "The registry dependencies can themselves use transitive TrueOS overlays. Those are outside this direct-dependency audit.",
+    "No TrueOS package verification was run.",
+    "Seven remaining vendor source trees were initially copied unchanged from the recorded Blueprints commit; the entire winit workspace was retained at its recorded submodule commit. Git metadata was excluded. The trueos SDK under api has not been copied. Cargo paths/patches were not changed.",
+    "Two Luna agents reviewed the six vendor packages other than winit. Isolated crossterm Windows backends and Tokio Windows named-pipe/signal APIs were removed; shared Linux/Unix implementations and uncertain adapters were retained. Parent independently checked modified syntax and preservation of Unix/TrueOS-specific source."
+  ]
+}

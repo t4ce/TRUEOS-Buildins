@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+jobs:
+  fmt:
+    name: Check formatting
+    runs-on: ubuntu-latest
+    steps:
+    - uses: taiki-e/checkout-action@v1
+    - uses: dtolnay/rust-toolchain@nightly
+      with:
+        components: rustfmt
+    - name: Check Formatting
+      run: cargo fmt -- --check
+
+  taplo:
+    name: Taplo
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: taiki-e/checkout-action@v1
+      - name: Install Taplo
+        uses: taiki-e/install-action@v2
+        with:
+          tool: taplo-cli
+      - name: Run Taplo
+        run: taplo fmt --check
+
+  typos:
+    name: Check for typos
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: taiki-e/checkout-action@v1
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: typos-cli
+      - name: run typos
+        run: typos
+      - name: Typos info
+        if: failure()
+        run: |
+          echo 'To fix typos, please run `typos -w`'
+          echo 'To check for a diff, run `typos`'
+          echo 'You can find typos here: https://crates.io/crates/typos'
+
+  tests:
+    name: Linux ${{ matrix.backend }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: [x11, wayland]
+    steps:
+      - uses: taiki-e/checkout-action@v1
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Linux libraries
+        run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libwayland-dev
+      - name: Check Linux backend
+        run: cargo check -p winit --all-targets --no-default-features --features=${{ matrix.backend }}
