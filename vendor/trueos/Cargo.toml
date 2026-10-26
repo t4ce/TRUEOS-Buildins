@@ -1,0 +1,35 @@
+[package]
+name = "trueos"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+default = []
+default-global-allocator = []
+default-panic-handler = []
+tokio-runtime = ["dep:tokio"]
+wc3-x86 = ["v/wc3-x86"]
+tokio-net-probe = ["tokio-runtime", "dep:mio", "dep:socket2", "tokio/net"]
+tracing = ["dep:tracing"]
+lifecycle-net = ["tokio-net-probe"]
+ui3 = []
+ui4-solara-text = []
+ui4-scene = ["ui4-solara-text"]
+ui4-winit = ["ui4-solara-text"]
+gridpaper = []
+spirit = []
+lumen = ["spirit"]
+
+[lib]
+name = "trueos"
+path = "src/lib.rs"
+
+[dependencies]
+v = { path = "../trueos-v" }
+tokio = { version = "=1.54.1", default-features = false, features = ["rt", "macros", "sync", "time", "io-util", "io-std", "fs"], optional = true }
+mio = { version = "=1.2.0", default-features = false, features = ["os-poll", "net"], optional = true }
+socket2 = { version = "=0.6.3", default-features = false, optional = true }
+tracing = { version = "=0.1.44", default-features = false, features = ["std"], optional = true }
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("trueos", "zkvm"))'] }

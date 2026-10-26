@@ -1,0 +1,660 @@
+extern crate alloc;
+
+use alloc::string::String;
+use alloc::vec::Vec;
+use core::fmt;
+
+use crate::vcabi;
+
+pub const RESET: &str = "\x1b[0m";
+pub const CLEAR_LINE: &str = "\x1b[2K";
+pub const CLEAR_TO_EOL: &str = "\x1b[K";
+pub const BOLD: &str = "\x1b[1m";
+pub const DIM: &str = "\x1b[2m";
+pub const ITALIC: &str = "\x1b[3m";
+pub const UNDERLINE: &str = "\x1b[4m";
+pub const INVERT: &str = "\x1b[7m";
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Rgb {
+    pub r: u8,
+    pub g: u8,
+    pub b: u8,
+}
+
+impl Rgb {
+    pub const fn new(r: u8, g: u8, b: u8) -> Self {
+        Self { r, g, b }
+    }
+}
+
+pub mod color {
+    use super::Rgb;
+
+    pub const OK: Rgb = Rgb::new(60, 183, 161);
+    pub const INFO: Rgb = Rgb::new(96, 165, 250);
+    pub const WARN: Rgb = Rgb::new(245, 158, 11);
+    pub const ERROR: Rgb = Rgb::new(248, 113, 113);
+    pub const ACCENT: Rgb = Rgb::new(255, 55, 255);
+    pub const MUTED: Rgb = Rgb::new(148, 163, 184);
+    pub const WHITE: Rgb = Rgb::new(255, 255, 255);
+}
+
+#[derive(Clone, Copy)]
+pub struct Style<'a> {
+    text: &'a str,
+    bold: bool,
+    dim: bool,
+    italic: bool,
+    underline: bool,
+    invert: bool,
+    fg_rgb: Option<Rgb>,
+    bg_rgb: Option<Rgb>,
+    fg_ansi: Option<u8>,
+    bg_ansi: Option<u8>,
+}
+
+impl fmt::Display for Style<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        #[inline]
+        fn emit_code(f: &mut fmt::Formatter<'_>, first: &mut bool, code: &str) -> fmt::Result {
+            if !*first {
+                write!(f, ";")?;
+            }
+            *first = false;
+            write!(f, "{}", code)
+        }
+
+        write!(f, "\x1b[")?;
+        let mut first = true;
+
+        if self.bold {
+            emit_code(f, &mut first, "1")?;
+        }
+        if self.dim {
+            emit_code(f, &mut first, "2")?;
+        }
+        if self.italic {
+            emit_code(f, &mut first, "3")?;
+        }
+        if self.underline {
+            emit_code(f, &mut first, "4")?;
+        }
+        if self.invert {
+            emit_code(f, &mut first, "7")?;
+        }
+        if let Some(rgb) = self.fg_rgb {
+            emit_code(f, &mut first, "38")?;
+            emit_code(f, &mut first, "2")?;
+            emit_code(f, &mut first, &alloc::format!("{}", rgb.r))?;
+            emit_code(f, &mut first, &alloc::format!("{}", rgb.g))?;
+            emit_code(f, &mut first, &alloc::format!("{}", rgb.b))?;
+        } else if let Some(idx) = self.fg_ansi {
+            emit_code(f, &mut first, "38")?;
+            emit_code(f, &mut first, "5")?;
+            emit_code(f, &mut first, &alloc::format!("{}", idx))?;
+        }
+        if let Some(rgb) = self.bg_rgb {
+            emit_code(f, &mut first, "48")?;
+            emit_code(f, &mut first, "2")?;
+            emit_code(f, &mut first, &alloc::format!("{}", rgb.r))?;
+            emit_code(f, &mut first, &alloc::format!("{}", rgb.g))?;
+            emit_code(f, &mut first, &alloc::format!("{}", rgb.b))?;
+        } else if let Some(idx) = self.bg_ansi {
+            emit_code(f, &mut first, "48")?;
+            emit_code(f, &mut first, "5")?;
+            emit_code(f, &mut first, &alloc::format!("{}", idx))?;
+        }
+        if first {
+            emit_code(f, &mut first, "0")?;
+        }
+
+        write!(f, "m{}{}", self.text, RESET)
+    }
+}
+
+impl<'a> Style<'a> {
+    pub fn bold(mut self) -> Self {
+        self.bold = true;
+        self
+    }
+
+    pub fn dim(mut self) -> Self {
+        self.dim = true;
+        self
+    }
+
+    pub fn italic(mut self) -> Self {
+        self.italic = true;
+        self
+    }
+
+    pub fn underline(mut self) -> Self {
+        self.underline = true;
+        self
+    }
+
+    pub fn invert(mut self) -> Self {
+        self.invert = true;
+        self
+    }
+
+    pub fn fg(mut self, rgb: Rgb) -> Self {
+        self.fg_rgb = Some(rgb);
+        self.fg_ansi = None;
+        self
+    }
+
+    pub fn bg(mut self, rgb: Rgb) -> Self {
+        self.bg_rgb = Some(rgb);
+        self.bg_ansi = None;
+        self
+    }
+
+    pub fn fg8(mut self, idx: u8) -> Self {
+        self.fg_ansi = Some(idx);
+        self.fg_rgb = None;
+        self
+    }
+
+    pub fn bg8(mut self, idx: u8) -> Self {
+        self.bg_ansi = Some(idx);
+        self.bg_rgb = None;
+        self
+    }
+}
+
+pub fn style(text: &str) -> Style<'_> {
+    Style {
+        text,
+        bold: false,
+        dim: false,
+        italic: false,
+        underline: false,
+        invert: false,
+        fg_rgb: None,
+        bg_rgb: None,
+        fg_ansi: None,
+        bg_ansi: None,
+    }
+}
+
+#[inline]
+pub fn uart1_shell_write(bytes: &[u8]) -> usize {
+    if bytes.is_empty() {
+        return 0;
+    }
+    unsafe { vcabi::trueos_cabi_uart1_shell_write(bytes.as_ptr(), bytes.len()) }
+}
+
+#[inline]
+pub fn shell2_print_line(bytes: &[u8]) -> usize {
+    let written = if bytes.is_empty() {
+        0
+    } else {
+        unsafe { vcabi::trueos_cabi_shell_attached_write(bytes.as_ptr(), bytes.len()) }
+    };
+    let newline = b"\r\n";
+    written.saturating_add(unsafe {
+        vcabi::trueos_cabi_shell_attached_write(newline.as_ptr(), newline.len())
+    })
+}
+
+#[inline]
+pub fn line(text: &str) -> usize {
+    shell2_print_line(text.as_bytes())
+}
+
+#[inline]
+pub fn linef(args: fmt::Arguments<'_>) -> usize {
+    let text = alloc::format!("{}", args);
+    line(text.as_str())
+}
+
+#[inline]
+pub fn progress_line(text: &str) -> usize {
+    let mut frame = String::with_capacity(text.len().saturating_add(1));
+    frame.push('\r');
+    frame.push_str(text);
+    attached_write(frame.as_bytes())
+}
+
+#[inline]
+pub fn progress_linef(args: fmt::Arguments<'_>) -> usize {
+    let text = alloc::format!("{}", args);
+    progress_line(text.as_str())
+}
+
+#[inline]
+pub fn styled_linef(args: fmt::Arguments<'_>, fg: Rgb, bold: bool) -> usize {
+    let text = alloc::format!("{}", args);
+    let styled = if bold {
+        alloc::format!("{}", style(text.as_str()).fg(fg).bold())
+    } else {
+        alloc::format!("{}", style(text.as_str()).fg(fg))
+    };
+    line(styled.as_str())
+}
+
+#[inline]
+pub fn ok(text: &str) -> usize {
+    linef(format_args!("{}", style(text).fg(color::OK)))
+}
+
+#[inline]
+pub fn info(text: &str) -> usize {
+    linef(format_args!("{}", style(text).fg(color::INFO)))
+}
+
+#[inline]
+pub fn warn(text: &str) -> usize {
+    linef(format_args!("{}", style(text).fg(color::WARN).bold()))
+}
+
+#[inline]
+pub fn error(text: &str) -> usize {
+    linef(format_args!("{}", style(text).fg(color::ERROR).bold()))
+}
+
+#[inline]
+pub fn write(bytes: &[u8]) -> usize {
+    if bytes.is_empty() {
+        return 0;
+    }
+    unsafe { vcabi::trueos_cabi_shell_attached_write(bytes.as_ptr(), bytes.len()) }
+}
+
+#[inline]
+pub fn attached_write(bytes: &[u8]) -> usize {
+    write(bytes)
+}
+
+/// Opaque authority for one active Blueprint terminal session.
+#[derive(Debug, Eq, PartialEq)]
+pub struct TerminalLease {
+    epoch: u64,
+}
+
+/// Opaque proof that one terminal session was returned to Shell2.
+#[derive(Debug, Eq, PartialEq)]
+pub struct TerminalParkingTicket {
+    ticket: u64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct TerminalSurfaceSnapshot {
+    pub generation: u64,
+    pub columns: u32,
+    pub rows: u32,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TerminalLeaseError {
+    Unsupported,
+    NotActive,
+    Stale,
+    Detached,
+    Busy,
+    Transport(i32),
+}
+
+impl TerminalLeaseError {
+    const fn from_rc(rc: i32) -> Self {
+        match rc {
+            -1 => Self::Unsupported,
+            -2 => Self::NotActive,
+            -3 => Self::Stale,
+            -4 => Self::Detached,
+            -5 => Self::Busy,
+            other => Self::Transport(other),
+        }
+    }
+}
+
+impl fmt::Display for TerminalLeaseError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Unsupported => formatter.write_str("terminal handoff is unsupported"),
+            Self::NotActive => formatter.write_str("terminal lease is not active"),
+            Self::Stale => formatter.write_str("terminal lease epoch is stale"),
+            Self::Detached => formatter.write_str("terminal console is detached"),
+            Self::Busy => formatter.write_str("terminal ownership could not be transferred"),
+            Self::Transport(code) => write!(formatter, "terminal lease transport error {code}"),
+        }
+    }
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub enum TerminalReentry {
+    Pending,
+    Ready(TerminalLease),
+}
+
+/// Atomically claim the launch-reserved terminal and return its first lease.
+///
+/// Until this call succeeds, Shell2 remains the visible/input owner and the
+/// Blueprint may perform ordinary fallible initialization without blacking
+/// out the launching terminal.
+pub fn terminal_initial_lease() -> Result<TerminalLease, TerminalLeaseError> {
+    let mut epoch = 0;
+    let rc = unsafe { vcabi::trueos_cabi_blueprint_terminal_lease_current_v1(0, &mut epoch) };
+    if rc == 0 && epoch != 0 {
+        Ok(TerminalLease { epoch })
+    } else {
+        Err(TerminalLeaseError::from_rc(if rc == 0 { -6 } else { rc }))
+    }
+}
+
+pub fn terminal_surface_snapshot() -> Result<TerminalSurfaceSnapshot, TerminalLeaseError> {
+    let mut generation = 0;
+    let mut columns = 0;
+    let mut rows = 0;
+    let rc = unsafe {
+        vcabi::trueos_cabi_blueprint_terminal_surface_snapshot_v1(
+            &mut generation,
+            &mut columns,
+            &mut rows,
+        )
+    };
+    if rc == 0 && generation != 0 && columns != 0 && rows != 0 {
+        Ok(TerminalSurfaceSnapshot {
+            generation,
+            columns,
+            rows,
+        })
+    } else {
+        Err(TerminalLeaseError::from_rc(if rc == 0 { -6 } else { rc }))
+    }
+}
+
+impl TerminalLease {
+    pub const fn epoch(&self) -> u64 {
+        self.epoch
+    }
+
+    /// Acknowledge that raw mode, the alternate screen, and the first render
+    /// boundary have been restored for this exact active epoch.
+    pub fn acknowledge_ready(&self) -> Result<(), TerminalLeaseError> {
+        let mut observed = 0;
+        let rc = unsafe {
+            vcabi::trueos_cabi_blueprint_terminal_lease_current_v1(self.epoch, &mut observed)
+        };
+        if rc == 0 && observed == self.epoch {
+            Ok(())
+        } else if rc == 0 {
+            Err(TerminalLeaseError::Stale)
+        } else {
+            Err(TerminalLeaseError::from_rc(rc))
+        }
+    }
+
+    pub fn surface_snapshot(&self) -> Result<TerminalSurfaceSnapshot, TerminalLeaseError> {
+        terminal_surface_snapshot()
+    }
+
+    pub fn release_to_shell(self) -> Result<TerminalParkingTicket, TerminalLeaseError> {
+        let mut ticket = 0;
+        let rc = unsafe {
+            vcabi::trueos_cabi_blueprint_terminal_lease_release_v1(self.epoch, &mut ticket)
+        };
+        if rc == 0 && ticket != 0 {
+            Ok(TerminalParkingTicket { ticket })
+        } else {
+            Err(TerminalLeaseError::from_rc(if rc == 0 { -6 } else { rc }))
+        }
+    }
+}
+
+impl TerminalParkingTicket {
+    pub const fn epoch(&self) -> u64 {
+        self.ticket
+    }
+
+    /// Poll without consuming terminal input or parking the guest VCPU.
+    pub fn poll_reentry(&self) -> Result<TerminalReentry, TerminalLeaseError> {
+        let mut epoch = 0;
+        let rc = unsafe {
+            vcabi::trueos_cabi_blueprint_terminal_lease_poll_reentry_v1(self.ticket, &mut epoch)
+        };
+        match rc {
+            1 => Ok(TerminalReentry::Pending),
+            0 if epoch != 0 => Ok(TerminalReentry::Ready(TerminalLease { epoch })),
+            0 => Err(TerminalLeaseError::Transport(-6)),
+            other => Err(TerminalLeaseError::from_rc(other)),
+        }
+    }
+
+    /// Convenience wait that yields the guest VCPU between typed polls.
+    /// Callers that must perform work while hidden should drive
+    /// [`Self::poll_reentry`] from their own loop or executor instead.
+    pub fn wait_for_reentry(self) -> Result<TerminalLease, TerminalLeaseError> {
+        loop {
+            match self.poll_reentry()? {
+                TerminalReentry::Pending => {
+                    crate::vsys::poll_once();
+                    crate::vsys::sleep_ms(10);
+                }
+                TerminalReentry::Ready(lease) => return Ok(lease),
+            }
+        }
+    }
+}
+
+#[inline]
+pub fn leave_terminal_handoff() {
+    if let Ok(lease) = terminal_initial_lease()
+        && lease.release_to_shell().is_ok()
+    {
+        return;
+    }
+    let _ = unsafe { vcabi::trueos_cabi_blueprint_return_to_cli() };
+}
+
+#[inline]
+pub fn report_exit_reason(reason: &str) -> bool {
+    if reason.is_empty() {
+        return false;
+    }
+    unsafe { vcabi::trueos_cabi_blueprint_exit_reason(reason.as_ptr(), reason.len()) == 0 }
+}
+
+#[inline]
+pub fn shutdown_current_blueprint(reason: &str) -> bool {
+    let bytes = reason.as_bytes();
+    unsafe { vcabi::trueos_cabi_blueprint_shutdown(bytes.as_ptr(), bytes.len()) == 0 }
+}
+
+#[inline]
+pub fn attached_read_byte() -> Option<u8> {
+    let value = unsafe { vcabi::trueos_cabi_shell_attached_read_byte() };
+    if (0..=255).contains(&value) {
+        Some(value as u8)
+    } else {
+        None
+    }
+}
+
+#[inline]
+pub fn read(buf: &mut [u8]) -> usize {
+    let mut read = 0;
+    for slot in buf {
+        let Some(byte) = attached_read_byte() else {
+            break;
+        };
+        *slot = byte;
+        read += 1;
+    }
+    read
+}
+
+pub fn read_blocking(buf: &mut [u8]) -> usize {
+    if buf.is_empty() {
+        return 0;
+    }
+
+    loop {
+        let read = read(buf);
+        if read != 0 {
+            return read;
+        }
+        crate::vsys::poll_once();
+        crate::vsys::sleep_ms(100);
+    }
+}
+
+#[inline]
+pub fn attached_read_available(buf: &mut [u8]) -> usize {
+    read(buf)
+}
+
+#[inline]
+pub fn attached_retarget_slot(slot: &str) -> bool {
+    if slot.is_empty() {
+        return false;
+    }
+    unsafe { vcabi::trueos_cabi_shell_attached_retarget_slot(slot.as_ptr(), slot.len()) == 0 }
+}
+
+/// Launch one new resident img instance for one or more TRUEOSFS paths.
+/// Every path is opened as its own fixed frame; passing one directory lets the
+/// viewer create a single navigable gallery frame.
+pub fn open_images(paths: &[String]) -> Result<(), i32> {
+    if paths.is_empty()
+        || paths.len() > 32
+        || paths
+            .iter()
+            .any(|path| path.is_empty() || path.as_bytes().contains(&0))
+    {
+        return Err(-1);
+    }
+    let payload_len = paths
+        .iter()
+        .map(String::len)
+        .sum::<usize>()
+        .saturating_add(paths.len().saturating_sub(1));
+    let mut payload = Vec::with_capacity(payload_len);
+    for (index, path) in paths.iter().enumerate() {
+        if index != 0 {
+            payload.push(0);
+        }
+        payload.extend_from_slice(path.as_bytes());
+    }
+    let rc = unsafe { vcabi::trueos_cabi_img_open_v1(payload.as_ptr(), payload.len()) };
+    if rc == 0 { Ok(()) } else { Err(rc) }
+}
+
+/// Queue looping playback through Shell2's `vid fs` player.
+pub fn play_video(path: &str) -> Result<(), i32> {
+    if path.is_empty() || !path.starts_with('/') || path.as_bytes().contains(&0) {
+        return Err(-1);
+    }
+    let rc = unsafe { vcabi::trueos_cabi_vid_open_v1(path.as_ptr(), path.len()) };
+    if rc == 0 { Ok(()) } else { Err(rc) }
+}
+
+/// Queue looping playback of a disc-qualified TRUEOSFS video.
+pub fn play_video_qualified(path: &str) -> Result<(), i32> {
+    let Some(rest) = path.strip_prefix("trueosfs:disc") else {
+        return Err(-1);
+    };
+    let Some((raw, file)) = rest.split_once('/') else {
+        return Err(-1);
+    };
+    if raw.is_empty()
+        || !raw.bytes().all(|byte| byte.is_ascii_digit())
+        || file.is_empty()
+        || path.as_bytes().contains(&0)
+    {
+        return Err(-1);
+    }
+    let rc = unsafe { vcabi::trueos_cabi_vid_open_v2(path.as_ptr(), path.len()) };
+    if rc == 0 { Ok(()) } else { Err(rc) }
+}
+
+/// Queue a browser-resolved HTTPS AVC MP4 in Shell2's bounded video player.
+/// The existing qualified-source ABI also accepts HTTPS media URLs.
+pub fn play_video_url(url: &str) -> Result<(), i32> {
+    if !url.starts_with("https://")
+        || url.len() > 8192
+        || url
+            .bytes()
+            .any(|b| b.is_ascii_control() || b.is_ascii_whitespace())
+    {
+        return Err(-1);
+    }
+    let rc = unsafe { vcabi::trueos_cabi_vid_open_v2(url.as_ptr(), url.len()) };
+    if rc == 0 { Ok(()) } else { Err(rc) }
+}
+
+pub const KONSOLE_FRAME_TERMINAL_HANDOFF: u32 = 1 << 31;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct KonsoleSize {
+    pub cols: u32,
+    pub rows: u32,
+}
+
+#[inline]
+pub fn konsole_size() -> Option<KonsoleSize> {
+    let mut cols = 0u32;
+    let mut rows = 0u32;
+    let status = unsafe { vcabi::trueos_cabi_konsole_size(&mut cols, &mut rows) };
+    if status == 0 && cols != 0 && rows != 0 {
+        Some(KonsoleSize { cols, rows })
+    } else {
+        None
+    }
+}
+
+#[inline]
+pub fn konsole_begin_frame(cols: u32, rows: u32, reserved_top_rows: u32) -> i32 {
+    unsafe { vcabi::trueos_cabi_konsole_begin_frame(cols, rows, reserved_top_rows) }
+}
+
+/// Launch an app with a one-shot UTF-8 start script on its own terminal target.
+pub fn launch_with_script(app: &str, script: &str) -> Result<(), i32> {
+    launch_with_destination(app, script, LaunchDestination::CurrentShell)
+}
+
+/// Presentation belongs to the launch request, independent of the child's script.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LaunchDestination {
+    CurrentShell,
+    NewShell3,
+    Headless,
+}
+
+/// NewShell3 creates one kernel-owned UI4 shell and enters the child's Matrix slot.
+/// Headless needs no inherited terminal; useful for App Store's pullbot.
+pub fn launch_with_destination(app: &str, script: &str, destination: LaunchDestination) -> Result<(), i32> {
+    if app.is_empty() || app.as_bytes().contains(&0) || script.as_bytes().contains(&0) {
+        return Err(-1);
+    }
+    let mut payload = Vec::from(app.as_bytes());
+    payload.push(0);
+    payload.extend_from_slice(script.as_bytes());
+    match destination {
+        LaunchDestination::CurrentShell => {},
+        LaunchDestination::NewShell3 => payload.extend_from_slice(b"\0sh3"),
+        LaunchDestination::Headless => payload.extend_from_slice(b"\0headless"),
+    }
+    let rc =
+        unsafe { vcabi::trueos_cabi_blueprint_launch_script_v1(payload.as_ptr(), payload.len()) };
+    if rc == 0 { Ok(()) } else { Err(rc) }
+}
+
+/// Spawn a normal Shell3 at a pixel origin and size, waiting for its first paint.
+/// Shell3 enforces its minimum text grid; partial edge cells remain padding.
+/// The returned window belongs to the Shell3 service and outlives the caller.
+pub fn spawn_window(x: i32, y: i32, width: u32, height: u32) -> Result<u32, i32> {
+    if width == 0 || height == 0 { return Err(-1); }
+    let rc = unsafe { vcabi::trueos_cabi_shell3_window_v1(x, y, width, height) };
+    if rc < 0 { return Err(rc as i32); }
+    loop {
+        let rc = unsafe { vcabi::trueos_cabi_shell3_window_v1(0, 0, 0, 0) };
+        if rc < 0 { return Err(rc as i32); }
+        if rc > 0 { return Ok(rc as u32); }
+        crate::vsys::poll_once();
+        crate::vsys::sleep_ms(1);
+    }
+}

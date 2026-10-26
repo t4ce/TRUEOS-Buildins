@@ -421,7 +421,13 @@
         "local/workspace"
       ],
       "original_source": "api",
-      "reason": "Blueprint SDK API; explicit paths are currently missing and workspace dependencies still need configuration."
+      "reason": "Blueprint SDK API; built-in manifest paths and workspace dependencies still need configuration.",
+      "local_source": "vendor/trueos",
+      "source_status": "copied with its local trueos-v and trueos-math dependencies; target build not verified",
+      "local_changes": [
+        "Adjusted the SDK v dependency path to ../trueos-v. All other copied files are unchanged.",
+        "trueos-v retains paths to the sibling TRUEOS kernel for infer and trueos-fs."
+      ]
     },
     {
       "name": "winit",
@@ -449,7 +455,7 @@
     "rand 0.10 is a normal upstream dependency. Kernel Cargo.lock rand 0.8.8 is not a substitute; both versions can coexist.",
     "The registry dependencies can themselves use transitive TrueOS overlays. Those are outside this direct-dependency audit.",
     "No TrueOS package verification was run.",
-    "Seven remaining vendor source trees were initially copied unchanged from the recorded Blueprints commit; the entire winit workspace was retained at its recorded submodule commit. Git metadata was excluded. The trueos SDK under api has not been copied. Cargo paths/patches were not changed.",
+    "Seven remaining vendor source trees were initially copied unchanged from the recorded Blueprints commit; the entire winit workspace was retained at its recorded submodule commit. Git metadata was excluded. The trueos SDK was subsequently copied to vendor/trueos together with vendor/trueos-v and vendor/trueos-math from the same commit. Only the SDK internal v path was adjusted; built-in Cargo paths/patches remain unchanged.",
     "Two Luna agents reviewed the six vendor packages other than winit. Isolated crossterm Windows backends and Tokio Windows named-pipe/signal APIs were removed; shared Linux/Unix implementations and uncertain adapters were retained. Parent independently checked modified syntax and preservation of Unix/TrueOS-specific source."
   ]
 }
