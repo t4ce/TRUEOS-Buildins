@@ -1,0 +1,947 @@
+--- a/std/src/hash/random.rs
++++ b/std/src/hash/random.rs
+@@ -64,15 +64,31 @@
+         // iteration order allows a form of DOS attack. To counter that we
+         // increment one of the seeds on every RandomState creation, giving
+         // every corresponding HashMap a different iteration order.
+-        thread_local!(static KEYS: Cell<(u64, u64)> = {
+-            Cell::new(hashmap_random_keys())
+-        });
++        #[cfg(any(target_os = "trueos", target_os = "zkvm"))]
++        {
++            use crate::sync::atomic::{AtomicU64, Ordering};
+ 
+-        KEYS.with(|keys| {
+-            let (k0, k1) = keys.get();
+-            keys.set((k0.wrapping_add(1), k1));
++            static TRUEOS_HASH_RANDOM_COUNTER: AtomicU64 = AtomicU64::new(0);
++
++            let seed = TRUEOS_HASH_RANDOM_COUNTER.fetch_add(1, Ordering::Relaxed);
++            let (mut k0, mut k1) = hashmap_random_keys();
++            k0 = k0.wrapping_add(seed);
++            k1 = k1.wrapping_add(seed.rotate_left(32));
+             RandomState { k0, k1 }
+-        })
++        }
++
++        #[cfg(not(any(target_os = "trueos", target_os = "zkvm")))]
++        {
++            thread_local!(static KEYS: Cell<(u64, u64)> = {
++                Cell::new(hashmap_random_keys())
++            });
++
++            KEYS.with(|keys| {
++                let (k0, k1) = keys.get();
++                keys.set((k0.wrapping_add(1), k1));
++                RandomState { k0, k1 }
++            })
++        }
+     }
+ }
+ 
+--- a/std/src/os/linux/mod.rs
++++ b/std/src/os/linux/mod.rs
+@@ -4,6 +4,8 @@
+ #![doc(cfg(target_os = "linux"))]
+ 
+ pub mod fs;
++#[cfg(not(target_os = "trueos"))]
+ pub mod net;
++#[cfg(not(target_os = "trueos"))]
+ pub mod process;
+ pub mod raw;
+--- a/std/src/os/mod.rs
++++ b/std/src/os/mod.rs
+@@ -50,7 +50,7 @@
+         pub mod unix;
+         #[cfg(target_vendor = "apple")]
+         pub mod darwin;
+-        #[cfg(target_os = "linux")]
++        #[cfg(any(target_os = "linux", target_os = "trueos"))]
+         pub mod linux;
+     }
+     target_family = "wasm" => {
+@@ -77,7 +77,7 @@
+ ))]
+ pub mod fd;
+ 
+-#[cfg(any(target_os = "linux", target_os = "android", target_os = "cygwin", doc))]
++#[cfg(any(target_os = "linux", target_os = "trueos", target_os = "android", target_os = "cygwin", doc))]
+ mod net;
+ 
+ // # Ordinary platforms
+--- a/std/src/os/unix/mod.rs
++++ b/std/src/os/unix/mod.rs
+@@ -65,7 +65,7 @@
+     pub use crate::os::illumos::*;
+     #[cfg(target_os = "l4re")]
+     pub use crate::os::l4re::*;
+-    #[cfg(target_os = "linux")]
++    #[cfg(any(target_os = "linux", target_os = "trueos"))]
+     pub use crate::os::linux::*;
+     #[cfg(target_os = "netbsd")]
+     pub use crate::os::netbsd::*;
+--- a/std/src/sys/args/unix.rs
++++ b/std/src/sys/args/unix.rs
+@@ -63,6 +63,7 @@
+ 
+ #[cfg(any(
+     target_os = "linux",
++    target_os = "trueos",
+     target_os = "android",
+     target_os = "freebsd",
+     target_os = "dragonfly",
+--- a/std/src/sys/backtrace.rs
++++ b/std/src/sys/backtrace.rs
+@@ -27,6 +27,14 @@
+ impl BacktraceLock<'_> {
+     /// Prints the current backtrace.
+     pub(crate) fn print(&mut self, w: &mut dyn Write, format: PrintFmt) -> io::Result<()> {
++        #[cfg(any(target_os = "trueos", target_os = "zkvm"))]
++        {
++            let _ = (w, format);
++            return Ok(());
++        }
++
++        #[cfg(not(any(target_os = "trueos", target_os = "zkvm")))]
++        {
+         // There are issues currently linking libbacktrace into tests, and in
+         // general during std's own unit tests we're not testing this path. In
+         // test mode immediately return here to optimize away any references to the
+@@ -45,6 +53,7 @@
+             }
+         }
+         write!(w, "{}", DisplayBacktrace { format })
++        }
+     }
+ }
+ 
+--- a/std/src/sys/fs/unix.rs
++++ b/std/src/sys/fs/unix.rs
+@@ -45,6 +45,7 @@
+     target_os = "illumos",
+     target_os = "l4re",
+     target_os = "linux",
++    target_os = "trueos",
+     target_os = "nto",
+     target_os = "qnx",
+     target_os = "redox",
+@@ -259,21 +260,32 @@
+ 
+ // all DirEntry's will have a reference to this struct
+ struct InnerReadDir {
++    #[cfg(not(target_os = "trueos"))]
+     dirp: DirStream,
+     root: PathBuf,
++    #[cfg(target_os = "trueos")]
++    entries: Vec<crate::ffi::CString>,
+ }
+ 
+ pub struct ReadDir {
+     inner: Arc<InnerReadDir>,
+     end_of_stream: bool,
++    #[cfg(target_os = "trueos")]
++    next_index: usize,
+ }
+ 
+ impl ReadDir {
+     fn new(inner: InnerReadDir) -> Self {
+-        Self { inner: Arc::new(inner), end_of_stream: false }
+-    }
+-}
+-
++        Self {
++            inner: Arc::new(inner),
++            end_of_stream: false,
++            #[cfg(target_os = "trueos")]
++            next_index: 0,
++        }
++    }
++}
++
++#[cfg(not(target_os = "trueos"))]
+ struct DirStream(*mut libc::DIR);
+ 
+ // dir::Dir requires openat support
+@@ -412,6 +424,7 @@
+     target_os = "hurd",
+     target_os = "illumos",
+     target_os = "linux",
++    target_os = "trueos",
+     target_os = "nto",
+     target_os = "qnx",
+     target_os = "redox",
+@@ -439,6 +452,7 @@
+     target_os = "hurd",
+     target_os = "illumos",
+     target_os = "linux",
++    target_os = "trueos",
+     target_os = "nto",
+     target_os = "qnx",
+     target_os = "redox",
+@@ -467,6 +481,7 @@
+     target_os = "hurd",
+     target_os = "illumos",
+     target_os = "linux",
++    target_os = "trueos",
+     target_os = "nto",
+     target_os = "qnx",
+     target_os = "redox",
+@@ -858,6 +873,30 @@
+ impl Iterator for ReadDir {
+     type Item = io::Result<DirEntry>;
+ 
++    #[cfg(target_os = "trueos")]
++    fn next(&mut self) -> Option<io::Result<DirEntry>> {
++        let name = match self.inner.entries.get(self.next_index) {
++            Some(name) => name.clone(),
++            None => {
++                self.end_of_stream = true;
++                return None;
++            }
++        };
++        self.next_index += 1;
++
++        Some(Ok(DirEntry {
++            entry: dirent64_min {
++                d_ino: self.next_index as u64,
++                // TRUEOSFS currently exposes names through its listing ABI, not
++                // per-entry kinds. `DT_UNKNOWN` deliberately sends callers that
++                // need the kind through the working `stat` facade.
++                d_type: libc::DT_UNKNOWN,
++            },
++            name,
++            dir: Arc::clone(&self.inner),
++        }))
++    }
++
+     #[cfg(any(
+         target_os = "aix",
+         target_os = "android",
+@@ -966,6 +1005,7 @@
+         target_os = "hurd",
+         target_os = "illumos",
+         target_os = "linux",
++        target_os = "trueos",
+         target_os = "nto",
+         target_os = "qnx",
+         target_os = "redox",
+@@ -1024,6 +1064,7 @@
+     }
+ }
+ 
++#[cfg(not(target_os = "trueos"))]
+ impl Drop for DirStream {
+     fn drop(&mut self) {
+         // dirfd isn't supported everywhere
+@@ -1055,7 +1096,9 @@
+ 
+ // SAFETY: `int dirfd (DIR *dirstream)` is MT-safe, implying that the pointer
+ // may be safely sent among threads.
++#[cfg(not(target_os = "trueos"))]
+ unsafe impl Send for DirStream {}
++#[cfg(not(target_os = "trueos"))]
+ unsafe impl Sync for DirStream {}
+ 
+ impl DirEntry {
+@@ -1164,6 +1207,7 @@
+         target_os = "illumos",
+         target_os = "l4re",
+         target_os = "linux",
++        target_os = "trueos",
+         target_os = "nto",
+         target_os = "qnx",
+         target_os = "redox",
+@@ -1223,6 +1267,7 @@
+         target_os = "illumos",
+         target_os = "fuchsia",
+         target_os = "redox",
++        target_os = "trueos",
+         target_os = "aix",
+         target_os = "nto",
+         target_os = "qnx",
+@@ -1241,6 +1286,7 @@
+         target_os = "illumos",
+         target_os = "fuchsia",
+         target_os = "redox",
++        target_os = "trueos",
+         target_os = "aix",
+         target_os = "nto",
+         target_os = "qnx",
+@@ -1990,6 +2036,7 @@
+     }
+ }
+ 
++#[cfg(not(target_os = "trueos"))]
+ pub fn readdir(path: &Path) -> io::Result<ReadDir> {
+     let ptr = run_path_with_cstr(path, &|p| unsafe { Ok(libc::opendir(p.as_ptr())) })?;
+     if ptr.is_null() {
+@@ -2001,20 +2048,191 @@
+     }
+ }
+ 
++#[cfg(target_os = "trueos")]
++pub fn readdir(path: &Path) -> io::Result<ReadDir> {
++    unsafe extern "C" {
++        fn trueos_cabi_async_fs_list_dir_start(path_ptr: *const u8, path_len: usize) -> i32;
++        fn trueos_cabi_async_fs_status(id: u32) -> i32;
++        fn trueos_cabi_async_fs_result_len(id: u32) -> isize;
++        fn trueos_cabi_async_fs_result_read(
++            id: u32,
++            offset: usize,
++            out_ptr: *mut u8,
++            out_cap: usize,
++        ) -> isize;
++        fn trueos_cabi_async_fs_discard(id: u32) -> i32;
++        fn trueos_cabi_poll_once();
++    }
++
++    struct Operation(u32);
++
++    impl Drop for Operation {
++        fn drop(&mut self) {
++            unsafe {
++                let _ = trueos_cabi_async_fs_discard(self.0);
++            }
++        }
++    }
++
++    fn error(code: i32) -> io::Error {
++        let errno = match code {
++            -8 => libc::ENOENT,
++            -7 => libc::ENAMETOOLONG,
++            -3 => libc::ENOSPC,
++            -1 | -4 | -6 => libc::EINVAL,
++            _ => libc::EIO,
++        };
++        io::Error::from_raw_os_error(errno)
++    }
++
++    let path_bytes = path.as_os_str().as_bytes();
++    let id = unsafe { trueos_cabi_async_fs_list_dir_start(path_bytes.as_ptr(), path_bytes.len()) };
++    if id <= 0 {
++        return Err(error(id));
++    }
++    let operation = Operation(id as u32);
++
++    loop {
++        match unsafe { trueos_cabi_async_fs_status(operation.0) } {
++            0 => unsafe { trueos_cabi_poll_once() },
++            1 => break,
++            code => return Err(error(code)),
++        }
++    }
++
++    let len = unsafe { trueos_cabi_async_fs_result_len(operation.0) };
++    if len < 0 {
++        return Err(error(len as i32));
++    }
++    let mut listing = vec![0u8; len as usize];
++    let mut offset = 0usize;
++    while offset < listing.len() {
++        let got = unsafe {
++            trueos_cabi_async_fs_result_read(
++                operation.0,
++                offset,
++                listing[offset..].as_mut_ptr(),
++                listing.len() - offset,
++            )
++        };
++        if got < 0 {
++            return Err(error(got as i32));
++        }
++        if got == 0 {
++            return Err(io::const_error!(
++                io::ErrorKind::UnexpectedEof,
++                "TRUEOSFS directory listing ended early",
++            ));
++        }
++        offset = offset.saturating_add(got as usize);
++    }
++
++    let mut entries = Vec::new();
++    for name in listing.split(|byte| *byte == b'\n') {
++        if name.is_empty() || name == b"." || name == b".." {
++            continue;
++        }
++        let name = crate::ffi::CString::new(name).map_err(|_| {
++            io::const_error!(
++                io::ErrorKind::InvalidData,
++                "TRUEOSFS directory entry contains a NUL byte",
++            )
++        })?;
++        entries.push(name);
++    }
++
++    Ok(ReadDir::new(InnerReadDir {
++        root: path.to_path_buf(),
++        entries,
++    }))
++}
++
++#[cfg(not(target_os = "trueos"))]
+ pub fn unlink(p: &CStr) -> io::Result<()> {
+     cvt(unsafe { libc::unlink(p.as_ptr()) }).map(|_| ())
+ }
+ 
++#[cfg(target_os = "trueos")]
++pub fn unlink(p: &CStr) -> io::Result<()> {
++    unsafe extern "C" {
++        fn trueos_cabi_async_fs_remove_start(path_ptr: *const u8, path_len: usize) -> i32;
++        fn trueos_cabi_async_fs_status(id: u32) -> i32;
++        fn trueos_cabi_async_fs_discard(id: u32) -> i32;
++        fn trueos_cabi_poll_once();
++    }
++
++    struct Operation(u32);
++
++    impl Drop for Operation {
++        fn drop(&mut self) {
++            unsafe {
++                let _ = trueos_cabi_async_fs_discard(self.0);
++            }
++        }
++    }
++
++    fn error(code: i32) -> io::Error {
++        let errno = match code {
++            -9 => libc::EEXIST,
++            -8 => libc::ENOENT,
++            -7 => libc::ENAMETOOLONG,
++            -3 => libc::ENOSPC,
++            -1 | -4 | -6 => libc::EINVAL,
++            _ => libc::EIO,
++        };
++        io::Error::from_raw_os_error(errno)
++    }
++
++    let path = p.to_bytes();
++    let id = unsafe { trueos_cabi_async_fs_remove_start(path.as_ptr(), path.len()) };
++    if id <= 0 {
++        return Err(error(id));
++    }
++    let operation = Operation(id as u32);
++    loop {
++        match unsafe { trueos_cabi_async_fs_status(operation.0) } {
++            0 => unsafe { trueos_cabi_poll_once() },
++            1 => return Ok(()),
++            code => return Err(error(code)),
++        }
++    }
++}
++
++#[cfg(not(target_os = "trueos"))]
+ pub fn rename(old: &CStr, new: &CStr) -> io::Result<()> {
+     cvt(unsafe { libc::rename(old.as_ptr(), new.as_ptr()) }).map(|_| ())
+ }
+ 
++#[cfg(target_os = "trueos")]
++pub fn rename(old: &CStr, new: &CStr) -> io::Result<()> {
++    // There is deliberately no process-wide atomic-rename contract yet.
++    // A compiler Blueprint is a single writer, so copy-then-remove provides
++    // the required metadata/object publication semantics without inventing a
++    // process or IPC subsystem.
++    let old = Path::new(OsStr::from_bytes(old.to_bytes()));
++    let new = Path::new(OsStr::from_bytes(new.to_bytes()));
++    crate::fs::copy(old, new)?;
++    crate::fs::remove_file(old)
++}
++
+ pub fn set_perm(p: &CStr, perm: FilePermissions) -> io::Result<()> {
+     cvt_r(|| unsafe { libc::chmod(p.as_ptr(), perm.mode) }).map(|_| ())
+ }
+ 
++#[cfg(not(target_os = "trueos"))]
+ pub fn rmdir(p: &CStr) -> io::Result<()> {
+     cvt(unsafe { libc::rmdir(p.as_ptr()) }).map(|_| ())
++}
++
++#[cfg(target_os = "trueos")]
++pub fn rmdir(p: &CStr) -> io::Result<()> {
++    // TRUEOSFS directories are namespace prefixes rather than inode objects.
++    // Once their children are gone, the async remove operation is the only
++    // cleanup contract required (and may report NotFound for an empty prefix).
++    match unlink(p) {
++        Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(()),
++        result => result,
++    }
+ }
+ 
+ pub fn readlink(c_path: &CStr) -> io::Result<PathBuf> {
+@@ -2049,6 +2267,13 @@
+ 
+ pub fn link(original: &CStr, link: &CStr) -> io::Result<()> {
+     cfg_select! {
++        target_os = "trueos" => {
++            let _ = (original, link);
++            return Err(io::const_error!(
++                io::ErrorKind::Unsupported,
++                "hard links are not supported by TRUEOSFS",
++            ));
++        }
+         any(
+             // VxWorks, Redox and ESP-IDF lack `linkat`, so use `link` instead.
+             // POSIX leaves it implementation-defined whether `link` follows
+@@ -2110,6 +2335,7 @@
+     Ok(FileAttr::from_stat64(stat))
+ }
+ 
++#[cfg(not(target_os = "trueos"))]
+ pub fn canonicalize(path: &CStr) -> io::Result<PathBuf> {
+     let r = unsafe { libc::realpath(path.as_ptr(), ptr::null_mut()) };
+     if r.is_null() {
+@@ -2120,6 +2346,35 @@
+         libc::free(r as *mut _);
+         buf
+     })))
++}
++
++#[cfg(target_os = "trueos")]
++pub fn canonicalize(path: &CStr) -> io::Result<PathBuf> {
++    use crate::path::Component;
++
++    // TRUEOSFS has no symbolic-link nodes. Canonicalization is therefore
++    // lexical normalization plus the same existence check that `realpath`
++    // would perform, without importing the unsupported libc `realpath` stub.
++    let path = PathBuf::from(OsString::from_vec(path.to_bytes().to_vec()));
++    let absolute = if path.is_absolute() {
++        path
++    } else {
++        crate::env::current_dir()?.join(path)
++    };
++    let mut normalized = PathBuf::new();
++    for component in absolute.components() {
++        match component {
++            Component::RootDir => normalized.push("/"),
++            Component::CurDir => {}
++            Component::ParentDir => {
++                normalized.pop();
++            }
++            Component::Normal(component) => normalized.push(component),
++            Component::Prefix(_) => unreachable!("Unix paths have no prefix component"),
++        }
++    }
++    run_path_with_cstr(&normalized, &stat)?;
++    Ok(normalized)
+ }
+ 
+ fn open_from(from: &Path) -> io::Result<(crate::fs::File, crate::fs::Metadata)> {
+@@ -2402,15 +2657,23 @@
+     Err(io::const_error!(io::ErrorKind::Unsupported, "lchown not supported by vxworks"))
+ }
+ 
+-#[cfg(not(any(target_os = "fuchsia", target_os = "vxworks", target_os = "wasi")))]
++#[cfg(not(any(
++    target_os = "fuchsia",
++    target_os = "trueos",
++    target_os = "vxworks",
++    target_os = "wasi"
++)))]
+ pub fn chroot(dir: &Path) -> io::Result<()> {
+     run_path_with_cstr(dir, &|dir| cvt(unsafe { libc::chroot(dir.as_ptr()) }).map(|_| ()))
+ }
+ 
+-#[cfg(target_os = "vxworks")]
++#[cfg(any(target_os = "trueos", target_os = "vxworks"))]
+ pub fn chroot(dir: &Path) -> io::Result<()> {
+     let _ = dir;
+-    Err(io::const_error!(io::ErrorKind::Unsupported, "chroot not supported by vxworks"))
++    Err(io::const_error!(
++        io::ErrorKind::Unsupported,
++        "chroot is not supported on this target",
++    ))
+ }
+ 
+ #[cfg(not(target_os = "wasi"))]
+@@ -2430,6 +2693,7 @@
+     target_os = "vita",
+     target_os = "nto",
+     target_os = "qnx",
++    target_os = "trueos",
+     target_os = "vxworks",
+     miri
+ ))]
+@@ -2445,6 +2709,7 @@
+     target_os = "vita",
+     target_os = "nto",
+     target_os = "qnx",
++    target_os = "trueos",
+     target_os = "vxworks",
+     miri
+ )))]
+--- a/std/src/sys/pal/unix/time.rs
++++ b/std/src/sys/pal/unix/time.rs
+@@ -73,6 +73,23 @@
+ 
+     #[allow(dead_code)]
+     pub fn now(clock: libc::clockid_t) -> Timespec {
++        #[cfg(target_os = "trueos")]
++        {
++            unsafe extern "Rust" {
++                fn trueos_platform_monotonic_nanos() -> u64;
++                fn trueos_platform_unix_seconds() -> u64;
++            }
++
++            let nanos = if clock == libc::CLOCK_MONOTONIC {
++                unsafe { trueos_platform_monotonic_nanos() }
++            } else {
++                unsafe { trueos_platform_unix_seconds() }.saturating_mul(NSEC_PER_SEC)
++            };
++            let secs = (nanos / NSEC_PER_SEC).min(i64::MAX as u64) as i64;
++            let nsec = (nanos % NSEC_PER_SEC) as i64;
++            return Timespec::new(secs, nsec).unwrap_or_else(|_| Timespec::zero());
++        }
++
+         use crate::mem::MaybeUninit;
+         use crate::sys::cvt;
+ 
+--- a/std/src/sys/paths/unix.rs
++++ b/std/src/sys/paths/unix.rs
+@@ -266,6 +266,7 @@
+ 
+ #[cfg(any(
+     target_os = "linux",
++    target_os = "trueos",
+     target_os = "cygwin",
+     target_os = "hurd",
+     target_os = "android",
+--- a/std/src/sys/random/mod.rs
++++ b/std/src/sys/random/mod.rs
+@@ -79,6 +79,10 @@
+         mod teeos;
+         pub use teeos::fill_bytes;
+     }
++    target_os = "trueos" => {
++        mod trueos;
++        pub use trueos::fill_bytes;
++    }
+     target_os = "trusty" => {
+         mod trusty;
+         pub use trusty::fill_bytes;
+--- a/std/src/sys/random/trueos.rs
++++ b/std/src/sys/random/trueos.rs
+@@ -0,0 +1,25 @@
++//! TRUEOS kernel random source.
++
++unsafe extern "C" {
++    fn sys_rand(recv_buf: *mut u32, words: usize);
++}
++
++pub fn fill_bytes(bytes: &mut [u8]) {
++    let (pre, words, post) = unsafe { bytes.align_to_mut::<u32>() };
++    if !words.is_empty() {
++        unsafe {
++            sys_rand(words.as_mut_ptr(), words.len());
++        }
++    }
++
++    let mut buf = [0u32; 2];
++    let len = (pre.len() + post.len() + size_of::<u32>() - 1) / size_of::<u32>();
++    if len != 0 {
++        unsafe { sys_rand(buf.as_mut_ptr(), len) };
++    }
++
++    let buf = buf.map(u32::to_ne_bytes);
++    let buf = buf.as_flattened();
++    pre.copy_from_slice(&buf[..pre.len()]);
++    post.copy_from_slice(&buf[pre.len()..pre.len() + post.len()]);
++}
+--- a/std/src/sys/thread/unix.rs
++++ b/std/src/sys/thread/unix.rs
+@@ -121,6 +121,12 @@
+                 let _handler = sys::stack_overflow::Handler::new();
+ 
+                 rust_start();
++
++                #[cfg(any(target_os = "trueos", target_os = "zkvm"))]
++                {
++                    // TRUEOS service-lane pthread shim has no native TLS destructor.
++                    crate::rt::thread_cleanup();
++                }
+             }
+             ptr::null_mut()
+         }
+@@ -532,6 +538,10 @@
+     let res = unsafe { libc::taskNameSet(libc::taskIdSelf(), name.as_mut_ptr()) };
+     debug_assert_eq!(res, libc::OK);
+ }
++
++
++#[cfg(any(target_os = "trueos", target_os = "zkvm"))]
++pub fn set_name(_name: &core::ffi::CStr) {}
+ 
+ #[cfg(not(target_os = "espidf"))]
+ pub fn sleep(dur: Duration) {
+--- a/std/src/sys/thread_local/mod.rs
++++ b/std/src/sys/thread_local/mod.rs
+@@ -27,6 +27,7 @@
+     any(
+         all(target_family = "wasm", not(target_feature = "atomics")),
+         target_os = "uefi",
++        target_os = "trueos",
+         target_os = "zkvm",
+         target_os = "trusty",
+         target_os = "vexos",
+--- a/std/src/sys/thread_local/no_threads.rs
++++ b/std/src/sys/thread_local/no_threads.rs
+@@ -1,11 +1,40 @@
+ //! On some targets like wasm there's no threads, so no need to generate
+ //! thread locals and we can instead just use plain statics!
+ 
++#[cfg(not(any(target_os = "trueos", target_os = "zkvm")))]
+ use crate::cell::{Cell, UnsafeCell};
++#[cfg(not(any(target_os = "trueos", target_os = "zkvm")))]
+ use crate::mem::MaybeUninit;
++#[cfg(any(target_os = "trueos", target_os = "zkvm"))]
++use crate::{
++    boxed::Box,
++    marker::PhantomData,
++    sync::atomic::{AtomicUsize, Ordering},
++};
+ use crate::ptr;
+ 
+-#[cfg(target_has_threads)]
++#[cfg(any(target_os = "trueos", target_os = "zkvm"))]
++const TRUEOS_STD_NO_THREADS_PER_SLOT: usize = 4096;
++
++#[cfg(any(target_os = "trueos", target_os = "zkvm"))]
++unsafe extern "C" {
++    fn trueos_cabi_wls_current_slot() -> u32;
++}
++
++#[cfg(any(target_os = "trueos", target_os = "zkvm"))]
++fn trueos_std_thread_local_slot() -> usize {
++    let slot = unsafe { trueos_cabi_wls_current_slot() } as usize;
++    if slot < TRUEOS_STD_NO_THREADS_PER_SLOT {
++        slot
++    } else {
++        0
++    }
++}
++
++#[cfg(all(
++    target_has_threads,
++    not(any(target_os = "trueos", target_os = "zkvm"))
++))]
+ compile_error!("Using no_threads implementation on a target with threads");
+ 
+ #[doc(hidden)]
+@@ -22,9 +51,9 @@
+         unsafe {
+             $crate::thread::LocalKey::new(|_| {
+                 $(#[$align_attr])*
+-                static __RUST_STD_INTERNAL_VAL: $crate::thread::local_impl::EagerStorage<$t> =
+-                    $crate::thread::local_impl::EagerStorage { value: __RUST_STD_INTERNAL_INIT };
+-                &__RUST_STD_INTERNAL_VAL.value
++                static __RUST_STD_INTERNAL_VAL: $crate::thread::local_impl::LazyStorage<$t> =
++                    $crate::thread::local_impl::LazyStorage::new();
++                __RUST_STD_INTERNAL_VAL.get(None, || __RUST_STD_INTERNAL_INIT)
+             })
+         }
+     }},
+@@ -53,6 +82,7 @@
+ // SAFETY: the target doesn't have threads.
+ unsafe impl<T> Sync for EagerStorage<T> {}
+ 
++#[cfg(not(any(target_os = "trueos", target_os = "zkvm")))]
+ #[derive(Clone, Copy, PartialEq, Eq)]
+ enum State {
+     Initial,
+@@ -60,6 +90,56 @@
+     Destroying,
+ }
+ 
++#[cfg(any(target_os = "trueos", target_os = "zkvm"))]
++#[allow(missing_debug_implementations)]
++pub struct LazyStorage<T> {
++    slots: [AtomicUsize; TRUEOS_STD_NO_THREADS_PER_SLOT],
++    _marker: PhantomData<fn() -> T>,
++}
++
++#[cfg(any(target_os = "trueos", target_os = "zkvm"))]
++impl<T> LazyStorage<T> {
++    pub const fn new() -> LazyStorage<T> {
++        LazyStorage {
++            slots: [const { AtomicUsize::new(0) }; TRUEOS_STD_NO_THREADS_PER_SLOT],
++            _marker: PhantomData,
++        }
++    }
++
++    #[inline]
++    pub fn get(&'static self, i: Option<&mut Option<T>>, f: impl FnOnce() -> T) -> *const T {
++        let slot = trueos_std_thread_local_slot();
++        let cell = &self.slots[slot];
++        let existing = cell.load(Ordering::Acquire);
++        if existing != 0 {
++            return existing as *const T;
++        }
++
++        self.initialize(cell, i, f)
++    }
++
++    #[cold]
++    fn initialize(
++        &'static self,
++        cell: &AtomicUsize,
++        i: Option<&mut Option<T>>,
++        f: impl FnOnce() -> T,
++    ) -> *const T {
++        let value = i.and_then(Option::take).unwrap_or_else(f);
++        let ptr = Box::leak(Box::new(value)) as *mut T as usize;
++        match cell.compare_exchange(0, ptr, Ordering::AcqRel, Ordering::Acquire) {
++            Ok(_) => ptr as *const T,
++            Err(existing) => {
++                unsafe {
++                    drop(Box::from_raw(ptr as *mut T));
++                }
++                existing as *const T
++            }
++        }
++    }
++}
++
++#[cfg(not(any(target_os = "trueos", target_os = "zkvm")))]
+ #[allow(missing_debug_implementations)]
+ #[repr(C)]
+ pub struct LazyStorage<T> {
+@@ -68,6 +148,7 @@
+     state: Cell<State>,
+ }
+ 
++#[cfg(not(any(target_os = "trueos", target_os = "zkvm")))]
+ impl<T> LazyStorage<T> {
+     pub const fn new() -> LazyStorage<T> {
+         LazyStorage {
+@@ -119,7 +200,12 @@
+     }
+ }
+ 
++// SAFETY: the TRUEOS variant uses per-slot atomics and leaked values.
++#[cfg(any(target_os = "trueos", target_os = "zkvm"))]
++unsafe impl<T> Sync for LazyStorage<T> {}
++
+ // SAFETY: the target doesn't have threads.
++#[cfg(not(any(target_os = "trueos", target_os = "zkvm")))]
+ unsafe impl<T> Sync for LazyStorage<T> {}
+ 
+ #[rustc_macro_transparency = "semiopaque"]
+@@ -131,10 +217,34 @@
+     },
+ }
+ 
++#[cfg(any(target_os = "trueos", target_os = "zkvm"))]
++pub(crate) struct LocalPointer {
++    slots: [AtomicUsize; TRUEOS_STD_NO_THREADS_PER_SLOT],
++}
++
++#[cfg(any(target_os = "trueos", target_os = "zkvm"))]
++impl LocalPointer {
++    pub const fn __new() -> LocalPointer {
++        LocalPointer {
++            slots: [const { AtomicUsize::new(0) }; TRUEOS_STD_NO_THREADS_PER_SLOT],
++        }
++    }
++
++    pub fn get(&self) -> *mut () {
++        self.slots[trueos_std_thread_local_slot()].load(Ordering::Acquire) as *mut ()
++    }
++
++    pub fn set(&self, p: *mut ()) {
++        self.slots[trueos_std_thread_local_slot()].store(p as usize, Ordering::Release)
++    }
++}
++
++#[cfg(not(any(target_os = "trueos", target_os = "zkvm")))]
+ pub(crate) struct LocalPointer {
+     p: Cell<*mut ()>,
+ }
+ 
++#[cfg(not(any(target_os = "trueos", target_os = "zkvm")))]
+ impl LocalPointer {
+     pub const fn __new() -> LocalPointer {
+         LocalPointer { p: Cell::new(ptr::null_mut()) }
+@@ -149,5 +259,10 @@
+     }
+ }
+ 
++// SAFETY: the TRUEOS variant uses per-slot atomics.
++#[cfg(any(target_os = "trueos", target_os = "zkvm"))]
++unsafe impl Sync for LocalPointer {}
++
+ // SAFETY: the target doesn't have threads.
++#[cfg(not(any(target_os = "trueos", target_os = "zkvm")))]
+ unsafe impl Sync for LocalPointer {}
+--- a/std/src/thread/current.rs
++++ b/std/src/thread/current.rs
+@@ -119,21 +119,41 @@
+ /// Tries to set the thread handle for the current thread. Fails if a handle was
+ /// already set or if the thread ID of `thread` would change an already-set ID.
+ pub(super) fn set_current(thread: Thread) -> Result<(), Thread> {
+-    if CURRENT.get() != NONE {
+-        return Err(thread);
+-    }
+-
+-    match id::get() {
+-        Some(id) if id == thread.id() => {}
+-        None => id::set(thread.id()),
+-        _ => return Err(thread),
+-    }
+-
+-    // Make sure that `crate::rt::thread_cleanup` will be run, which will
+-    // call `drop_current`.
+-    crate::sys::thread_local::guard::enable();
+-    CURRENT.set(thread.into_raw().cast_mut());
+-    Ok(())
++    #[cfg(any(target_os = "trueos", target_os = "zkvm"))]
++    {
++        // TRUEOS carrier lanes may host multiple logical std threads over time.
++        // Rebind the per-lane std thread handle/id instead of treating a prior
++        // logical thread as a fatal TLS collision.
++        let current = CURRENT.get();
++        if current > DESTROYED {
++            unsafe {
++                drop(Thread::from_raw(current));
++            }
++        }
++        id::set(thread.id());
++        crate::sys::thread_local::guard::enable();
++        CURRENT.set(thread.into_raw().cast_mut());
++        return Ok(());
++    }
++
++    #[cfg(not(any(target_os = "trueos", target_os = "zkvm")))]
++    {
++        if CURRENT.get() != NONE {
++            return Err(thread);
++        }
++
++        match id::get() {
++            Some(id) if id == thread.id() => {}
++            None => id::set(thread.id()),
++            _ => return Err(thread),
++        }
++
++        // Make sure that `crate::rt::thread_cleanup` will be run, which will
++        // call `drop_current`.
++        crate::sys::thread_local::guard::enable();
++        CURRENT.set(thread.into_raw().cast_mut());
++        Ok(())
++    }
+ }
+ 
+ /// Gets the unique identifier of the thread which invokes it.
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -146,9 +146,9 @@
+ 
+ [[package]]
+ name = "libc"
+-version = "0.2.185"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "52ff2c0fe9bc6cb6b14a0592c2ff4fa9ceb83eea9db979b0487cd054946a2b8f"
++version = "0.2.186"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "68ab91017fe16c622486840e4c83c9a37afeff978bd239b5293d61ece587de66"
+ dependencies = [
+  "rustc-std-workspace-core",
+ ]

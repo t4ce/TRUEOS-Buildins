@@ -70,7 +70,7 @@ optional = true
 default-features = false
 
 [target.'cfg(any(target_os = "trueos", target_os = "zkvm"))'.dependencies.trueos-io]
-path = "../../crates/trueos-io"
+path = "../../../TRUEOS/crates/trueos-io"
 
 [dev-dependencies.futures-util]
 version = "0.3"
