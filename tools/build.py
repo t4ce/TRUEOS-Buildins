@@ -8,6 +8,9 @@ All generated sources, Cargo locks, caches and packages live below --output.
 from __future__ import annotations
 
 import argparse
+import ctypes
+import ctypes.util
+import fcntl
 import hashlib
 import json
 import os
@@ -17,7 +20,9 @@ import shutil
 import struct
 import subprocess
 import sys
+import tarfile
 import tempfile
+import time
 import tomllib
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -211,7 +216,7 @@ def stage_app(name: str, output: Path, manifest: Path, source: Path):
         if not any(part in IGNORED for part in original.relative_to(ROOT / name).parts):
             transformed[original] = staged_manifest(stage / original.relative_to(ROOT / name), original)
     text = source.read_text()
-    if "#![no_main]" not in text and 'cfg_attr(target_os = "trueos", no_main)' not in text:
+    if not re.search(r'(?m)^\s*#!\[(?:no_main|cfg_attr\(target_os\s*=\s*"trueos",\s*no_main\))\]', text):
         text = '#![no_main]\n' + text + '''
 #[allow(unsafe_code)]
 #[unsafe(no_mangle)]
@@ -255,12 +260,167 @@ def entry_hint(path: Path):
     raise ValueError(f"missing _start in {path}")
 
 
-def build_app(name: str, output: Path, profile: str, cargo: Path, binaries: Path, env: dict, overlays):
+def compress_module(payload: bytes):
+    """The normal Blueprint payload: deterministic USTAR inside an LZ4 frame."""
+    member = tarfile.TarInfo("module.elf")
+    member.size, member.mode, member.mtime = len(payload), 0o644, 0
+    archive = member.tobuf(format=tarfile.USTAR_FORMAT) + payload
+    archive += b"\0" * ((-len(archive)) % 512 + 1024)
+    return lz4_frame(archive)
+
+
+def lz4_frame(archive: bytes):
+    library = ctypes.util.find_library("lz4")
+    if library is None:
+        raise ValueError("LZ4 packaging requires the host liblz4 library")
+    lz4 = ctypes.CDLL(library)
+    lz4.LZ4F_compressFrameBound.argtypes = [ctypes.c_size_t, ctypes.c_void_p]
+    lz4.LZ4F_compressFrameBound.restype = ctypes.c_size_t
+    lz4.LZ4F_compressFrame.argtypes = [ctypes.c_void_p, ctypes.c_size_t, ctypes.c_void_p, ctypes.c_size_t, ctypes.c_void_p]
+    lz4.LZ4F_compressFrame.restype = ctypes.c_size_t
+    lz4.LZ4F_isError.argtypes = [ctypes.c_size_t]
+    capacity = lz4.LZ4F_compressFrameBound(len(archive), None)
+    buffer = ctypes.create_string_buffer(capacity)
+    size = lz4.LZ4F_compressFrame(buffer, capacity, archive, len(archive), None)
+    if lz4.LZ4F_isError(size):
+        raise ValueError("LZ4 frame compression failed")
+    return buffer.raw[:size]
+
+
+def input_roots(kernel: Path):
+    names = json.loads((ROOT / "buildins.json").read_text())["buildins"]
+    return [ROOT / "buildins.json", ROOT / "tools", ROOT / "vendor", *(ROOT / name for name in names),
+            *(kernel / "crates" / name for name in ("trueos-io", "trueos-fs", "trueos-crypto")),
+            kernel / "vendor/infer", kernel / "crates/trueos-v/src/bp_abi.rs", kernel / "crates/trueos-v/src/worker_abi.rs",
+            kernel / "src/hv/blueprint/blueprint.rs", kernel / "src/hv/blueprint/prebind.rs", kernel / "src/unix_compat.rs",
+            kernel / "tools/appdb-seed",
+            kernel / "Cargo.toml",
+            kernel / "tools/testpy/apply_trueos_rust_std_thread_backend.py", kernel / "tools/rust-std/trueos_thread.rs"]
+
+
+def source_digest(kernel: Path):
+    digest = hashlib.sha256()
+    for root in input_roots(kernel):
+        for path in sorted(root.rglob("*") if root.is_dir() else [root]):
+            if path.is_file() and not any(part in IGNORED for part in path.relative_to(root.parent).parts):
+                digest.update(str(path).encode() + b"\0" + hashlib.sha256(path.read_bytes()).digest())
+    for path in sorted(patches(kernel).values()):
+        if path.is_relative_to(kernel):
+            for source in sorted(path.rglob("*")):
+                if source.is_file() and not any(part in IGNORED for part in source.relative_to(path).parts):
+                    digest.update(str(source).encode() + b"\0" + hashlib.sha256(source.read_bytes()).digest())
+    return digest.hexdigest()
+
+
+def compile_snapshot(roots, config, lock: Path):
+    """Track local Cargo inputs before invoking rustc's no-link mode.
+
+    no-link deliberately omits Cargo's executable, so Cargo otherwise recompiles
+    the root binary even when all its inputs are fresh. Dependency roots come
+    from the last successful Cargo artifact stream, including build dependencies.
+    """
+    digest = hashlib.sha256(config)
+    for root in map(Path, roots):
+        digest.update(str(root).encode() + b"\0")
+        if not root.exists():
+            return None
+        for path in sorted(root.rglob("*") if root.is_dir() else [root]):
+            if path.is_file() and not any(part in IGNORED for part in path.relative_to(root.parent).parts):
+                digest.update(str(path).encode() + b"\0" + hashlib.sha256(path.read_bytes()).digest())
+    if not lock.is_file():
+        return None
+    digest.update(lock.read_bytes())
+    return digest.hexdigest()
+
+
+def verify_abi(kernel: Path, output: Path, names):
+    def contracts(path):
+        text = re.sub(r"//[^\n]*", "", path.read_text())
+        return {match[1]: re.sub(r"\s+", "", text[match.start():text.index(";", match.end())]).replace(",)", ")")
+                for match in re.finditer(r"pub fn (trueos_cabi_\w+)\s*\(", text)}
+    sdk = contracts(ROOT / "vendor/trueos-v/src/bp_abi.rs")
+    host = contracts(kernel / "crates/trueos-v/src/bp_abi.rs")
+    loader = (kernel / "src/hv/blueprint/blueprint.rs").read_text()
+    unix = (kernel / "src/unix_compat.rs").read_text()
+    prebind = (kernel / "src/hv/blueprint/prebind.rs").read_text()
+    known = set(re.findall(r'"([^"\n]+)"\s*(?:\||=>)', loader + unix))
+    rejected = set()
+    for source, function in [(unix, "unsupported_unix_import_reason"), (prebind, "retired_import_error")]:
+        body = source.split("fn " + function + "(", 1)[1].split("\n}", 1)[0]
+        rejected.update(re.findall(r'"([^"\n]+)"', body))
+    for name in names:
+        for line in capture(["nm", "-u", output / "objects" / name / "module.stripped.o"]).splitlines():
+            symbol = line.split()[-1]
+            if symbol in rejected or symbol.startswith("ring_core_"):
+                raise ValueError(f"{name} imports a retired or unsupported ABI: {symbol}")
+            if symbol.startswith("trueos_cabi_"):
+                if symbol not in host or sdk.get(symbol) != host[symbol]:
+                    raise ValueError(f"{name}: SDK/kernel CABI declaration mismatch for {symbol}")
+            elif symbol not in known:
+                raise ValueError(f"{name}: kernel has no literal import binding for {symbol}")
+
+
+def check_ready(output: Path, kernel: Path, profile: str):
+    ready = json.loads((output / "ready.json").read_text())
+    names = json.loads((ROOT / "buildins.json").read_text())["buildins"]
+    if (output / ".building").exists() or ready["profile"] != profile or ready["sources"] != source_digest(kernel):
+        raise ValueError("builtins are stale or the last build failed; prepare the kernel and builtins together")
+    if list(ready["packages"]) != names or (output / "buildins.json").read_bytes() != (ROOT / "buildins.json").read_bytes():
+        raise ValueError("the prepared builtins do not match buildins.json")
+    for name, expected in ready["packages"].items():
+        if hashlib.sha256((output / "dist" / f"{name}.bp").read_bytes()).hexdigest() != expected:
+            raise ValueError(f"prepared package changed since the complete build: {name}")
+    for name, expected in ready["database"].items():
+        if hashlib.sha256((output / name).read_bytes()).hexdigest() != expected:
+            raise ValueError(f"prepared database changed since the complete build: {name}")
+    # Cargo watches source directories as well as existing files, catching additions/deletions.
+    for path in [*input_roots(kernel), *patches(kernel).values(), output / "ready.json"]:
+        print(f"cargo:rerun-if-changed={path}")
+
+
+def build_database(output: Path, kernel: Path, cargo: Path, env: dict, names):
+    packages = {name: hashlib.sha256((output / "dist" / f"{name}.bp").read_bytes()).hexdigest() for name in names}
+    tool = kernel / "tools/appdb-seed"
+    kernel_version = tomllib.loads((kernel / "Cargo.toml").read_text())["dependencies"]["redb"]["version"]
+    host_version = tomllib.loads((tool / "Cargo.toml").read_text())["dependencies"]["redb"]["version"]
+    if kernel_version != host_version or not host_version.startswith("="):
+        raise ValueError("kernel and app.db builder must pin the same exact redb version")
+    inputs = hashlib.sha256(json.dumps(packages).encode())
+    for path in sorted(tool.rglob("*")):
+        if path.is_file() and not any(part in IGNORED for part in path.relative_to(tool).parts):
+            inputs.update(str(path).encode() + b"\0" + path.read_bytes())
+    inputs.update(os.environ.get("SOURCE_DATE_EPOCH", "").encode())
+    signature = inputs.hexdigest()
+    state = output / "database.json"
+    if state.is_file():
+        previous = json.loads(state.read_text())
+        if previous["inputs"] == signature and all((output / name).is_file() and hashlib.sha256((output / name).read_bytes()).hexdigest() == digest
+                                                     for name, digest in previous["database"].items()):
+            print("buildins: fresh app.db image", flush=True)
+            return previous["database"]
+    host_env = dict(env)
+    host_env.pop("CARGO_ENCODED_RUSTFLAGS", None)
+    host_env.pop("RUSTC_BOOTSTRAP_SYNTHETIC_TARGET", None)
+    host_env["RUSTC"] = str(cargo.parent / "rustc")
+    host_env["CARGO_TARGET_DIR"] = str(output / "host")
+    updated = time.strftime("%Y-%m-%d %H:%MZ", time.gmtime(int(os.environ.get("SOURCE_DATE_EPOCH", time.time()))))
+    # An external working directory keeps the host helper out of kernel Cargo config.
+    with tempfile.TemporaryDirectory(prefix="trueos-appdb-host-") as directory:
+        run([cargo, "run", "--quiet", "--release", "--target", "x86_64-unknown-linux-gnu",
+             "--manifest-path", tool / "Cargo.toml", "--", ROOT / "buildins.json", output / "dist", output / "app.db", updated],
+            cwd=directory, env=host_env)
+    write_changed(output / "app.db.lz4", lz4_frame((output / "app.db").read_bytes()))
+    database = {name: hashlib.sha256((output / name).read_bytes()).hexdigest() for name in ("app.db", "app.db.lz4")}
+    write_changed(state, (json.dumps({"inputs": signature, "database": database}, indent=2) + "\n").encode())
+    return database
+
+
+def build_app(name: str, output: Path, profile: str, cargo: Path, binaries: Path, env: dict, overlays, pending):
     manifest, source, needs_std, features, doc = settings(name)
     staged = stage_app(name, output, manifest, source)
     args = [cargo, "rustc", "--message-format=json-render-diagnostics",
             "-Zbuild-std=" + ("core,compiler_builtins,alloc,std,panic_abort" if needs_std else "core,compiler_builtins,alloc"),
-            "-Zjson-target-spec", "--target", ROOT / "tools/trueos-app.json",
+            "-Zbuild-std-features=compiler-builtins-mem", "-Zjson-target-spec", "--target", ROOT / "tools/trueos-app.json",
             "--manifest-path", staged, "--bin", name]
     config = output / "overlays.toml"
     lines = ["[patch.crates-io]"]
@@ -273,12 +433,29 @@ def build_app(name: str, output: Path, profile: str, cargo: Path, binaries: Path
     if features:
         args += ["--features", ",".join(features)]
     args += ["--", "-Zno-link", "--emit=obj"]
+    work = output / "objects" / name
+    package = output / "dist" / f"{name}.bp"
+    compilation = work / "compilation.json"
+    lock = output / "sources" / name / "Cargo.lock"
+    config_bytes = json.dumps({"args": list(map(str, args)), "env": {
+        key: value for key, value in env.items() if key.startswith(("CARGO_PROFILE_", "CARGO_ENCODED_", "RUSTC_BOOTSTRAP"))
+        or key in {"CC", "CXX", "AR", "CFLAGS", "CXXFLAGS"}}}, sort_keys=True).encode()
+    config_bytes += Path(__file__).read_bytes() + config.read_bytes() + (output / "rustc-app").read_bytes() + (ROOT / "tools/trueos-app.json").read_bytes()
+    if compilation.is_file() and package.is_file() and (work / "module.stripped.o").is_file():
+        previous = json.loads(compilation.read_text())
+        snapshot = compile_snapshot(previous["roots"], config_bytes, lock)
+        if snapshot == previous["snapshot"] and hashlib.sha256(package.read_bytes()).hexdigest() == previous["package"]:
+            print(f"buildins: fresh {name}", flush=True)
+            return package
     log = output / f"{name}.log"
     print(f"buildins: checking {name} ({profile})", flush=True)
     artifacts = []
     errors = []
+    roots = {ROOT / name}
     with log.open("w") as stream:
-        process = subprocess.Popen(list(map(str, args)), cwd=staged.parent, env=env,
+        # Cargo discovers .cargo/config from its working directory, not --manifest-path.
+        # Keep the kernel linker script and kernel build-std settings out of apps.
+        process = subprocess.Popen(list(map(str, args)), cwd=tempfile.gettempdir(), env=env,
                                    stdout=subprocess.PIPE, stderr=stream, text=True)
         for line in process.stdout:
             stream.write(line)
@@ -288,6 +465,15 @@ def build_app(name: str, output: Path, profile: str, cargo: Path, binaries: Path
                 continue
             if item.get("reason") == "compiler-message" and item["message"]["level"] == "error":
                 errors.append(item["message"].get("rendered", item["message"]["message"]))
+            if item.get("reason") == "compiler-artifact":
+                dependency = Path(item["manifest_path"]).parent
+                if not dependency.is_relative_to(output) and (dependency.is_relative_to(ROOT) or dependency.is_relative_to(ROOT.parent / "TRUEOS")):
+                    roots.add(dependency)
+                    for parent in dependency.parents:
+                        if parent in (ROOT, ROOT.parent / "TRUEOS"):
+                            break
+                        if (parent / "Cargo.toml").is_file():
+                            roots.add(parent / "Cargo.toml")
             if item.get("reason") == "compiler-artifact" and item["target"]["name"] == name and "bin" in item["target"]["kind"]:
                 artifacts.extend(item["filenames"])
         if process.wait():
@@ -303,10 +489,8 @@ def build_app(name: str, output: Path, profile: str, cargo: Path, binaries: Path
     objects, archives = selected_inputs(rlink)
     state = [[str(path), path.stat().st_size, path.stat().st_mtime_ns] for path in [Path(__file__), ROOT / "tools/trueos-app.json", *objects, *archives]]
     state_bytes = json.dumps(state).encode()
-    work = output / "objects" / name
     work.mkdir(parents=True, exist_ok=True)
     stamp = work / "inputs.json"
-    package = output / "dist" / f"{name}.bp"
     metadata = doc.get("package", {}).get("metadata", {}).get("trueos-blueprint", {})
     flags = sum(bit for key, value, bit in [("replicatable", True, 1 << 8), ("entry-abi", "argv-v1", 1 << 9),
                 ("filesystem-independent", True, 1 << 10), ("fs-scope", "trueosfs", 1 << 11)] if metadata.get(key) == value)
@@ -320,11 +504,13 @@ def build_app(name: str, output: Path, profile: str, cargo: Path, binaries: Path
     stripped = work / "module.stripped.o"
     run([binaries / "rust-objcopy", "--strip-debug", "--set-section-flags", ".trueos.shaders=readonly", module, stripped], env=env)
     payload = stripped.read_bytes()
-    # TRBP's existing raw-ELF payload (kind 1), consumed by the normal loader.
-    # No catalog, publisher, alternate launcher, or package identity is needed.
-    data = struct.pack("<4sHHQII", b"TRBP", 1, 1 | flags, entry_hint(stripped), len(payload), len(payload)) + payload
+    compressed = compress_module(payload)
+    data = struct.pack("<4sHHQII", b"TRBP", 1, 3 | flags, entry_hint(stripped), len(compressed), len(payload)) + compressed
     write_changed(package, data)
     write_changed(stamp, state_bytes)
+    pending[compilation] = (json.dumps({"roots": list(map(str, sorted(roots))),
+        "snapshot": compile_snapshot(sorted(roots), config_bytes, lock),
+        "package": hashlib.sha256(data).hexdigest()}, indent=2) + "\n").encode()
     print(f"buildins: linked {name} ({len(data):,} bytes)", flush=True)
     return package
 
@@ -335,9 +521,15 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--profile", choices=("dev", "release"), default="dev")
     parser.add_argument("--app", action="append", help="compile selected apps for diagnostics; no complete-set marker")
+    parser.add_argument("--check", action="store_true", help="verify the complete prepared set without building")
     args = parser.parse_args()
     output, kernel = args.output.resolve(), args.kernel.resolve()
     output.mkdir(parents=True, exist_ok=True)
+    if args.check:
+        check_ready(output, kernel, args.profile)
+        return
+    lock = (output / "build.lock").open("w")
+    fcntl.flock(lock, fcntl.LOCK_EX)
     names = json.loads((ROOT / "buildins.json").read_text())["buildins"]
     if not names or len(set(names)) != len(names) or any(not re.fullmatch(r"[A-Za-z0-9_-]+", name) for name in names):
         raise ValueError("buildins.json must contain unique, nonempty app names")
@@ -345,12 +537,25 @@ def main():
     if any(name not in names for name in selected):
         raise ValueError("unknown built-in app")
     needs_std = any(settings(name)[2] for name in selected)
+    before = source_digest(kernel)
+    (output / ".building").touch()
     cargo, binaries, env = tool_environment(output, kernel, needs_std)
     overlays = patches(kernel)
+    pending = {}
     for name in selected:
-        build_app(name, output, args.profile, cargo, binaries, env, overlays)
+        build_app(name, output, args.profile, cargo, binaries, env, overlays, pending)
+    verify_abi(kernel, output, selected)
+    database = build_database(output, kernel, cargo, env, names) if not args.app else None
+    if source_digest(kernel) != before:
+        raise ValueError("built-in inputs changed during the build; run the build again")
+    for path, data in pending.items():
+        write_changed(path, data)
     if not args.app:
         write_changed(output / "buildins.json", (ROOT / "buildins.json").read_bytes())
+        ready = {"profile": args.profile, "sources": before, "database": database, "packages": {
+            name: hashlib.sha256((output / "dist" / f"{name}.bp").read_bytes()).hexdigest() for name in names}}
+        write_changed(output / "ready.json", (json.dumps(ready, indent=2) + "\n").encode())
+        (output / ".building").unlink()
         print(f"buildins: complete set of {len(names)} apps ready for the kernel", flush=True)
 
 

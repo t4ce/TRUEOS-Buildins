@@ -457,5 +457,49 @@
     "No TrueOS package verification was run.",
     "Seven remaining vendor source trees were initially copied unchanged from the recorded Blueprints commit; the entire winit workspace was retained at its recorded submodule commit. Git metadata was excluded. The trueos SDK was subsequently copied to vendor/trueos together with vendor/trueos-v and vendor/trueos-math from the same commit. Only the SDK internal v path was adjusted; built-in Cargo paths/patches remain unchanged.",
     "Two Luna agents reviewed the six vendor packages other than winit. Isolated crossterm Windows backends and Tokio Windows named-pipe/signal APIs were removed; shared Linux/Unix implementations and uncertain adapters were retained. Parent independently checked modified syntax and preservation of Unix/TrueOS-specific source."
-  ]
+  ],
+  "kernel_build_workflow": {
+    "driver": "tools/build.py",
+    "integration": "TRUEOS/tools/trueos-boot/prepare.sh builds the complete set before the final kernel build; build.rs verifies and embeds normal TRBP packages into the existing app.db seed.",
+    "outputs": "TRUEOS/tgt/buildins/{dev,release}; no independent publication",
+    "std_port": {
+      "file": "tools/trueos-std.patch",
+      "repository": "https://github.com/t4ce/TRUEOS-Rust-Toolchain-nightly-2026-07-10",
+      "commit": "c399451b5455a61f58936c9080cf96f5ad4cb7ef",
+      "baseline_rustc": "af3d95584dbddcae597890340995509a7fb47a50",
+      "note": "Applied only to a private rust-src copy, followed by the kernel-owned thread/TLS backend installer."
+    },
+    "additional_platform_sources": [
+      "getrandom-0.2.17",
+      "getrandom-0.3.4",
+      "getrandom-0.4.2",
+      "hyper-1.10.0",
+      "httpdate-1.0.3",
+      "hyper-util-0.1.20",
+      "hyper-rustls-0.27.9",
+      "mio-1.2.0",
+      "raw-window-handle",
+      "rustix-1.1.4-trueos",
+      "signal-hook-mio-0.2.5-trueos",
+      "socket2-0.6.3",
+      "tokio-rustls-0.26.4",
+      "tower-0.5.3",
+      "tower-http-0.6.9",
+      "russh-cryptovec-0.62.0",
+      "tracing-0.1.44",
+      "tracing-core-0.1.36",
+      "tracing-attributes-0.1.31"
+    ],
+    "source_note": "Additional sources come from the recorded original_blueprints commit. The original std adaptations were applied to Hyper-util and Tower. Local paths in http-body-util, Hyper and winit-trueos now resolve to the sibling kernel or vendored API. Kernel http, http-body, crc32fast, futures-util, ring and want remain shared.",
+    "compatibility_correction": "Matching crate versions do not guarantee matching platform APIs: the Blueprint mio and Hyper forks use std I/O, while the kernel versions use no_std I/O; Blueprint httpdate supplies std-system-time. These require their own vendored copies here.",
+    "getrandom": {
+      "versions_retained": [
+        "0.2.17",
+        "0.3.4",
+        "0.4.2"
+      ],
+      "shared_backend": "vendor/getrandom-trueos.rs",
+      "reason": "ring and rand_core 0.6 require the 0.2 API, while ahash 0.8 and lightningcss pin 0.3. Removing these adapters needs wider upstream dependency migrations. Only TrueOS byte filling is shared; dispatch, other platforms and versioned public APIs are unchanged."
+    }
+  }
 }
