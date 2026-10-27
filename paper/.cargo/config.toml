@@ -1,0 +1,7 @@
+[build]
+target = "../tools/trueos-object.json"
+
+[unstable]
+json-target-spec = true
+build-std = ["core", "alloc", "compiler_builtins"]
+build-std-features = ["compiler-builtins-mem"]

@@ -23,11 +23,31 @@ Resize preserves physical cell size, clipping or exposing white space
 instead of stretching the grid. Closing the window releases the frame and
 GPU device. This app does not advertise the replicatable lifecycle.
 
-Build from the Blueprint repository:
+Build the relocatable object with ordinary Cargo from this app's directory:
 
 ```sh
-TRUEOS_BLUEPRINT_SKIP_APPS_PUBLISH=1 cargo bp paper
+cd paper
+cargo build
 ```
+
+Output: `target/trueos-object/debug/paper.o`. The local Cargo config selects the
+TRUEOS target and builds `core`/`alloc`; the repository pins the same nightly as
+the kernel. The target's normal linker step uses `-r` and retains `_start`, so
+the object includes the selected Rust dependencies. Kernel C ABI imports remain
+unresolved for the Blueprint loader. Run from `paper/` so Cargo reads its config.
+
+This uses the default unoptimized dev profile. Strip debug information separately:
+
+```sh
+objcopy --strip-debug target/trueos-object/debug/paper.o \
+    target/trueos-object/debug/paper.stripped.o
+```
+
+LLD ignores stripping during `-r` links, including Cargo's `strip` profile option.
+Keep symbols and relocations: the loader needs them. Cargo tracks the original
+`paper.o`, so a repeated `cargo build` stays fresh. `cargo check` also works.
+This first object workflow covers Paper's `no_std` dependency graph; apps using
+`std` still need their TRUEOS standard-library setup.
 
 Requires a kernel built with the additive
 `trueos_cabi_ui4_scene_physical_extent_v1` API and BCS0 native-line clear path.
