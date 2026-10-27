@@ -8,7 +8,7 @@
 use std::ffi::{c_char, c_int, c_void};
 use std::fs::File;
 use std::mem::{self, ManuallyDrop, MaybeUninit};
-use std::os::fd::{AsRawFd as _, FromRawFd as _};
+use std::os::fd::FromRawFd as _;
 use std::path::Path;
 use std::ptr::NonNull;
 #[cfg(not(target_os = "trueos"))]
@@ -21,11 +21,16 @@ use stdext::collections::{BString, BVec};
 
 use crate::helpers::*;
 
+#[cfg(not(target_os = "trueos"))]
+use libc as abi;
+#[cfg(target_os = "trueos")]
+use super::trueos_abi as abi;
+
 struct State {
-    stdin: libc::c_int,
-    stdin_flags: libc::c_int,
-    stdout: libc::c_int,
-    stdout_initial_termios: Option<libc::termios>,
+    stdin: abi::c_int,
+    stdin_flags: abi::c_int,
+    stdout: abi::c_int,
+    stdout_initial_termios: Option<abi::termios>,
     inject_resize: bool,
     #[cfg(target_os = "trueos")]
     restore_terminal: bool,
@@ -35,9 +40,9 @@ struct State {
 }
 
 static mut STATE: State = State {
-    stdin: libc::STDIN_FILENO,
+    stdin: abi::STDIN_FILENO,
     stdin_flags: 0,
-    stdout: libc::STDOUT_FILENO,
+    stdout: abi::STDOUT_FILENO,
     stdout_initial_termios: None,
     inject_resize: false,
     #[cfg(target_os = "trueos")]
@@ -47,7 +52,7 @@ static mut STATE: State = State {
 };
 
 #[cfg(not(target_os = "trueos"))]
-extern "C" fn sigwinch_handler(_: libc::c_int) {
+extern "C" fn sigwinch_handler(_: abi::c_int) {
     unsafe {
         STATE.inject_resize = true;
     }
@@ -60,9 +65,9 @@ pub fn init() -> Deinit {
 /// Reopen stdin if it's redirected (= piped input).
 pub fn reopen_stdin_if_redirected() -> io::Result<Option<File>> {
     unsafe {
-        if libc::isatty(STATE.stdin) == 0 {
-            STATE.stdin = check_int_return(libc::open(c"/dev/tty".as_ptr(), libc::O_RDONLY))?;
-            Ok(Some(File::from_raw_fd(libc::STDIN_FILENO)))
+        if abi::isatty(STATE.stdin) == 0 {
+            STATE.stdin = check_int_return(abi::open(c"/dev/tty".as_ptr(), abi::O_RDONLY))?;
+            Ok(Some(File::from_raw_fd(abi::STDIN_FILENO)))
         } else {
             Ok(None)
         }
@@ -72,69 +77,69 @@ pub fn reopen_stdin_if_redirected() -> io::Result<Option<File>> {
 pub fn switch_modes() -> io::Result<()> {
     unsafe {
         // Store the stdin flags so we can more easily toggle `O_NONBLOCK` later on.
-        STATE.stdin_flags = check_int_return(libc::fcntl(STATE.stdin, libc::F_GETFL))?;
+        STATE.stdin_flags = check_int_return(abi::fcntl(STATE.stdin, abi::F_GETFL))?;
 
         // Set STATE.inject_resize to true whenever we get a SIGWINCH. TRUEOS does
         // not implement sigaction yet, so it continues to use explicit size queries.
         #[cfg(not(target_os = "trueos"))]
         {
-            let mut sigwinch_action: libc::sigaction = mem::zeroed();
-            sigwinch_action.sa_sigaction = sigwinch_handler as *const () as libc::sighandler_t;
-            check_int_return(libc::sigaction(libc::SIGWINCH, &sigwinch_action, null_mut()))?;
+            let mut sigwinch_action: abi::sigaction = mem::zeroed();
+            sigwinch_action.sa_sigaction = sigwinch_handler as *const () as abi::sighandler_t;
+            check_int_return(abi::sigaction(abi::SIGWINCH, &sigwinch_action, null_mut()))?;
         }
 
         // Get the original terminal modes so we can disable raw mode on exit.
-        let mut termios = MaybeUninit::<libc::termios>::uninit();
-        check_int_return(libc::tcgetattr(STATE.stdout, termios.as_mut_ptr()))?;
+        let mut termios = MaybeUninit::<abi::termios>::uninit();
+        check_int_return(abi::tcgetattr(STATE.stdout, termios.as_mut_ptr()))?;
         let mut termios = termios.assume_init();
         STATE.stdout_initial_termios = Some(termios);
 
         termios.c_iflag &= !(
             // When neither IGNBRK...
-            libc::IGNBRK
+            abi::IGNBRK
             // ...nor BRKINT are set, a BREAK reads as a null byte ('\0'), ...
-            | libc::BRKINT
+            | abi::BRKINT
             // ...except when PARMRK is set, in which case it reads as the sequence \377 \0 \0.
-            | libc::PARMRK
+            | abi::PARMRK
             // Disable input parity checking.
-            | libc::INPCK
+            | abi::INPCK
             // Disable stripping of eighth bit.
-            | libc::ISTRIP
+            | abi::ISTRIP
             // Disable mapping of NL to CR on input.
-            | libc::INLCR
+            | abi::INLCR
             // Disable ignoring CR on input.
-            | libc::IGNCR
+            | abi::IGNCR
             // Disable mapping of CR to NL on input.
-            | libc::ICRNL
+            | abi::ICRNL
             // Disable software flow control.
-            | libc::IXON
+            | abi::IXON
         );
         // Disable output processing.
-        termios.c_oflag &= !libc::OPOST;
+        termios.c_oflag &= !abi::OPOST;
         termios.c_cflag &= !(
             // Reset character size mask.
-            libc::CSIZE
+            abi::CSIZE
             // Disable parity generation.
-            | libc::PARENB
+            | abi::PARENB
         );
         // Set character size back to 8 bits.
-        termios.c_cflag |= libc::CS8;
+        termios.c_cflag |= abi::CS8;
         termios.c_lflag &= !(
             // Disable signal generation (SIGINT, SIGTSTP, SIGQUIT).
-            libc::ISIG
+            abi::ISIG
             // Disable canonical mode (line buffering).
-            | libc::ICANON
+            | abi::ICANON
             // Disable echoing of input characters.
-            | libc::ECHO
+            | abi::ECHO
             // Disable echoing of NL.
-            | libc::ECHONL
+            | abi::ECHONL
             // Disable extended input processing (e.g. Ctrl-V).
-            | libc::IEXTEN
+            | abi::IEXTEN
         );
 
         // Set the terminal to raw mode.
-        termios.c_lflag &= !(libc::ICANON | libc::ECHO);
-        check_int_return(libc::tcsetattr(STATE.stdout, libc::TCSANOW, &termios))?;
+        termios.c_lflag &= !(abi::ICANON | abi::ECHO);
+        check_int_return(abi::tcsetattr(STATE.stdout, abi::TCSANOW, &termios))?;
 
         Ok(())
     }
@@ -148,7 +153,7 @@ impl Drop for Deinit {
             #[allow(static_mut_refs)]
             if let Some(termios) = STATE.stdout_initial_termios.take() {
                 // Restore the original terminal modes.
-                libc::tcsetattr(STATE.stdout, libc::TCSANOW, &termios);
+                abi::tcsetattr(STATE.stdout, abi::TCSANOW, &termios);
             }
         }
     }
@@ -198,10 +203,10 @@ pub fn inject_window_size_into_stdin() {
 }
 
 fn get_window_size() -> (u16, u16) {
-    let mut winsz: libc::winsize = unsafe { mem::zeroed() };
+    let mut winsz: abi::winsize = unsafe { mem::zeroed() };
 
     for attempt in 1.. {
-        let ret = unsafe { libc::ioctl(STATE.stdout, libc::TIOCGWINSZ, &raw mut winsz) };
+        let ret = unsafe { abi::ioctl(STATE.stdout, abi::TIOCGWINSZ, &raw mut winsz) };
         if ret == -1 || (winsz.ws_col != 0 && winsz.ws_row != 0) {
             break;
         }
@@ -253,21 +258,21 @@ pub fn read_stdin(arena: &Arena, mut timeout: time::Duration) -> Option<BString<
             if read_poll {
                 let beg = time::Instant::now();
 
-                let mut pollfd = libc::pollfd { fd: STATE.stdin, events: libc::POLLIN, revents: 0 };
+                let mut pollfd = abi::pollfd { fd: STATE.stdin, events: abi::POLLIN, revents: 0 };
                 let ret;
                 #[cfg(target_os = "linux")]
                 {
-                    let ts = libc::timespec {
-                        tv_sec: timeout.as_secs() as libc::time_t,
-                        tv_nsec: timeout.subsec_nanos() as libc::c_long,
+                    let ts = abi::timespec {
+                        tv_sec: timeout.as_secs() as abi::time_t,
+                        tv_nsec: timeout.subsec_nanos() as abi::c_long,
                     };
-                    ret = libc::ppoll(&mut pollfd, 1, &ts, std::ptr::null());
+                    ret = abi::ppoll(&mut pollfd, 1, &ts, std::ptr::null());
                 }
                 #[cfg(not(target_os = "linux"))]
                 {
                     let millis = if timeout == time::Duration::MAX { -1 }
-                        else { timeout.as_millis().min(libc::c_int::MAX as u128) as libc::c_int };
-                    ret = libc::poll(&mut pollfd, 1, millis);
+                        else { timeout.as_millis().min(abi::c_int::MAX as u128) as abi::c_int };
+                    ret = abi::poll(&mut pollfd, 1, millis);
                 }
                 #[cfg(target_os = "trueos")]
                 check_terminal_resize();
@@ -287,7 +292,7 @@ pub fn read_stdin(arena: &Arena, mut timeout: time::Duration) -> Option<BString<
 
             // Read from stdin.
             let spare = buf.spare_capacity_mut();
-            let ret = libc::read(STATE.stdin, spare.as_mut_ptr().cast(), spare.len());
+            let ret = abi::read(STATE.stdin, spare.as_mut_ptr().cast(), spare.len());
             if ret > 0 {
                 buf.set_len(buf.len() + ret as usize);
                 break;
@@ -297,9 +302,9 @@ pub fn read_stdin(arena: &Arena, mut timeout: time::Duration) -> Option<BString<
             }
             if ret < 0 {
                 match errno() {
-                    libc::EINTR if STATE.inject_resize => break,
-                    libc::EAGAIN if timeout == time::Duration::ZERO => break,
-                    libc::EINTR | libc::EAGAIN => {}
+                    abi::EINTR if STATE.inject_resize => break,
+                    abi::EAGAIN if timeout == time::Duration::ZERO => break,
+                    abi::EINTR | abi::EAGAIN => {}
                     _ => return None,
                 }
             }
@@ -367,7 +372,7 @@ pub fn write_stdout(text: &str) {
     while written < buf.len() {
         let w = &buf[written..];
         let w = &buf[..w.len().min(GIBI)];
-        let n = unsafe { libc::write(STATE.stdout, w.as_ptr().cast(), w.len()) };
+        let n = unsafe { abi::write(STATE.stdout, w.as_ptr().cast(), w.len()) };
 
         if n >= 0 {
             written += n as usize;
@@ -375,7 +380,7 @@ pub fn write_stdout(text: &str) {
         }
 
         let err = errno();
-        if err != libc::EINTR {
+        if err != abi::EINTR {
             return;
         }
     }
@@ -387,39 +392,35 @@ pub fn write_stdout(text: &str) {
 /// TTY is a bidirectional device and both handles refer to the same thing.
 fn set_tty_nonblocking(nonblock: bool) {
     unsafe {
-        let is_nonblock = (STATE.stdin_flags & libc::O_NONBLOCK) != 0;
+        let is_nonblock = (STATE.stdin_flags & abi::O_NONBLOCK) != 0;
         if is_nonblock != nonblock {
-            STATE.stdin_flags ^= libc::O_NONBLOCK;
-            let _ = libc::fcntl(STATE.stdin, libc::F_SETFL, STATE.stdin_flags);
+            STATE.stdin_flags ^= abi::O_NONBLOCK;
+            let _ = abi::fcntl(STATE.stdin, abi::F_SETFL, STATE.stdin_flags);
         }
     }
 }
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct FileId {
-    st_dev: libc::dev_t,
-    st_ino: libc::ino_t,
+    st_dev: u64,
+    st_ino: u64,
 }
 
 /// Returns a unique identifier for the given file by handle or path.
 pub fn file_id(file: Option<&File>, path: &Path) -> io::Result<FileId> {
-    let file = match file {
-        Some(f) => f,
-        None => &File::open(path)?,
-    };
+    use std::os::unix::fs::MetadataExt;
 
-    unsafe {
-        let mut stat = MaybeUninit::<libc::stat>::uninit();
-        check_int_return(libc::fstat(file.as_raw_fd(), stat.as_mut_ptr()))?;
-        let stat = stat.assume_init();
-        Ok(FileId { st_dev: stat.st_dev, st_ino: stat.st_ino })
-    }
+    let metadata = match file {
+        Some(file) => file.metadata()?,
+        None => File::open(path)?.metadata()?,
+    };
+    Ok(FileId { st_dev: metadata.dev(), st_ino: metadata.ino() })
 }
 
 unsafe fn load_library(name: *const c_char) -> io::Result<NonNull<c_void>> {
     unsafe {
-        NonNull::new(libc::dlopen(name, libc::RTLD_LAZY))
-            .ok_or_else(|| from_raw_os_error(libc::ENOENT))
+        NonNull::new(abi::dlopen(name, abi::RTLD_LAZY))
+            .ok_or_else(|| from_raw_os_error(abi::ENOENT))
     }
 }
 
@@ -433,9 +434,9 @@ unsafe fn load_library(name: *const c_char) -> io::Result<NonNull<c_void>> {
 // It'd be nice to constrain T to std::marker::FnPtr, but that's unstable.
 pub unsafe fn get_proc_address<T>(handle: NonNull<c_void>, name: *const c_char) -> io::Result<T> {
     unsafe {
-        let sym = libc::dlsym(handle.as_ptr(), name);
+        let sym = abi::dlsym(handle.as_ptr(), name);
         if sym.is_null() {
-            Err(from_raw_os_error(libc::ENOENT))
+            Err(from_raw_os_error(abi::ENOENT))
         } else {
             Ok(mem::transmute_copy(&sym))
         }
@@ -504,8 +505,8 @@ pub fn icu_detect_renaming_suffix(arena: &Arena, handle: NonNull<c_void>) -> BSt
         };
 
         // `dladdr` is specific to GNU's libc unfortunately.
-        let mut info: libc::Dl_info = mem::zeroed();
-        let ret = libc::dladdr(proc, &mut info);
+        let mut info: abi::Dl_info = mem::zeroed();
+        let ret = abi::dladdr(proc, &mut info);
         if ret == 0 {
             return res;
         }
@@ -613,6 +614,6 @@ fn from_raw_os_error(code: c_int) -> io::Error {
     io::Error::from_raw_os_error(code)
 }
 
-fn check_int_return(ret: libc::c_int) -> io::Result<libc::c_int> {
+fn check_int_return(ret: abi::c_int) -> io::Result<abi::c_int> {
     if ret < 0 { Err(last_os_error()) } else { Ok(ret) }
 }

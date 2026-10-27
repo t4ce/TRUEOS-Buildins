@@ -1,6 +1,6 @@
 # Paper
 
-A standalone editable DIN A4 sheet: white paper and a gray 5 mm grid.
+A standalone editable DIN A4 sheet with gridpaper, linepaper, and whitepaper modes.
 The Blueprint owns its UI4 immutable frame through `trueos::ui4_scene`.
 It does not use the Paperr service or its snapshot/font API.
 
@@ -38,10 +38,21 @@ normal builds with built-ins enabled; it does not need an online catalog entry.
 The one-shot `vFile:launch` runscript is read before opening the UI4 frame:
 
 ```text
-scale 3x
+mode linepaper
+step 3x
 ```
 
-`scale 1` through `scale 8` (also `1x` through `8x`) select 5–40 mm cell
+`mode gridpaper` (default) draws a grid; `mode linepaper` draws only horizontal
+ruling; `mode whitepaper` leaves the sheet visually blank. These are top-level
+launch settings, independent of spacing.
+
+`step 1` through `step 8` select 5–40 mm spacing; `scale` remains an alias.
+In lined and white modes, step changes only row height: character columns stay
+5 mm wide and glyphs retain their 1x size. Whitepaper retains the same editing
+layout without visible ruling. The native line batch uses white lines to preserve
+its existing white clear path.
+
+In grid mode, `scale 1` through `scale 8` (also `1x` through `8x`) select 5–40 mm cell
 spacing. An absent/empty script defaults to 1x. Invalid directives fail before
 opening a window. The A4 frame stays the same size; each scale centers the
 largest whole-cell grid within the original 195 × 275 mm grid area. Resize
@@ -50,7 +61,8 @@ keeps the selected spacing. Lines remain one pixel wide.
 
 ## Editing
 
-The page allocates `(39 / scale) * (55 / scale)` character slots up front.
+Grid mode allocates `(39 / scale) * (55 / scale)` character slots up front.
+Lined and white modes allocate `39 * (55 / scale)` slots.
 Typing replaces the selected cell and advances, wrapping to the next row;
 the cursor stops at the final cell. Space only advances. Arrow keys navigate,
 Backspace moves left and clears that cell, Delete clears in place, and Enter

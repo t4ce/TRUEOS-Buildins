@@ -46,7 +46,7 @@ pub unsafe fn virtual_reserve(size: usize) -> io::Result<NonNull<u8>> {
 pub unsafe fn virtual_reserve(size: usize) -> io::Result<NonNull<u8>> {
     let layout = Layout::from_size_align(size, VIRTUAL_ALIGNMENT)
         .map_err(|_| io::Error::from(io::ErrorKind::InvalidInput))?;
-    NonNull::new(unsafe { alloc(layout) }).ok_or_else(|| io::Error::from_raw_os_error(libc::ENOMEM))
+    NonNull::new(unsafe { alloc(layout) }).ok_or_else(|| io::Error::from(io::ErrorKind::OutOfMemory))
 }
 
 #[cfg(all(not(target_os = "trueos"), target_os = "netbsd"))]

@@ -11,3 +11,6 @@ pub use std::fs::canonicalize;
 
 #[cfg(unix)]
 pub use unix::*;
+
+#[cfg(target_os = "trueos")]
+mod trueos_abi;

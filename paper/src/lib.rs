@@ -6,40 +6,94 @@ pub const COLUMNS: u32 = 39;
 pub const ROWS: u32 = 55;
 pub const INDEX_COUNT: u32 = (COLUMNS + ROWS + 2) * 2;
 
-/// Optional `scale N` / `scale Nx` directive, applied before the first frame.
-/// Empty/comment-only scripts keep 1x. Reject malformed scales and unknown commands.
-pub fn script_scale(script: &str) -> Result<u32, &'static str> {
-    let mut scale = 1;
+/// Page ruling is independent of row spacing.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Mode {
+    #[default]
+    Gridpaper,
+    Linepaper,
+    Whitepaper,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Settings {
+    pub mode: Mode,
+    pub scale: u32,
+}
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            mode: Mode::Gridpaper,
+            scale: 1,
+        }
+    }
+}
+/// Top-level launch settings. `step` and the original `scale` are aliases.
+pub fn script_settings(script: &str) -> Result<Settings, &'static str> {
+    let mut settings = Settings::default();
     for line in script.lines() {
         let line = line.split('#').next().unwrap_or("").trim();
         if line.is_empty() {
             continue;
         }
         let mut words = line.split_whitespace();
-        if words.next() != Some("scale") {
-            return Err("expected scale 1x..8x");
+        let command = words.next().unwrap();
+        let value = words.next().ok_or("missing setting value")?;
+        if words.next().is_some() {
+            return Err("unexpected setting argument");
         }
-        let value = words.next().ok_or("missing scale")?;
-        let value = value.strip_suffix('x').unwrap_or(value);
-        scale = value.parse().map_err(|_| "invalid scale")?;
-        if !(1..=8).contains(&scale) || words.next().is_some() {
-            return Err("expected scale 1x..8x");
+        match command {
+            "mode" => {
+                settings.mode = match value {
+                    "gridpaper" => Mode::Gridpaper,
+                    "linepaper" => Mode::Linepaper,
+                    "whitepaper" => Mode::Whitepaper,
+                    _ => return Err("expected mode gridpaper|linepaper|whitepaper"),
+                }
+            }
+            "scale" | "step" => {
+                settings.scale = value
+                    .strip_suffix('x')
+                    .unwrap_or(value)
+                    .parse()
+                    .map_err(|_| "invalid step")?;
+                if !(1..=8).contains(&settings.scale) {
+                    return Err("expected step 1x..8x");
+                }
+            }
+            _ => return Err("unknown paper setting"),
         }
     }
-    Ok(scale)
+    Ok(settings)
+}
+pub fn script_scale(script: &str) -> Result<u32, &'static str> {
+    script_settings(script).map(|settings| settings.scale)
 }
 
 /// Match Gridpaper's centered 195 x 275 mm grid on a full 210 x 297 mm page.
 /// Keep physical sizing on resize: extra area is white, smaller windows clip.
 /// Each independent segment is two vertices and two indices, never adjacency.
 pub fn geometry(page: (u32, u32), viewport: (u32, u32), scale: u32) -> (Vec<u8>, Vec<u8>) {
+    geometry_for_mode(page, viewport, scale, Mode::Gridpaper)
+}
+
+pub fn geometry_for_mode(
+    page: (u32, u32),
+    viewport: (u32, u32),
+    scale: u32,
+    mode: Mode,
+) -> (Vec<u8>, Vec<u8>) {
     assert!((1..=8).contains(&scale));
     let columns = COLUMNS / scale;
     let rows = ROWS / scale;
     let step = 5.0 * scale as f32;
-    let left = (210.0 - columns as f32 * step) / 2.0;
+    let width = if mode == Mode::Gridpaper {
+        columns as f32 * step
+    } else {
+        195.0
+    };
+    let left = (210.0 - width) / 2.0;
     let top = (297.0 - rows as f32 * step) / 2.0;
-    let right = left + columns as f32 * step;
+    let right = left + width;
     let bottom = top + rows as f32 * step;
     let mut vertices = Vec::with_capacity(INDEX_COUNT as usize * 12);
     let mut indices = Vec::with_capacity(INDEX_COUNT as usize * 4);
@@ -56,10 +110,12 @@ pub fn geometry(page: (u32, u32), viewport: (u32, u32), scale: u32) -> (Vec<u8>,
         }
         indices.extend_from_slice(&((indices.len() / 4) as u32).to_le_bytes());
     };
-    for column in 0..=columns {
-        let x = left + column as f32 * step;
-        vertex(x, top);
-        vertex(x, bottom);
+    if mode == Mode::Gridpaper {
+        for column in 0..=columns {
+            let x = left + column as f32 * step;
+            vertex(x, top);
+            vertex(x, bottom);
+        }
     }
     for row in 0..=rows {
         let y = top + row as f32 * step;
@@ -72,6 +128,34 @@ pub fn geometry(page: (u32, u32), viewport: (u32, u32), scale: u32) -> (Vec<u8>,
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn modes_keep_columns_fixed_and_only_scale_row_height() {
+        for mode in [Mode::Linepaper, Mode::Whitepaper] {
+            let editor = Editor::with_mode(3, mode);
+            assert_eq!(editor.columns, 39);
+            assert_eq!(editor.rows, 18);
+            let a = editor.bounds(0, (840, 1188), 3);
+            let b = editor.bounds(1, (840, 1188), 3);
+            assert_eq!(a.2, 20);
+            assert_eq!(a.3, 60);
+            assert_eq!(b.0 - a.0, 20);
+            let (v, i) = geometry_for_mode((840, 1188), (840, 1188), 3, mode);
+            assert_eq!(i.len(), 19 * 2 * 4);
+            for line in v.chunks_exact(24) {
+                assert_eq!(&line[4..8], &line[16..20]);
+            }
+        }
+        let settings = script_settings("mode linepaper\nstep 3x").unwrap();
+        assert_eq!(settings.mode, Mode::Linepaper);
+        assert_eq!(settings.scale, 3);
+        assert_eq!(
+            script_settings("mode whitepaper").unwrap().mode,
+            Mode::Whitepaper
+        );
+        for script in ["mode", "mode unknown", "mode linepaper extra", "step 0"] {
+            assert!(script_settings(script).is_err());
+        }
+    }
     #[test]
     fn scales_parse_and_reduce_line_counts() {
         assert_eq!(script_scale("# default\n"), Ok(1));
@@ -135,16 +219,26 @@ pub struct Editor {
     pub cursor: usize,
     pub columns: usize,
     pub rows: usize,
+    pub mode: Mode,
 }
 impl Editor {
     pub fn new(scale: u32) -> Self {
-        let columns = (COLUMNS / scale) as usize;
+        Self::with_mode(scale, Mode::Gridpaper)
+    }
+    pub fn with_mode(scale: u32, mode: Mode) -> Self {
+        assert!((1..=8).contains(&scale));
+        let columns = if mode == Mode::Gridpaper {
+            COLUMNS / scale
+        } else {
+            COLUMNS
+        } as usize;
         let rows = (ROWS / scale) as usize;
         Self {
             cells: alloc::vec![Cell::default(); columns * rows],
             cursor: 0,
             columns,
             rows,
+            mode,
         }
     }
     pub fn advance(&mut self) {
@@ -187,11 +281,17 @@ impl Editor {
     /// Pixel cell bounds aligned with the independently rendered grid lines.
     pub fn bounds(&self, index: usize, page: (u32, u32), scale: u32) -> (u32, u32, u32, u32) {
         let step = 5.0 * scale as f32;
-        let left = (210.0 - self.columns as f32 * step) / 2.0;
+        let column_step = if self.mode == Mode::Gridpaper {
+            step
+        } else {
+            5.0
+        };
+        let left = (210.0 - self.columns as f32 * column_step) / 2.0;
         let top = (297.0 - self.rows as f32 * step) / 2.0;
-        let x = (left + (index % self.columns) as f32 * step) * page.0 as f32 / 210.0;
+        let x = (left + (index % self.columns) as f32 * column_step) * page.0 as f32 / 210.0;
         let y = (top + (index / self.columns) as f32 * step) * page.1 as f32 / 297.0;
-        let right = (left + (index % self.columns + 1) as f32 * step) * page.0 as f32 / 210.0;
+        let right =
+            (left + (index % self.columns + 1) as f32 * column_step) * page.0 as f32 / 210.0;
         let bottom = (top + (index / self.columns + 1) as f32 * step) * page.1 as f32 / 297.0;
         (
             x as u32,

@@ -10,5 +10,5 @@ rust-version.workspace = true
 [features]
 single-threaded = []
 
-[target.'cfg(unix)'.dependencies]
+[target.'cfg(all(unix, not(target_os = "trueos")))'.dependencies]
 libc = "=0.2.186"

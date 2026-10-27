@@ -40,13 +40,23 @@ def capture(args, **kwargs):
     return subprocess.check_output(list(map(str, args)), text=True, **kwargs).strip()
 
 
-def write_changed(path: Path, data: bytes):
+def write_changed(path: Path, data: bytes, *, durable=False):
     if path.is_file() and path.read_bytes() == data:
         return False
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(path.name + ".new")
-    temporary.write_bytes(data)
+    with temporary.open("wb") as stream:
+        stream.write(data)
+        if durable:
+            stream.flush()
+            os.fsync(stream.fileno())
     temporary.replace(path)
+    if durable:
+        directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
     return True
 
 
@@ -128,6 +138,7 @@ def tool_environment(output: Path, kernel: Path, needs_std: bool):
     env["RUSTC"] = str(wrapper)
     env["RUSTC_BOOTSTRAP_SYNTHETIC_TARGET"] = "1"
     env["CARGO_TARGET_DIR"] = str(output / "cargo")
+    env.setdefault("CARGO_BUILD_JOBS", "1")
     env["CARGO_ENCODED_RUSTFLAGS"] = "\x1f".join(["-C", "panic=abort", "--check-cfg=cfg(target_os,values(\"trueos\",\"zkvm\"))"])
     env["CARGO_PROFILE_RELEASE_LTO"] = "false"
     env["CARGO_PROFILE_DEV_PANIC"] = "abort"
@@ -409,9 +420,9 @@ def build_database(output: Path, kernel: Path, cargo: Path, env: dict, names):
         run([cargo, "run", "--quiet", "--release", "--target", "x86_64-unknown-linux-gnu",
              "--manifest-path", tool / "Cargo.toml", "--", ROOT / "buildins.json", output / "dist", output / "app.db", updated],
             cwd=directory, env=host_env)
-    write_changed(output / "app.db.lz4", lz4_frame((output / "app.db").read_bytes()))
+    write_changed(output / "app.db.lz4", lz4_frame((output / "app.db").read_bytes()), durable=True)
     database = {name: hashlib.sha256((output / name).read_bytes()).hexdigest() for name in ("app.db", "app.db.lz4")}
-    write_changed(state, (json.dumps({"inputs": signature, "database": database}, indent=2) + "\n").encode())
+    write_changed(state, (json.dumps({"inputs": signature, "database": database}, indent=2) + "\n").encode(), durable=True)
     return database
 
 
@@ -445,10 +456,12 @@ def build_app(name: str, output: Path, profile: str, cargo: Path, binaries: Path
         previous = json.loads(compilation.read_text())
         snapshot = compile_snapshot(previous["roots"], config_bytes, lock)
         if snapshot == previous["snapshot"] and hashlib.sha256(package.read_bytes()).hexdigest() == previous["package"]:
-            print(f"buildins: fresh {name}", flush=True)
-            return package
+            if hashlib.sha256((work / "module.stripped.o").read_bytes()).hexdigest() == previous.get("module"):
+                print(f"buildins: fresh {name}", flush=True)
+                return package
     log = output / f"{name}.log"
     print(f"buildins: checking {name} ({profile})", flush=True)
+    checkpoint(output, name, "compile start")
     artifacts = []
     errors = []
     roots = {ROOT / name}
@@ -469,6 +482,9 @@ def build_app(name: str, output: Path, profile: str, cargo: Path, binaries: Path
                 dependency = Path(item["manifest_path"]).parent
                 if not dependency.is_relative_to(output) and (dependency.is_relative_to(ROOT) or dependency.is_relative_to(ROOT.parent / "TRUEOS")):
                     roots.add(dependency)
+                    if dependency.name.startswith("getrandom-"):
+                        # The three API adapters include this file from outside their crate roots.
+                        roots.add(ROOT / "vendor/getrandom-trueos.rs")
                     for parent in dependency.parents:
                         if parent in (ROOT, ROOT.parent / "TRUEOS"):
                             break
@@ -487,6 +503,7 @@ def build_app(name: str, output: Path, profile: str, cargo: Path, binaries: Path
     if rlink is None:
         raise ValueError(f"{name}: Cargo produced no selected .rlink")
     objects, archives = selected_inputs(rlink)
+    checkpoint(output, name, "compile complete")
     state = [[str(path), path.stat().st_size, path.stat().st_mtime_ns] for path in [Path(__file__), ROOT / "tools/trueos-app.json", *objects, *archives]]
     state_bytes = json.dumps(state).encode()
     work.mkdir(parents=True, exist_ok=True)
@@ -499,20 +516,31 @@ def build_app(name: str, output: Path, profile: str, cargo: Path, binaries: Path
         print(f"buildins: fresh {name}", flush=True)
         return package
     module = work / "module.o"
-    run([binaries / "rust-lld", "-flavor", "gnu", "-r", "--gc-sections", "--undefined=_start", "-o", module,
+    checkpoint(output, name, "link start")
+    run([binaries / "rust-lld", "-flavor", "gnu", "--threads=1", "-r", "--gc-sections", "--undefined=_start", "-o", module,
          *objects, "--start-group", *archives, "--end-group"], env=env)
     stripped = work / "module.stripped.o"
+    checkpoint(output, name, "strip start")
     run([binaries / "rust-objcopy", "--strip-debug", "--set-section-flags", ".trueos.shaders=readonly", module, stripped], env=env)
     payload = stripped.read_bytes()
+    checkpoint(output, name, "compress start")
     compressed = compress_module(payload)
     data = struct.pack("<4sHHQII", b"TRBP", 1, 3 | flags, entry_hint(stripped), len(compressed), len(payload)) + compressed
-    write_changed(package, data)
+    write_changed(package, data, durable=True)
     write_changed(stamp, state_bytes)
     pending[compilation] = (json.dumps({"roots": list(map(str, sorted(roots))),
         "snapshot": compile_snapshot(sorted(roots), config_bytes, lock),
-        "package": hashlib.sha256(data).hexdigest()}, indent=2) + "\n").encode()
+        "package": hashlib.sha256(data).hexdigest(), "module": hashlib.sha256(payload).hexdigest()}, indent=2) + "\n").encode()
     print(f"buildins: linked {name} ({len(data):,} bytes)", flush=True)
+    checkpoint(output, name, "package complete")
     return package
+
+
+def checkpoint(output: Path, name: str, phase: str):
+    with (output / "phases.log").open("a") as stream:
+        stream.write(f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())} pid={os.getpid()} {name}: {phase}\n")
+        stream.flush()
+        os.fsync(stream.fileno())
 
 
 def main():
@@ -528,6 +556,13 @@ def main():
     if args.check:
         check_ready(output, kernel, args.profile)
         return
+    # Diagnostic invocations need the same limits as cargo rigdev. Reuse the
+    # enclosing rig scope, otherwise enter it before starting any build tools.
+    if os.environ.get("TRUEOS_BUILD_SCOPE") != "1":
+        safety = kernel / "tools/build-safe.sh"
+        if not safety.is_file():
+            raise ValueError(f"missing required build containment wrapper: {safety}")
+        os.execvp("bash", ["bash", str(safety), sys.executable, str(Path(__file__).resolve()), *sys.argv[1:]])
     lock = (output / "build.lock").open("w")
     fcntl.flock(lock, fcntl.LOCK_EX)
     names = json.loads((ROOT / "buildins.json").read_text())["buildins"]
@@ -544,17 +579,24 @@ def main():
     pending = {}
     for name in selected:
         build_app(name, output, args.profile, cargo, binaries, env, overlays, pending)
+        if pending:
+            if source_digest(kernel) != before:
+                raise ValueError("built-in inputs changed during compilation; run the build again")
+            for path, data in pending.items():
+                write_changed(path, data, durable=True)
+            pending.clear()
     verify_abi(kernel, output, selected)
-    database = build_database(output, kernel, cargo, env, names) if not args.app else None
+    if not args.app:
+        checkpoint(output, "app.db", "image start")
+        database = build_database(output, kernel, cargo, env, names)
+        checkpoint(output, "app.db", "image complete")
     if source_digest(kernel) != before:
         raise ValueError("built-in inputs changed during the build; run the build again")
-    for path, data in pending.items():
-        write_changed(path, data)
     if not args.app:
         write_changed(output / "buildins.json", (ROOT / "buildins.json").read_bytes())
         ready = {"profile": args.profile, "sources": before, "database": database, "packages": {
             name: hashlib.sha256((output / "dist" / f"{name}.bp").read_bytes()).hexdigest() for name in names}}
-        write_changed(output / "ready.json", (json.dumps(ready, indent=2) + "\n").encode())
+        write_changed(output / "ready.json", (json.dumps(ready, indent=2) + "\n").encode(), durable=True)
         (output / ".building").unlink()
         print(f"buildins: complete set of {len(names)} apps ready for the kernel", flush=True)
 

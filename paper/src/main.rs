@@ -36,21 +36,27 @@ fn ui(error: Error) -> i32 {
 
 fn run() -> Result<(), i32> {
     // Consume the one-shot runscript before any UI4 window can become visible.
-    let scale = match trueos::async_fs::block_on(trueos::async_fs::read_file(b"vFile:launch")) {
+    let settings = match trueos::async_fs::block_on(trueos::async_fs::read_file(b"vFile:launch")) {
         Ok(bytes) => {
             let script = core::str::from_utf8(&bytes).map_err(|_| -22)?;
-            paper::script_scale(script).map_err(|message| {
+            paper::script_settings(script).map_err(|message| {
                 trueos::logl::log(trueos::logl::level::ERROR, message);
                 -22
             })?
         }
-        Err(trueos::async_fs::ERR_NOT_FOUND) => 1,
+        Err(trueos::async_fs::ERR_NOT_FOUND) => paper::Settings::default(),
         Err(error) => return Err(error),
+    };
+    let scale = settings.scale;
+    let glyph_scale = if settings.mode == paper::Mode::Gridpaper {
+        scale
+    } else {
+        1
     };
     let page = ui4_scene::physical_extent(210, 297).map_err(ui)?;
     // Warm only small complete atlases. Large sizes remain strictly demand-only.
-    if scale <= 4 {
-        let _ = glyph_pixels(scale, '?')?;
+    if glyph_scale <= 4 {
+        let _ = glyph_pixels(glyph_scale, '?')?;
     }
     let output = ui4_scene::output_dimensions().map_err(ui)?;
     let mut frame = Frame::open_immutable(
@@ -67,7 +73,7 @@ fn run() -> Result<(), i32> {
         let shader =
             device.create_shader_module(SHADER_PACKAGE_CLIP_POSITION3_IMMEDIATE_RGBA_FNV1A64)?;
         let pipeline = device.create_render_pipeline(shader, 12, 0)?;
-        let mut editor = Editor::new(scale);
+        let mut editor = Editor::with_mode(scale, settings.mode);
         let mut sprites = vec![GlyphSlot::default(); editor.cells.len()];
         let mut dirty = true;
         let mut visible = true;
@@ -151,7 +157,14 @@ fn draw(
         if let Some(ch) = cell.character
             && sprites[index].character != Some(ch)
         {
-            let bytes = glyph_pixels(scale, ch)?;
+            let bytes = glyph_pixels(
+                if editor.mode == paper::Mode::Gridpaper {
+                    scale
+                } else {
+                    1
+                },
+                ch,
+            )?;
             if bytes.len() < 8 {
                 return Err(ERR_IO);
             }
@@ -167,7 +180,8 @@ fn draw(
             };
         }
     }
-    let (vertices, indices) = paper::geometry(page, (frame.width(), frame.height()), scale);
+    let (vertices, indices) =
+        paper::geometry_for_mode(page, (frame.width(), frame.height()), scale, editor.mode);
     let vb = device.create_buffer(vertices.len(), BUFFER_USAGE_MAP_WRITE | BUFFER_USAGE_VERTEX)?;
     let ib = device.create_buffer(indices.len(), BUFFER_USAGE_MAP_WRITE | BUFFER_USAGE_INDEX)?;
     if device.write_buffer(vb, 0, &vertices)? != vertices.len()
@@ -191,7 +205,12 @@ fn draw(
     };
     batch.draws[0] = IndexedBatchDrawV2 {
         index_count: (indices.len() / 4) as u32,
-        rgba8_srgb: u32::from_le_bytes([190, 190, 190, 255]),
+        // White ruling keeps the native line batch clear path for blank sheets.
+        rgba8_srgb: if editor.mode == paper::Mode::Whitepaper {
+            u32::from_le_bytes([255; 4])
+        } else {
+            u32::from_le_bytes([190, 190, 190, 255])
+        },
         topology: PRIMITIVE_TOPOLOGY_LINE_LIST,
         ..Default::default()
     };

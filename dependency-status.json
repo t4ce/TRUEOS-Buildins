@@ -22,22 +22,6 @@
         ],
         "path": "TRUEOS/vendor/futures-util-0.3.32",
         "version": "0.3.32"
-      },
-      {
-        "name": "httpdate",
-        "required": [
-          "=1.0.3"
-        ],
-        "path": "TRUEOS/vendor/httpdate-1.0.3",
-        "version": "1.0.3"
-      },
-      {
-        "name": "hyper",
-        "required": [
-          "=1.10.0"
-        ],
-        "path": "TRUEOS/vendor/hyper-1.10.0",
-        "version": "1.10.0"
       }
     ],
     "upstream": [
@@ -232,6 +216,24 @@
           "local/workspace"
         ],
         "path": "edit/crates/unicode-gen"
+      },
+      {
+        "name": "hyper",
+        "required": [
+          "=1.10.0"
+        ],
+        "path": "vendor/hyper-1.10.0",
+        "version": "1.10.0",
+        "reason": "The Blueprint std fork is required; the kernel copy has a different platform interface."
+      },
+      {
+        "name": "httpdate",
+        "required": [
+          "=1.0.3"
+        ],
+        "path": "vendor/httpdate-1.0.3",
+        "version": "1.0.3",
+        "reason": "The Blueprint std fork is required; the kernel copy has a different platform interface."
       }
     ]
   },
@@ -460,7 +462,7 @@
   ],
   "kernel_build_workflow": {
     "driver": "tools/build.py",
-    "integration": "TRUEOS/tools/trueos-boot/prepare.sh builds the complete set before the final kernel build; build.rs verifies and embeds normal TRBP packages into the existing app.db seed.",
+    "integration": "TRUEOS/tools/trueos-boot/prepare.sh builds all packages and a complete redb app.db image, LZ4-compresses it, then build.rs verifies and embeds the image with the kernel.",
     "outputs": "TRUEOS/tgt/buildins/{dev,release}; no independent publication",
     "std_port": {
       "file": "tools/trueos-std.patch",
@@ -500,6 +502,22 @@
       ],
       "shared_backend": "vendor/getrandom-trueos.rs",
       "reason": "ring and rand_core 0.6 require the 0.2 API, while ahash 0.8 and lightningcss pin 0.3. Removing these adapters needs wider upstream dependency migrations. Only TrueOS byte filling is shared; dispatch, other platforms and versioned public APIs are unchanged."
+    },
+    "database": {
+      "host_builder": "TRUEOS/tools/appdb-seed",
+      "redb_version": "4.4.0 (exactly pinned on host and kernel)",
+      "outputs": [
+        "app.db",
+        "app.db.lz4"
+      ],
+      "boot": "Decompress the image into writable RAM and open the existing apps/hashes/updated tables. No table seeding or standalone publishing at boot."
+    },
+    "toolchain_verification": {
+      "archive_commit": "c399451b5455a61f58936c9080cf96f5ad4cb7ef",
+      "host_binaries": "Installed Linux rustc, Cargo, rustc_driver, LLVM, rust-lld and rust-objcopy exactly match the archived binaries.",
+      "rust_src": "Compared all 3545 archived library files: private sysroot preserves the original Blueprint std port, with four expected kernel thread-backend edits and the added current trueos.rs backend.",
+      "execution": "The driver runs Linux rustc with a private sysroot. It does not build or execute the native rustc-min/Cranelift Blueprint compiler.",
+      "limit": "This verifies consistency; it does not exclude a compiler bug or diagnose the host freezes."
     }
   }
 }
