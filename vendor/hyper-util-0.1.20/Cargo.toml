@@ -187,6 +187,7 @@ default-features = false
 [dependencies.hyper]
 version = "1.8.0"
 default-features = false
+features = ["std-compat"]
 
 [dependencies.ipnet]
 version = "2.9"

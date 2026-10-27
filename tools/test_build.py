@@ -5,6 +5,7 @@ import io
 import json
 import os
 from pathlib import Path
+import shutil
 import tempfile
 import tomllib
 from types import SimpleNamespace
@@ -45,6 +46,59 @@ class BuildInputs(unittest.TestCase):
             self.assertEqual(before[0], staged.stat().st_mtime_ns)
             self.assertIn("// changed", entry.read_text())
             self.assertFalse((entry.parent / "old.rs").exists())
+
+
+@unittest.skipUnless(shutil.which("patch"), "std preparation requires the patch utility")
+class StdPatch(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        self.library = self.root / "library"
+        self.library.mkdir()
+        self.patch = self.root / "trueos.patch"
+        self.patch.write_text("--- a/first.rs\n+++ b/first.rs\n@@ -1 +1 @@\n-host first\n+trueos first\n"
+                              "--- a/second.rs\n+++ b/second.rs\n@@ -1 +1 @@\n-host second\n+trueos second\n")
+
+    def sources(self, first, second):
+        (self.library / "first.rs").write_text(first + "\n")
+        (self.library / "second.rs").write_text(second + "\n")
+
+    def snapshot(self):
+        return {path.name: (path.read_bytes(), path.stat().st_mtime_ns)
+                for path in self.library.iterdir()}
+
+    def test_pristine_sources_are_patched_and_a_second_run_keeps_timestamps(self):
+        self.sources("host first", "host second")
+        build.apply_std_patch(self.library, self.patch)
+        self.assertEqual((self.library / "first.rs").read_text(), "trueos first\n")
+        self.assertEqual((self.library / "second.rs").read_text(), "trueos second\n")
+        before = self.snapshot()
+        build.apply_std_patch(self.library, self.patch)
+        self.assertEqual(self.snapshot(), before)
+
+    def test_archived_sources_already_containing_the_patch_are_unchanged(self):
+        self.sources("trueos first", "trueos second")
+        before = self.snapshot()
+        build.apply_std_patch(self.library, self.patch)
+        self.assertEqual(self.snapshot(), before)
+
+    def test_partial_patch_is_rejected_without_changing_sources(self):
+        # A reverse dry run without --forward can guess the wrong direction
+        # for the pristine file and mistakenly accept this mixed state.
+        self.sources("trueos first", "host second")
+        before = self.snapshot()
+        with self.assertRaises(ValueError):
+            build.apply_std_patch(self.library, self.patch)
+        self.assertEqual(self.snapshot(), before)
+
+    def test_unrecognized_sources_are_rejected_with_patch_diagnostics(self):
+        self.sources("unrelated first", "host second")
+        before = self.snapshot()
+        with self.assertRaises(ValueError) as raised:
+            build.apply_std_patch(self.library, self.patch)
+        self.assertIn("first.rs", str(raised.exception))
+        self.assertEqual(self.snapshot(), before)
 
 
 class ToolEnvironment(unittest.TestCase):

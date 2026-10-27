@@ -29,7 +29,7 @@ ROOT = Path(__file__).resolve().parents[1]
 TOOLCHAIN = "nightly-2026-07-10"
 COMMIT = "af3d95584dbddcae597890340995509a7fb47a50"
 IGNORED = {".git", "target", "tgt", "__pycache__", "Cargo.lock"}
-KERNEL_OVERLAYS = {"crc32fast", "futures-util", "http", "http-body", "httpdate", "hyper", "ring", "want"}
+KERNEL_OVERLAYS = {"crc32fast", "futures-util", "http", "http-body", "httpdate", "hyper", "mio", "ring", "want"}
 # Bump when the stripping or container recipe changes, independently of Rust inputs.
 PACKAGE_REVISION = 2
 
@@ -78,6 +78,26 @@ def sync_tree(source: Path, target: Path, transformed=None):
             write_changed(dest, (transformed or {}).get(path, path.read_bytes()))
 
 
+def apply_std_patch(library: Path, patch: Path):
+    """Accept pristine or fully patched rust-src, without changing partial inputs."""
+    command = ["patch", "--batch", "--forward", "-p1", "-i", str(patch.resolve())]
+    forward = subprocess.run([*command, "--dry-run"], cwd=library,
+                             text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    if forward.returncode == 0:
+        run(command, cwd=library, stdout=subprocess.DEVNULL)
+        return
+    # --forward also prevents patch from silently ignoring --reverse when a
+    # source file is still pristine. Every hunk must already be present.
+    reverse = subprocess.run([*command, "--dry-run", "--reverse"], cwd=library,
+                             text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    if reverse.returncode == 0:
+        print("buildins: archived rust-src already includes the TRUEOS std patch", flush=True)
+        return
+    raise ValueError("rust-src does not match the pristine or fully patched TRUEOS std inputs; "
+                     "refusing to modify it\nforward patch check:\n" + forward.stdout +
+                     "\nreverse patch check:\n" + reverse.stdout)
+
+
 def private_sysroot(output: Path, kernel: Path, rustc: Path, env: dict) -> Path:
     installed = Path(capture([rustc, "--print", "sysroot"], env=env))
     patch = ROOT / "tools/trueos-std.patch"
@@ -107,8 +127,7 @@ def private_sysroot(output: Path, kernel: Path, rustc: Path, env: dict) -> Path:
                 dest.symlink_to(path)
         sources = stage / "lib/rustlib/src/rust"
         shutil.copytree(installed / "lib/rustlib/src/rust/library", sources / "library")
-        run(["patch", "--batch", "--forward", "-p1", "-i", patch],
-            cwd=sources / "library", stdout=subprocess.DEVNULL)
+        apply_std_patch(sources / "library", patch)
         run([sys.executable, backend, sources])
         (stage / ".ready").write_text(COMMIT + "\n")
         if destination.exists():
@@ -177,7 +196,10 @@ def patches(kernel: Path):
             if isinstance(package.get("name"), str) and isinstance(package.get("version"), str):
                 if vendor == kernel / "vendor" and package["name"] not in KERNEL_OVERLAYS:
                     continue
-                result[(package["name"], package["version"])] = manifest.parent
+                key = (package["name"], package["version"])
+                if vendor == ROOT / "vendor" and package["name"] in {"hyper", "mio"}:
+                    continue
+                result[key] = manifest.parent
     return result
 
 
@@ -201,7 +223,10 @@ def staged_manifest(path: Path, original: Path):
             if relative.endswith("/api"):
                 dest = ROOT / "vendor/trueos"
             elif "/vendor/" in relative:
-                dest = ROOT / "vendor" / relative.split("/vendor/", 1)[1]
+                suffix = relative.split("/vendor/", 1)[1]
+                dest = ROOT / "vendor" / suffix
+                if suffix.split("/", 1)[0] in {"hyper-1.10.0", "mio-1.2.0"}:
+                    dest = ROOT.parent / "TRUEOS/vendor" / suffix
                 if not dest.exists():
                     dest = ROOT.parent / "TRUEOS/vendor" / relative.split("/vendor/", 1)[1]
             else:

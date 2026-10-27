@@ -342,7 +342,7 @@ default-features = false
 
 [target.'cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))'.dependencies.hyper]
 version = "1.1"
-features = [
+features = ["std-compat", 
     "http1",
     "client",
 ]
