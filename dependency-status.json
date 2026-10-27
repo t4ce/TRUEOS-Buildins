@@ -94,7 +94,7 @@
         "required": [
           "=1.0.0-alpha.72"
         ],
-        "evidence": "Registry dependency; no custom replacement found in the original manifests or Blueprint vendor overlay list."
+        "evidence": "Local vendor/lightningcss-1.0.0-alpha.72 preserves upstream source; its wasm-only getrandom requirement is migrated to =0.4.3 to keep the graph on one version."
       },
       {
         "name": "miniz_oxide",
@@ -472,9 +472,6 @@
       "note": "Applied only to a private rust-src copy, followed by the kernel-owned thread/TLS backend installer."
     },
     "additional_platform_sources": [
-      "getrandom-0.2.17",
-      "getrandom-0.3.4",
-      "getrandom-0.4.2",
       "hyper-util-0.1.20",
       "hyper-rustls-0.27.9",
       "raw-window-handle",
@@ -487,18 +484,23 @@
       "russh-cryptovec-0.62.0",
       "tracing-0.1.44",
       "tracing-core-0.1.36",
-      "tracing-attributes-0.1.31"
+      "tracing-attributes-0.1.31",
+      "ahash-0.8.12",
+      "lightningcss-1.0.0-alpha.72"
     ],
     "source_note": "Built-ins consume kernel-owned Mio, Hyper, Httpdate, http, http-body, crc32fast, futures-util, ring and want. The duplicate built-in Mio, Hyper and Httpdate trees were removed. Other platform overlays remain in the built-ins vendor directory.",
     "compatibility_correction": "Mio, Hyper and Httpdate have one kernel-owned source tree each. The kernel uses their native no_std defaults. Built-ins that still require std explicitly enable std-compat (Mio/Hyper) or std-system-time (Httpdate). Mio std-compat selects its Unix descriptor backend; it does not migrate Tokio to native Mio socket handles.",
     "getrandom": {
       "versions_retained": [
-        "0.2.17",
-        "0.3.4",
-        "0.4.2"
+        "0.4.3"
       ],
-      "shared_backend": "vendor/getrandom-trueos.rs",
-      "reason": "ring and rand_core 0.6 require the 0.2 API, while ahash 0.8 and lightningcss pin 0.3. Removing these adapters needs wider upstream dependency migrations. Only TrueOS byte filling is shared; dispatch, other platforms and versioned public APIs are unchanged."
+      "canonical_source": "../TRUEOS/vendor/getrandom-0.4.3",
+      "upstream_archive_sha256": "300e883d756b2e4ec94e02791f39b04b522276138852cfc41d9fb7e904106099",
+      "reason": "Kernel and built-ins share getrandom 0.4.3. Ring and Sunset use fill; rand_core 0.6.4 retains its public traits and legacy error conventions while using the new backend. AHash and Lightning CSS declarations select 0.4.3. The three previous getrandom vendor trees are removed.",
+      "kernel_backend": "getrandom_backend=custom calls the fallible Tyche CSPRNG through __getrandom_v03_custom; entropy failure remains an error.",
+      "builtin_backend": "src/backends/trueos.rs and trueos_bytes.rs retain the existing aligned/chunked sys_rand ABI; zero-length requests make no call.",
+      "rand_core_error_bridge": "OS codes and known internal errors retain legacy codes. The kernel custom error 1 retains CUSTOM_START+1. With std, original errors remain boxed; without std, other opaque new errors map to reserved INTERNAL_START+0xffff.",
+      "graph_check": "python3 tools/test_getrandom_graph.py"
     },
     "database": {
       "host_builder": "TRUEOS/tools/appdb-seed",
@@ -519,7 +521,9 @@
     "shared_platform_sources": {
       "mio": "../TRUEOS/vendor/mio-1.2.0",
       "hyper": "../TRUEOS/vendor/hyper-1.10.0",
-      "httpdate": "../TRUEOS/vendor/httpdate-1.0.3"
+      "httpdate": "../TRUEOS/vendor/httpdate-1.0.3",
+      "getrandom": "../TRUEOS/vendor/getrandom-0.4.3",
+      "rand_core": "../TRUEOS/vendor/rand_core-0.6.4"
     }
   }
 }

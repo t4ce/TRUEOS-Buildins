@@ -29,8 +29,9 @@ ROOT = Path(__file__).resolve().parents[1]
 TOOLCHAIN = "nightly-2026-07-10"
 COMMIT = "af3d95584dbddcae597890340995509a7fb47a50"
 IGNORED = {".git", "target", "tgt", "__pycache__", "Cargo.lock"}
-KERNEL_PLATFORM_SOURCES = {"hyper": "hyper-1.10.0", "mio": "mio-1.2.0", "httpdate": "httpdate-1.0.3"}
-KERNEL_OVERLAYS = {"crc32fast", "futures-util", "http", "http-body", "httpdate", "hyper", "mio", "ring", "want"}
+KERNEL_PLATFORM_SOURCES = {"hyper": "hyper-1.10.0", "mio": "mio-1.2.0", "httpdate": "httpdate-1.0.3",
+                           "getrandom": "getrandom-0.4.3", "rand_core": "rand_core-0.6.4"}
+KERNEL_OVERLAYS = {"crc32fast", "futures-util", "http", "http-body", "httpdate", "hyper", "mio", "getrandom", "rand_core", "ring", "want"}
 # Bump when the stripping or container recipe changes, independently of Rust inputs.
 PACKAGE_REVISION = 2
 

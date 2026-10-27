@@ -10,9 +10,7 @@ mod util {
     pub fn inner_u32() {}
     pub fn inner_u64() {}
 }
-#[path="../vendor/getrandom-0.2.17/src/trueos.rs"] mod old;
-#[path="../vendor/getrandom-0.3.4/src/backends/trueos.rs"] mod middle;
-#[path="../vendor/getrandom-0.4.2/src/backends/trueos.rs"] mod newest;
+#[path="../../TRUEOS/vendor/getrandom-0.4.3/src/backends/trueos.rs"] mod backend;
 use std::sync::atomic::{AtomicUsize, Ordering::SeqCst};
 static WORD: AtomicUsize = AtomicUsize::new(0);
 static CALLS: AtomicUsize = AtomicUsize::new(0);
@@ -27,8 +25,8 @@ unsafe extern "C" fn sys_rand(out: *mut u32, count: usize) {
     }
 }
 #[test]
-fn all_adapters_preserve_word_abi_and_buffer_boundaries() {
-    for fill in [old::getrandom_inner, middle::fill_inner, newest::fill_inner] {
+fn native_backend_preserves_word_abi_and_buffer_boundaries() {
+    for fill in [backend::fill_inner] {
         for length in [0, 1, 2, 3, 4, 5, 255, 256, 257, 511, 512, 513, 4097] {
             for offset in 0..4 {
                 WORD.store(0, SeqCst); CALLS.store(0, SeqCst);
