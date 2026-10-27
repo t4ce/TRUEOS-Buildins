@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Build the kernel-owned app.db inputs. No publishing or independent app releases.
 
-Cargo owns Rust dependency freshness; this driver stages only target adaptations,
-links rustc's selected archive closure, and writes the existing TRBP containers.
+Cargo builds and tracks complete relocatable objects; this driver stages target
+adaptations, strips debug information, and writes the existing TRBP containers.
 All generated sources, Cargo locks, caches and packages live below --output.
 """
 from __future__ import annotations
@@ -30,6 +30,8 @@ TOOLCHAIN = "nightly-2026-07-10"
 COMMIT = "af3d95584dbddcae597890340995509a7fb47a50"
 IGNORED = {".git", "target", "tgt", "__pycache__", "Cargo.lock"}
 KERNEL_OVERLAYS = {"crc32fast", "futures-util", "http", "http-body", "httpdate", "hyper", "ring", "want"}
+# Bump when the stripping or container recipe changes, independently of Rust inputs.
+PACKAGE_REVISION = 1
 
 
 def run(args, **kwargs):
@@ -138,8 +140,22 @@ def tool_environment(output: Path, kernel: Path, needs_std: bool):
     env["RUSTC"] = str(wrapper)
     env["RUSTC_BOOTSTRAP_SYNTHETIC_TARGET"] = "1"
     env["CARGO_TARGET_DIR"] = str(output / "cargo")
-    env.setdefault("CARGO_BUILD_JOBS", "1")
-    env["CARGO_ENCODED_RUSTFLAGS"] = "\x1f".join(["-C", "panic=abort", "--check-cfg=cfg(target_os,values(\"trueos\",\"zkvm\"))"])
+    # std declares native libc/unwinder libraries. TRUEOS supplies those symbols
+    # at load time, just as it does for the kernel's freestanding link.
+    libraries = output / "system-libraries"
+    for name in ("c", "gcc_s"):
+        write_changed(libraries / f"lib{name}.a", b"!<arch>\n")
+    env["CARGO_ENCODED_RUSTFLAGS"] = "\x1f".join([
+        "-C", "panic=abort", "--check-cfg=cfg(target_os,values(\"trueos\",\"zkvm\"))",
+        "-L", f"native={libraries}",
+    ])
+    # Some copied app manifests used release-like dev profiles. Rig development
+    # uses ordinary incremental, unoptimized code and strips only after linking.
+    env["CARGO_PROFILE_DEV_OPT_LEVEL"] = "0"
+    env["CARGO_PROFILE_DEV_LTO"] = "false"
+    env["CARGO_PROFILE_DEV_CODEGEN_UNITS"] = "256"
+    env["CARGO_PROFILE_DEV_SPLIT_DEBUGINFO"] = "off"
+    env["CARGO_PROFILE_DEV_STRIP"] = "none"
     env["CARGO_PROFILE_RELEASE_LTO"] = "false"
     env["CARGO_PROFILE_DEV_PANIC"] = "abort"
     env["CARGO_PROFILE_RELEASE_PANIC"] = "abort"
@@ -242,27 +258,6 @@ pub extern "C" fn _start() -> ! {
     return stage / manifest.relative_to(ROOT / name)
 
 
-def selected_inputs(rlink: Path):
-    """Read the pinned rustc .rlink's ordered paths, never glob cached archives."""
-    archives, objects = [], []
-    for raw in re.findall(rb"[!-~]+", rlink.read_bytes()):
-        token = raw.decode()
-        if ".rlib" in token:
-            token = token[:token.index(".rlib") + 5]
-            path = Path(token[token.index("/"):]) if "/" in token else rlink.parent / token[token.rfind("lib"):]
-            if path.is_file() and path not in archives:
-                archives.append(path)
-        elif token.endswith(".o") and "/" in token:
-            path = Path(token[token.index("/"):])
-            if path.name.startswith(rlink.stem) and path.is_file() and path not in objects:
-                objects.append(path)
-    if not archives or not objects:
-        raise ValueError(f"cannot recover the selected objects and archives from {rlink}")
-    if any(path.name.startswith("libpanic_unwind-") for path in archives):
-        raise ValueError("app selected panic_unwind despite panic=abort")
-    return objects, archives
-
-
 def entry_hint(path: Path):
     for line in capture(["readelf", "-Ws", path]).splitlines():
         columns = line.split()
@@ -320,27 +315,6 @@ def source_digest(kernel: Path):
             for source in sorted(path.rglob("*")):
                 if source.is_file() and not any(part in IGNORED for part in source.relative_to(path).parts):
                     digest.update(str(source).encode() + b"\0" + hashlib.sha256(source.read_bytes()).digest())
-    return digest.hexdigest()
-
-
-def compile_snapshot(roots, config, lock: Path):
-    """Track local Cargo inputs before invoking rustc's no-link mode.
-
-    no-link deliberately omits Cargo's executable, so Cargo otherwise recompiles
-    the root binary even when all its inputs are fresh. Dependency roots come
-    from the last successful Cargo artifact stream, including build dependencies.
-    """
-    digest = hashlib.sha256(config)
-    for root in map(Path, roots):
-        digest.update(str(root).encode() + b"\0")
-        if not root.exists():
-            return None
-        for path in sorted(root.rglob("*") if root.is_dir() else [root]):
-            if path.is_file() and not any(part in IGNORED for part in path.relative_to(root.parent).parts):
-                digest.update(str(path).encode() + b"\0" + hashlib.sha256(path.read_bytes()).digest())
-    if not lock.is_file():
-        return None
-    digest.update(lock.read_bytes())
     return digest.hexdigest()
 
 
@@ -426,12 +400,12 @@ def build_database(output: Path, kernel: Path, cargo: Path, env: dict, names):
     return database
 
 
-def build_app(name: str, output: Path, profile: str, cargo: Path, binaries: Path, env: dict, overlays, pending):
+def build_app(name: str, output: Path, profile: str, cargo: Path, binaries: Path, env: dict, overlays):
     manifest, source, needs_std, features, doc = settings(name)
     staged = stage_app(name, output, manifest, source)
-    args = [cargo, "rustc", "--message-format=json-render-diagnostics",
+    args = [cargo, "build", "--message-format=json-render-diagnostics",
             "-Zbuild-std=" + ("core,compiler_builtins,alloc,std,panic_abort" if needs_std else "core,compiler_builtins,alloc"),
-            "-Zbuild-std-features=compiler-builtins-mem", "-Zjson-target-spec", "--target", ROOT / "tools/trueos-app.json",
+            "-Zbuild-std-features=compiler-builtins-mem", "-Zjson-target-spec", "--target", ROOT / "tools/trueos-object.json",
             "--manifest-path", staged, "--bin", name]
     config = output / "overlays.toml"
     lines = ["[patch.crates-io]"]
@@ -443,28 +417,13 @@ def build_app(name: str, output: Path, profile: str, cargo: Path, binaries: Path
         args.append("--release")
     if features:
         args += ["--features", ",".join(features)]
-    args += ["--", "-Zno-link", "--emit=obj"]
     work = output / "objects" / name
     package = output / "dist" / f"{name}.bp"
-    compilation = work / "compilation.json"
-    lock = output / "sources" / name / "Cargo.lock"
-    config_bytes = json.dumps({"args": list(map(str, args)), "env": {
-        key: value for key, value in env.items() if key.startswith(("CARGO_PROFILE_", "CARGO_ENCODED_", "RUSTC_BOOTSTRAP"))
-        or key in {"CC", "CXX", "AR", "CFLAGS", "CXXFLAGS"}}}, sort_keys=True).encode()
-    config_bytes += Path(__file__).read_bytes() + config.read_bytes() + (output / "rustc-app").read_bytes() + (ROOT / "tools/trueos-app.json").read_bytes()
-    if compilation.is_file() and package.is_file() and (work / "module.stripped.o").is_file():
-        previous = json.loads(compilation.read_text())
-        snapshot = compile_snapshot(previous["roots"], config_bytes, lock)
-        if snapshot == previous["snapshot"] and hashlib.sha256(package.read_bytes()).hexdigest() == previous["package"]:
-            if hashlib.sha256((work / "module.stripped.o").read_bytes()).hexdigest() == previous.get("module"):
-                print(f"buildins: fresh {name}", flush=True)
-                return package
     log = output / f"{name}.log"
     print(f"buildins: checking {name} ({profile})", flush=True)
     checkpoint(output, name, "compile start")
-    artifacts = []
+    artifacts = set()
     errors = []
-    roots = {ROOT / name}
     with log.open("w") as stream:
         # Cargo discovers .cargo/config from its working directory, not --manifest-path.
         # Keep the kernel linker script and kernel build-std settings out of apps.
@@ -478,48 +437,37 @@ def build_app(name: str, output: Path, profile: str, cargo: Path, binaries: Path
                 continue
             if item.get("reason") == "compiler-message" and item["message"]["level"] == "error":
                 errors.append(item["message"].get("rendered", item["message"]["message"]))
-            if item.get("reason") == "compiler-artifact":
-                dependency = Path(item["manifest_path"]).parent
-                if not dependency.is_relative_to(output) and (dependency.is_relative_to(ROOT) or dependency.is_relative_to(ROOT.parent / "TRUEOS")):
-                    roots.add(dependency)
-                    if dependency.name.startswith("getrandom-"):
-                        # The three API adapters include this file from outside their crate roots.
-                        roots.add(ROOT / "vendor/getrandom-trueos.rs")
-                    for parent in dependency.parents:
-                        if parent in (ROOT, ROOT.parent / "TRUEOS"):
-                            break
-                        if (parent / "Cargo.toml").is_file():
-                            roots.add(parent / "Cargo.toml")
-            if item.get("reason") == "compiler-artifact" and item["target"]["name"] == name and "bin" in item["target"]["kind"]:
-                artifacts.extend(item["filenames"])
+            if (item.get("reason") == "compiler-artifact" and item["target"]["name"] == name
+                    and "bin" in item["target"]["kind"] and Path(item["manifest_path"]) == staged):
+                if item.get("executable"):
+                    artifacts.add(Path(item["executable"]))
         if process.wait():
             details = "\n".join(errors)[:20000] if errors else log.read_text()[-16000:]
             raise ValueError(f"{name} compilation failed; {log}\n{details}")
-    # rustc's no-link artifact is a .rlink; Cargo may report the executable stem.
-    candidates = [Path(filename).with_suffix(".rlink") for filename in artifacts]
-    deps = output / "cargo/trueos-app" / ("debug" if profile == "dev" else "release") / "deps"
-    candidates += sorted(deps.glob(name.replace("-", "_") + "-*.rlink"), key=lambda p: p.stat().st_mtime_ns, reverse=True)
-    rlink = next((path for path in candidates if path.is_file()), None)
-    if rlink is None:
-        raise ValueError(f"{name}: Cargo produced no selected .rlink")
-    objects, archives = selected_inputs(rlink)
+    if len(artifacts) != 1:
+        raise ValueError(f"{name}: Cargo must report exactly one executable object, got {len(artifacts)}")
+    module = artifacts.pop()
+    if module.suffix != ".o" or not module.is_file():
+        raise ValueError(f"{name}: Cargo reported an invalid executable object: {module}")
     checkpoint(output, name, "compile complete")
-    state = [[str(path), path.stat().st_size, path.stat().st_mtime_ns] for path in [Path(__file__), ROOT / "tools/trueos-app.json", *objects, *archives]]
-    state_bytes = json.dumps(state).encode()
     work.mkdir(parents=True, exist_ok=True)
     stamp = work / "inputs.json"
+    stripped = work / "module.stripped.o"
     metadata = doc.get("package", {}).get("metadata", {}).get("trueos-blueprint", {})
     flags = sum(bit for key, value, bit in [("replicatable", True, 1 << 8), ("entry-abi", "argv-v1", 1 << 9),
                 ("filesystem-independent", True, 1 << 10), ("fs-scope", "trueosfs", 1 << 11)] if metadata.get(key) == value)
-    state_bytes += json.dumps(flags).encode()
-    if package.is_file() and stamp.is_file() and stamp.read_bytes() == state_bytes:
-        print(f"buildins: fresh {name}", flush=True)
-        return package
-    module = work / "module.o"
-    checkpoint(output, name, "link start")
-    run([binaries / "rust-lld", "-flavor", "gnu", "--threads=1", "-r", "--gc-sections", "--undefined=_start", "-o", module,
-         *objects, "--start-group", *archives, "--end-group"], env=env)
-    stripped = work / "module.stripped.o"
+    inputs = {"module": hashlib.sha256(module.read_bytes()).hexdigest(), "flags": flags, "format": PACKAGE_REVISION}
+    if package.is_file() and stripped.is_file() and stamp.is_file():
+        try:
+            previous = json.loads(stamp.read_text())
+        except json.JSONDecodeError:
+            # The previous driver stored concatenated JSON values here.
+            previous = None
+        if (isinstance(previous, dict) and previous.get("inputs") == inputs
+                and previous.get("package") == hashlib.sha256(package.read_bytes()).hexdigest()
+                and previous.get("stripped") == hashlib.sha256(stripped.read_bytes()).hexdigest()):
+            print(f"buildins: fresh {name}", flush=True)
+            return package
     checkpoint(output, name, "strip start")
     run([binaries / "rust-objcopy", "--strip-debug", "--set-section-flags", ".trueos.shaders=readonly", module, stripped], env=env)
     payload = stripped.read_bytes()
@@ -527,11 +475,9 @@ def build_app(name: str, output: Path, profile: str, cargo: Path, binaries: Path
     compressed = compress_module(payload)
     data = struct.pack("<4sHHQII", b"TRBP", 1, 3 | flags, entry_hint(stripped), len(compressed), len(payload)) + compressed
     write_changed(package, data, durable=True)
-    write_changed(stamp, state_bytes)
-    pending[compilation] = (json.dumps({"roots": list(map(str, sorted(roots))),
-        "snapshot": compile_snapshot(sorted(roots), config_bytes, lock),
-        "package": hashlib.sha256(data).hexdigest(), "module": hashlib.sha256(payload).hexdigest()}, indent=2) + "\n").encode()
-    print(f"buildins: linked {name} ({len(data):,} bytes)", flush=True)
+    state = {"inputs": inputs, "package": hashlib.sha256(data).hexdigest(), "stripped": hashlib.sha256(payload).hexdigest()}
+    write_changed(stamp, (json.dumps(state, indent=2) + "\n").encode(), durable=True)
+    print(f"buildins: packaged {name} ({len(data):,} bytes)", flush=True)
     checkpoint(output, name, "package complete")
     return package
 
@@ -556,13 +502,6 @@ def main():
     if args.check:
         check_ready(output, kernel, args.profile)
         return
-    # Diagnostic invocations need the same limits as cargo rigdev. Reuse the
-    # enclosing rig scope, otherwise enter it before starting any build tools.
-    if os.environ.get("TRUEOS_BUILD_SCOPE") != "1":
-        safety = kernel / "tools/build-safe.sh"
-        if not safety.is_file():
-            raise ValueError(f"missing required build containment wrapper: {safety}")
-        os.execvp("bash", ["bash", str(safety), sys.executable, str(Path(__file__).resolve()), *sys.argv[1:]])
     lock = (output / "build.lock").open("w")
     fcntl.flock(lock, fcntl.LOCK_EX)
     names = json.loads((ROOT / "buildins.json").read_text())["buildins"]
@@ -576,15 +515,8 @@ def main():
     (output / ".building").touch()
     cargo, binaries, env = tool_environment(output, kernel, needs_std)
     overlays = patches(kernel)
-    pending = {}
     for name in selected:
-        build_app(name, output, args.profile, cargo, binaries, env, overlays, pending)
-        if pending:
-            if source_digest(kernel) != before:
-                raise ValueError("built-in inputs changed during compilation; run the build again")
-            for path, data in pending.items():
-                write_changed(path, data, durable=True)
-            pending.clear()
+        build_app(name, output, args.profile, cargo, binaries, env, overlays)
     verify_abi(kernel, output, selected)
     if not args.app:
         checkpoint(output, "app.db", "image start")
