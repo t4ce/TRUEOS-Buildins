@@ -51,7 +51,7 @@
 //! [`Write`]: hyper::rt::Write
 //! [tokio-async-docs]: https://docs.rs/tokio/latest/tokio/#asynchronous-io
 
-use alloc::{boxed::Box, vec::Vec};
+use alloc::boxed::Box;
 use core::time::Duration;
 use std::{
     future::Future,
@@ -60,9 +60,12 @@ use std::{
     task::{Context, Poll},
 };
 
-use hyper::{io as hyper_io, time::Instant};
 use hyper::rt::{Executor, Sleep, Timer};
+#[cfg(any(target_os = "trueos", target_os = "zkvm"))]
+use hyper::{io as hyper_io, time::Instant};
 use pin_project_lite::pin_project;
+#[cfg(not(any(target_os = "trueos", target_os = "zkvm")))]
+use std::{io as hyper_io, time::Instant};
 use tokio::io as tokio_io;
 
 #[cfg(feature = "tracing")]
@@ -73,102 +76,15 @@ pub use self::{with_hyper_io::WithHyperIo, with_tokio_io::WithTokioIo};
 mod with_hyper_io;
 mod with_tokio_io;
 
-fn tokio_to_hyper_kind(kind: tokio_io::ErrorKind) -> hyper_io::ErrorKind {
-    match kind {
-        tokio_io::ErrorKind::NotFound => hyper_io::ErrorKind::NotFound,
-        tokio_io::ErrorKind::PermissionDenied => hyper_io::ErrorKind::PermissionDenied,
-        tokio_io::ErrorKind::ConnectionRefused => hyper_io::ErrorKind::ConnectionRefused,
-        tokio_io::ErrorKind::ConnectionReset => hyper_io::ErrorKind::ConnectionReset,
-        tokio_io::ErrorKind::ConnectionAborted => hyper_io::ErrorKind::ConnectionAborted,
-        tokio_io::ErrorKind::NotConnected => hyper_io::ErrorKind::NotConnected,
-        tokio_io::ErrorKind::AddrInUse => hyper_io::ErrorKind::AddrInUse,
-        tokio_io::ErrorKind::AddrNotAvailable => hyper_io::ErrorKind::AddrNotAvailable,
-        tokio_io::ErrorKind::BrokenPipe => hyper_io::ErrorKind::BrokenPipe,
-        tokio_io::ErrorKind::AlreadyExists => hyper_io::ErrorKind::AlreadyExists,
-        tokio_io::ErrorKind::WouldBlock => hyper_io::ErrorKind::WouldBlock,
-        tokio_io::ErrorKind::InvalidInput => hyper_io::ErrorKind::InvalidInput,
-        tokio_io::ErrorKind::InvalidData => hyper_io::ErrorKind::InvalidData,
-        tokio_io::ErrorKind::TimedOut => hyper_io::ErrorKind::TimedOut,
-        tokio_io::ErrorKind::WriteZero => hyper_io::ErrorKind::WriteZero,
-        tokio_io::ErrorKind::Interrupted => hyper_io::ErrorKind::Interrupted,
-        tokio_io::ErrorKind::UnexpectedEof => hyper_io::ErrorKind::UnexpectedEof,
-        _ => hyper_io::ErrorKind::Other,
-    }
-}
+#[cfg(test)]
+mod tests;
 
-fn hyper_to_tokio_kind(kind: hyper_io::ErrorKind) -> tokio_io::ErrorKind {
-    match kind {
-        hyper_io::ErrorKind::NotFound => tokio_io::ErrorKind::NotFound,
-        hyper_io::ErrorKind::PermissionDenied => tokio_io::ErrorKind::PermissionDenied,
-        hyper_io::ErrorKind::ConnectionRefused => tokio_io::ErrorKind::ConnectionRefused,
-        hyper_io::ErrorKind::ConnectionReset => tokio_io::ErrorKind::ConnectionReset,
-        hyper_io::ErrorKind::ConnectionAborted => tokio_io::ErrorKind::ConnectionAborted,
-        hyper_io::ErrorKind::NotConnected => tokio_io::ErrorKind::NotConnected,
-        hyper_io::ErrorKind::AddrInUse => tokio_io::ErrorKind::AddrInUse,
-        hyper_io::ErrorKind::AddrNotAvailable => tokio_io::ErrorKind::AddrNotAvailable,
-        hyper_io::ErrorKind::BrokenPipe => tokio_io::ErrorKind::BrokenPipe,
-        hyper_io::ErrorKind::AlreadyExists => tokio_io::ErrorKind::AlreadyExists,
-        hyper_io::ErrorKind::WouldBlock => tokio_io::ErrorKind::WouldBlock,
-        hyper_io::ErrorKind::InvalidInput => tokio_io::ErrorKind::InvalidInput,
-        hyper_io::ErrorKind::InvalidData => tokio_io::ErrorKind::InvalidData,
-        hyper_io::ErrorKind::TimedOut => tokio_io::ErrorKind::TimedOut,
-        hyper_io::ErrorKind::WriteZero => tokio_io::ErrorKind::WriteZero,
-        hyper_io::ErrorKind::Interrupted => tokio_io::ErrorKind::Interrupted,
-        hyper_io::ErrorKind::UnexpectedEof => tokio_io::ErrorKind::UnexpectedEof,
-        _ => tokio_io::ErrorKind::Other,
-    }
-}
-
-fn tokio_to_hyper_error(err: tokio_io::Error) -> hyper_io::Error {
-    hyper_io::Error::new(tokio_to_hyper_kind(err.kind()), "tokio io error")
-}
-
-fn hyper_to_tokio_error(err: hyper_io::Error) -> tokio_io::Error {
-    tokio_io::Error::new(hyper_to_tokio_kind(err.kind()), "hyper io error")
-}
-
-fn tokio_to_hyper_slices<'buf>(
-    bufs: &'buf [IoSlice<'buf>],
-) -> Vec<hyper_io::IoSlice<'buf>> {
-    // On TRUEOS both sides re-export `trueos-io` platform I/O. Keep the
-    // conversion shape so the bridge remains source-compatible upstream.
-    bufs.iter().map(|buf| hyper_io::IoSlice::new(&**buf)).collect()
-}
-
-fn hyper_to_tokio_slices<'buf>(
-    bufs: &'buf [hyper_io::IoSlice<'buf>],
-) -> Vec<IoSlice<'buf>> {
-    bufs.iter().map(|buf| IoSlice::new(&**buf)).collect()
-}
-
-#[cfg(any(target_os = "trueos", target_os = "zkvm"))]
-fn hyper_to_tokio_instant(deadline: Instant) -> tokio::time::Instant {
-    let hyper_now = Instant::now();
-    let tokio_now = tokio::time::Instant::now();
-    if deadline >= hyper_now {
-        tokio_now + deadline.duration_since(hyper_now)
-    } else {
-        tokio_now - hyper_now.duration_since(deadline)
-    }
-}
-
-#[cfg(not(any(target_os = "trueos", target_os = "zkvm")))]
+// This overlay enables Hyper's `std-compat` feature. I/O errors, vectored
+// buffers, and the underlying clock therefore already share Tokio's std types.
 fn hyper_to_tokio_instant(deadline: Instant) -> tokio::time::Instant {
     deadline.into()
 }
 
-#[cfg(any(target_os = "trueos", target_os = "zkvm"))]
-fn tokio_to_hyper_instant(instant: tokio::time::Instant) -> Instant {
-    let tokio_now = tokio::time::Instant::now();
-    let hyper_now = Instant::now();
-    if instant >= tokio_now {
-        hyper_now + (instant - tokio_now)
-    } else {
-        hyper_now - (tokio_now - instant)
-    }
-}
-
-#[cfg(not(any(target_os = "trueos", target_os = "zkvm")))]
 fn tokio_to_hyper_instant(instant: tokio::time::Instant) -> Instant {
     instant.into()
 }
@@ -264,7 +180,7 @@ where
             let mut tbuf = tokio::io::ReadBuf::uninit(buf.as_mut());
             match tokio::io::AsyncRead::poll_read(self.project().inner, cx, &mut tbuf) {
                 Poll::Ready(Ok(())) => tbuf.filled().len(),
-                Poll::Ready(Err(err)) => return Poll::Ready(Err(tokio_to_hyper_error(err))),
+                Poll::Ready(Err(err)) => return Poll::Ready(Err(err)),
                 Poll::Pending => return Poll::Pending,
             }
         };
@@ -286,11 +202,10 @@ where
         buf: &[u8],
     ) -> Poll<Result<usize, hyper_io::Error>> {
         tokio::io::AsyncWrite::poll_write(self.project().inner, cx, buf)
-            .map_err(tokio_to_hyper_error)
     }
 
     fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), hyper_io::Error>> {
-        tokio::io::AsyncWrite::poll_flush(self.project().inner, cx).map_err(tokio_to_hyper_error)
+        tokio::io::AsyncWrite::poll_flush(self.project().inner, cx)
     }
 
     fn poll_shutdown(
@@ -298,7 +213,6 @@ where
         cx: &mut Context<'_>,
     ) -> Poll<Result<(), hyper_io::Error>> {
         tokio::io::AsyncWrite::poll_shutdown(self.project().inner, cx)
-            .map_err(tokio_to_hyper_error)
     }
 
     fn is_write_vectored(&self) -> bool {
@@ -310,9 +224,7 @@ where
         cx: &mut Context<'_>,
         bufs: &[hyper_io::IoSlice<'_>],
     ) -> Poll<Result<usize, hyper_io::Error>> {
-        let bufs = hyper_to_tokio_slices(bufs);
-        tokio::io::AsyncWrite::poll_write_vectored(self.project().inner, cx, &bufs)
-            .map_err(tokio_to_hyper_error)
+        tokio::io::AsyncWrite::poll_write_vectored(self.project().inner, cx, bufs)
     }
 }
 
@@ -332,7 +244,7 @@ where
 
             match hyper::rt::Read::poll_read(self.project().inner, cx, buf.unfilled()) {
                 Poll::Ready(Ok(())) => buf.filled().len(),
-                Poll::Ready(Err(err)) => return Poll::Ready(Err(hyper_to_tokio_error(err))),
+                Poll::Ready(Err(err)) => return Poll::Ready(Err(err)),
                 Poll::Pending => return Poll::Pending,
             }
         };
@@ -358,18 +270,18 @@ where
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<Result<usize, tokio_io::Error>> {
-        hyper::rt::Write::poll_write(self.project().inner, cx, buf).map_err(hyper_to_tokio_error)
+        hyper::rt::Write::poll_write(self.project().inner, cx, buf)
     }
 
     fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), tokio_io::Error>> {
-        hyper::rt::Write::poll_flush(self.project().inner, cx).map_err(hyper_to_tokio_error)
+        hyper::rt::Write::poll_flush(self.project().inner, cx)
     }
 
     fn poll_shutdown(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Result<(), tokio_io::Error>> {
-        hyper::rt::Write::poll_shutdown(self.project().inner, cx).map_err(hyper_to_tokio_error)
+        hyper::rt::Write::poll_shutdown(self.project().inner, cx)
     }
 
     fn is_write_vectored(&self) -> bool {
@@ -381,9 +293,7 @@ where
         cx: &mut Context<'_>,
         bufs: &[IoSlice<'_>],
     ) -> Poll<Result<usize, tokio_io::Error>> {
-        let bufs = tokio_to_hyper_slices(bufs);
-        hyper::rt::Write::poll_write_vectored(self.project().inner, cx, &bufs)
-            .map_err(hyper_to_tokio_error)
+        hyper::rt::Write::poll_write_vectored(self.project().inner, cx, bufs)
     }
 }
 
@@ -432,6 +342,9 @@ impl Sleep for TokioSleep {}
 
 impl TokioSleep {
     fn reset(self: Pin<&mut Self>, deadline: Instant) {
-        self.project().inner.as_mut().reset(hyper_to_tokio_instant(deadline));
+        self.project()
+            .inner
+            .as_mut()
+            .reset(hyper_to_tokio_instant(deadline));
     }
 }

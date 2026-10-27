@@ -1,13 +1,11 @@
+use super::hyper_io;
 use pin_project_lite::pin_project;
 use std::{
     io::IoSlice,
     pin::Pin,
     task::{Context, Poll},
 };
-use hyper::io as hyper_io;
 use tokio::io as tokio_io;
-
-use super::{hyper_to_tokio_slices, tokio_to_hyper_error};
 
 pin_project! {
     /// Extends an underlying [`tokio`] I/O with [`hyper`] I/O implementations.
@@ -62,7 +60,7 @@ where
             let mut tbuf = tokio::io::ReadBuf::uninit(buf.as_mut());
             match tokio::io::AsyncRead::poll_read(self.project().inner, cx, &mut tbuf) {
                 Poll::Ready(Ok(())) => tbuf.filled().len(),
-                Poll::Ready(Err(err)) => return Poll::Ready(Err(tokio_to_hyper_error(err))),
+                Poll::Ready(Err(err)) => return Poll::Ready(Err(err)),
                 Poll::Pending => return Poll::Pending,
             }
         };
@@ -88,11 +86,10 @@ where
         buf: &[u8],
     ) -> Poll<Result<usize, hyper_io::Error>> {
         tokio::io::AsyncWrite::poll_write(self.project().inner, cx, buf)
-            .map_err(tokio_to_hyper_error)
     }
 
     fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), hyper_io::Error>> {
-        tokio::io::AsyncWrite::poll_flush(self.project().inner, cx).map_err(tokio_to_hyper_error)
+        tokio::io::AsyncWrite::poll_flush(self.project().inner, cx)
     }
 
     fn poll_shutdown(
@@ -100,7 +97,6 @@ where
         cx: &mut Context<'_>,
     ) -> Poll<Result<(), hyper_io::Error>> {
         tokio::io::AsyncWrite::poll_shutdown(self.project().inner, cx)
-            .map_err(tokio_to_hyper_error)
     }
 
     fn is_write_vectored(&self) -> bool {
@@ -112,9 +108,7 @@ where
         cx: &mut Context<'_>,
         bufs: &[hyper_io::IoSlice<'_>],
     ) -> Poll<Result<usize, hyper_io::Error>> {
-        let bufs = hyper_to_tokio_slices(bufs);
-        tokio::io::AsyncWrite::poll_write_vectored(self.project().inner, cx, &bufs)
-            .map_err(tokio_to_hyper_error)
+        tokio::io::AsyncWrite::poll_write_vectored(self.project().inner, cx, bufs)
     }
 }
 

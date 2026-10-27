@@ -1,13 +1,11 @@
+use super::hyper_io;
 use pin_project_lite::pin_project;
 use std::{
     io::IoSlice,
     pin::Pin,
     task::{Context, Poll},
 };
-use hyper::io as hyper_io;
 use tokio::io as tokio_io;
-
-use super::{hyper_to_tokio_error, tokio_to_hyper_slices};
 
 pin_project! {
     /// Extends an underlying [`hyper`] I/O with [`tokio`] I/O implementations.
@@ -43,7 +41,7 @@ where
 
             match hyper::rt::Read::poll_read(self.project().inner, cx, buf.unfilled()) {
                 Poll::Ready(Ok(())) => buf.filled().len(),
-                Poll::Ready(Err(err)) => return Poll::Ready(Err(hyper_to_tokio_error(err))),
+                Poll::Ready(Err(err)) => return Poll::Ready(Err(err)),
                 Poll::Pending => return Poll::Pending,
             }
         };
@@ -73,18 +71,18 @@ where
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<Result<usize, tokio_io::Error>> {
-        hyper::rt::Write::poll_write(self.project().inner, cx, buf).map_err(hyper_to_tokio_error)
+        hyper::rt::Write::poll_write(self.project().inner, cx, buf)
     }
 
     fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), tokio_io::Error>> {
-        hyper::rt::Write::poll_flush(self.project().inner, cx).map_err(hyper_to_tokio_error)
+        hyper::rt::Write::poll_flush(self.project().inner, cx)
     }
 
     fn poll_shutdown(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Result<(), tokio_io::Error>> {
-        hyper::rt::Write::poll_shutdown(self.project().inner, cx).map_err(hyper_to_tokio_error)
+        hyper::rt::Write::poll_shutdown(self.project().inner, cx)
     }
 
     fn is_write_vectored(&self) -> bool {
@@ -96,9 +94,7 @@ where
         cx: &mut Context<'_>,
         bufs: &[IoSlice<'_>],
     ) -> Poll<Result<usize, tokio_io::Error>> {
-        let bufs = tokio_to_hyper_slices(bufs);
-        hyper::rt::Write::poll_write_vectored(self.project().inner, cx, &bufs)
-            .map_err(hyper_to_tokio_error)
+        hyper::rt::Write::poll_write_vectored(self.project().inner, cx, bufs)
     }
 }
 
