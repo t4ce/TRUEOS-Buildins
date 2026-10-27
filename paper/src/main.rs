@@ -1,4 +1,5 @@
 #![no_std]
+#![no_main]
 extern crate alloc;
 use alloc::{format, vec, vec::Vec};
 use paper::Editor;
@@ -24,6 +25,15 @@ fn main() {
         );
     }
     trueos::vshell::shutdown_current_blueprint("Paper closed");
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn _start() -> ! {
+    main();
+    unsafe extern "C" {
+        fn exit(code: core::ffi::c_int) -> !;
+    }
+    unsafe { exit(0) }
 }
 
 fn ui(error: Error) -> i32 {
