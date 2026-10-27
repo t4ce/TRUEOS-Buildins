@@ -1,0 +1,12 @@
+# Shared by builtin release builds; development keeps its fast Cargo profile.
+[profile.release]
+codegen-units = 1
+debug = "full"
+lto = "fat"
+# Keep each app's optimization level (Cargo defaults to 3; Hull/Edit use "s").
+panic = "abort"
+# The relocatable target supports unsplit debug data. Packaging removes it.
+split-debuginfo = "off"
+# Blueprint loading needs the ELF symbol table and its relocation references.
+strip = "none"
+incremental = true

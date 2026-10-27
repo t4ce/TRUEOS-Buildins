@@ -31,7 +31,7 @@ COMMIT = "af3d95584dbddcae597890340995509a7fb47a50"
 IGNORED = {".git", "target", "tgt", "__pycache__", "Cargo.lock"}
 KERNEL_OVERLAYS = {"crc32fast", "futures-util", "http", "http-body", "httpdate", "hyper", "ring", "want"}
 # Bump when the stripping or container recipe changes, independently of Rust inputs.
-PACKAGE_REVISION = 1
+PACKAGE_REVISION = 2
 
 
 def run(args, **kwargs):
@@ -414,7 +414,10 @@ def build_app(name: str, output: Path, profile: str, cargo: Path, binaries: Path
     write_changed(config, ("\n".join(lines) + "\n").encode())
     args += ["--config", config]
     if profile == "release":
-        args.append("--release")
+        args += ["--release", "--config", ROOT / "tools/release-profile.toml"]
+        # Apply the shared Cargo profile only to builtin compiler processes.
+        # The host AppDB helper retains its own release settings.
+        env = {key: value for key, value in env.items() if not key.startswith("CARGO_PROFILE_RELEASE_")}
     if features:
         args += ["--features", ",".join(features)]
     work = output / "objects" / name
@@ -469,7 +472,10 @@ def build_app(name: str, output: Path, profile: str, cargo: Path, binaries: Path
             print(f"buildins: fresh {name}", flush=True)
             return package
     checkpoint(output, name, "strip start")
-    run([binaries / "rust-objcopy", "--strip-debug", "--set-section-flags", ".trueos.shaders=readonly", module, stripped], env=env)
+    # Relocatable LTO links retain compiler_builtins' excluded LLVM bitcode.
+    # Drop that compiler input while keeping native symbols and relocations.
+    run([binaries / "rust-objcopy", "--strip-debug", "--remove-section=.llvmbc", "--remove-section=.llvmcmd",
+         "--set-section-flags", ".trueos.shaders=readonly", module, stripped], env=env)
     payload = stripped.read_bytes()
     checkpoint(output, name, "compress start")
     compressed = compress_module(payload)

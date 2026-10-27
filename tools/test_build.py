@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import tempfile
+import tomllib
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -72,6 +73,9 @@ class ToolEnvironment(unittest.TestCase):
             self.assertEqual(env["CARGO_PROFILE_DEV_CODEGEN_UNITS"], "256")
             self.assertEqual(env["CARGO_PROFILE_DEV_SPLIT_DEBUGINFO"], "off")
             self.assertEqual(env["CARGO_PROFILE_DEV_STRIP"], "none")
+            # This environment also builds the host AppDB seed helper. The
+            # builtin-only release override must not enable LTO for that tool.
+            self.assertEqual(env["CARGO_PROFILE_RELEASE_LTO"], "false")
             self.assertNotIn("RUSTFLAGS", env)
             self.assertNotIn("CARGO_BUILD_TARGET", env)
             self.assertNotIn("CARGO_TARGET_TRUEOS_APP_RUSTFLAGS", env)
@@ -80,6 +84,23 @@ class ToolEnvironment(unittest.TestCase):
             for name in ("libc.a", "libgcc_s.a"):
                 self.assertEqual((output / "system-libraries" / name).read_bytes(), b"!<arch>\n")
             self.assertFalse(installed.exists(), "tool preparation must not modify the installed toolchain")
+
+
+class ReleaseProfile(unittest.TestCase):
+    def test_shared_release_profile_optimizes_without_removing_loader_symbols(self):
+        config = Path(__file__).with_name("release-profile.toml")
+        profile = tomllib.loads(config.read_text())["profile"]["release"]
+        self.assertNotIn("opt-level", profile,
+                         "the shared profile must preserve apps' existing size optimization")
+        self.assertEqual(profile["codegen-units"], 1)
+        self.assertEqual(profile["lto"], "fat")
+        self.assertEqual(profile["panic"], "abort")
+        self.assertTrue(profile["incremental"])
+        # Keep debug information in Cargo's cached object. The packaging step
+        # removes it, while retaining the symbols needed by the TRUEOS loader.
+        self.assertEqual(profile["debug"], "full")
+        self.assertEqual(profile["split-debuginfo"], "off")
+        self.assertEqual(profile["strip"], "none")
 
 
 class CargoObjects(unittest.TestCase):
@@ -147,12 +168,47 @@ class CargoObjects(unittest.TestCase):
         command = list(map(str, command))
         self.assertEqual(Path(command[0]).name, "rust-objcopy")
         self.assertIn("--strip-debug", command)
+        removed = [arg.split("=", 1)[1] for arg in command if arg.startswith("--remove-section=")]
+        self.assertEqual(removed, [".llvmbc", ".llvmcmd"],
+                         "remove only compiler metadata; live function sections can contain .llvm hashes")
+        self.assertTrue({"--strip-all", "--strip-unneeded", "-s"}.isdisjoint(command),
+                        "the TRUEOS object loader requires the symbol table")
         self.assertEqual(Path(command[-2]), self.current)
         Path(command[-1]).write_bytes(b"stripped:" + self.current.read_bytes())
 
-    def package(self):
-        return build.build_app("paper", self.output, "dev", self.cargo, self.binaries,
-                               {}, {})
+    def package(self, profile="dev", env=None):
+        return build.build_app("paper", self.output, profile, self.cargo, self.binaries,
+                               {} if env is None else env, {})
+
+    def test_release_uses_shared_profile_and_cleans_only_its_child_environment(self):
+        env = {"CARGO_PROFILE_RELEASE_LTO": "false",
+               "CARGO_PROFILE_RELEASE_OPT_LEVEL": "0",
+               "CARGO_PROFILE_RELEASE_STRIP": "symbols",
+               "CARGO_PROFILE_RELEASE_BUILD_OVERRIDE_OPT_LEVEL": "0",
+               "CARGO_PROFILE_DEV_OPT_LEVEL": "0",
+               "CARGO_ENCODED_RUSTFLAGS": "-C\x1fpanic=abort",
+               "CARGO_BUILD_JOBS": "2"}
+        original = env.copy()
+        self.package("release", env)
+        command = self.popen.call_args.args[0]
+        self.assertIn("--release", command)
+        configs = [command[index + 1] for index, arg in enumerate(command) if arg == "--config"]
+        self.assertIn(str(self.root / "tools/release-profile.toml"), configs)
+        child_env = self.popen.call_args.kwargs["env"]
+        self.assertFalse(any(key.startswith("CARGO_PROFILE_RELEASE_") for key in child_env))
+        self.assertEqual(child_env, {key: value for key, value in original.items()
+                                    if not key.startswith("CARGO_PROFILE_RELEASE_")})
+        self.assertEqual(env, original, "later host builds must retain their original release settings")
+        self.assertIsNot(child_env, env)
+        self.run.assert_called_once()
+
+    def test_dev_does_not_apply_the_release_profile_or_change_its_environment(self):
+        env = {"CARGO_PROFILE_RELEASE_LTO": "false", "CARGO_PROFILE_DEV_OPT_LEVEL": "0"}
+        self.package(env=env)
+        command = self.popen.call_args.args[0]
+        self.assertNotIn("--release", command)
+        self.assertNotIn(str(self.root / "tools/release-profile.toml"), command)
+        self.assertEqual(self.popen.call_args.kwargs["env"], env)
 
     def test_packages_only_the_selected_cargo_binary_object(self):
         self.artifacts.insert(0, self.artifact([self.stale], kind="lib"))
@@ -252,6 +308,23 @@ class CargoObjects(unittest.TestCase):
         self.assertEqual(self.run.call_count, 2)
         self.assertEqual(self.compress.call_count, 2)
         self.assertEqual(stripped.read_bytes(), b"stripped:" + self.current.read_bytes())
+
+    def test_packaging_revision_change_repackages_a_fresh_cargo_object(self):
+        package = self.package()
+        expected = package.read_bytes()
+        stamp = self.output / "objects/paper/inputs.json"
+        previous = json.loads(stamp.read_text())
+        previous["inputs"]["format"] = build.PACKAGE_REVISION - 1
+        stamp.write_text(json.dumps(previous))
+        self.artifacts = [self.artifact([self.current], fresh=True)]
+        self.assertEqual(self.package(), package)
+        self.assertEqual(self.run.call_count, 2)
+        self.assertEqual(self.compress.call_count, 2)
+        self.assertEqual(package.read_bytes(), expected)
+        self.assertEqual(json.loads(stamp.read_text())["inputs"]["format"], build.PACKAGE_REVISION)
+        self.package()
+        self.assertEqual(self.run.call_count, 2)
+        self.assertEqual(self.compress.call_count, 2)
 
     def test_legacy_or_malformed_stamp_is_replaced_then_fresh_builds_skip_packaging(self):
         package = self.package()
