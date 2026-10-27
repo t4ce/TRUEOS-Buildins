@@ -222,18 +222,18 @@
         "required": [
           "=1.10.0"
         ],
-        "path": "vendor/hyper-1.10.0",
+        "path": "../TRUEOS/vendor/hyper-1.10.0",
         "version": "1.10.0",
-        "reason": "The Blueprint std fork is required; the kernel copy has a different platform interface."
+        "reason": "Single kernel-owned no_std source; std consumers opt into compatibility features."
       },
       {
         "name": "httpdate",
         "required": [
           "=1.0.3"
         ],
-        "path": "vendor/httpdate-1.0.3",
+        "path": "../TRUEOS/vendor/httpdate-1.0.3",
         "version": "1.0.3",
-        "reason": "The Blueprint std fork is required; the kernel copy has a different platform interface."
+        "reason": "Single kernel-owned no_std source; std consumers opt into compatibility features."
       }
     ]
   },
@@ -475,11 +475,8 @@
       "getrandom-0.2.17",
       "getrandom-0.3.4",
       "getrandom-0.4.2",
-      "hyper-1.10.0",
-      "httpdate-1.0.3",
       "hyper-util-0.1.20",
       "hyper-rustls-0.27.9",
-      "mio-1.2.0",
       "raw-window-handle",
       "rustix-1.1.4-trueos",
       "signal-hook-mio-0.2.5-trueos",
@@ -492,8 +489,8 @@
       "tracing-core-0.1.36",
       "tracing-attributes-0.1.31"
     ],
-    "source_note": "Additional sources come from the recorded original_blueprints commit. The original std adaptations were applied to Hyper-util and Tower. Local paths in http-body-util, Hyper and winit-trueos now resolve to the sibling kernel or vendored API. Kernel http, http-body, crc32fast, futures-util, ring and want remain shared.",
-    "compatibility_correction": "Matching crate versions do not guarantee matching platform APIs: the Blueprint mio and Hyper forks use std I/O, while the kernel versions use no_std I/O; Blueprint httpdate supplies std-system-time. These require their own vendored copies here.",
+    "source_note": "Built-ins consume kernel-owned Mio, Hyper, Httpdate, http, http-body, crc32fast, futures-util, ring and want. The duplicate built-in Mio, Hyper and Httpdate trees were removed. Other platform overlays remain in the built-ins vendor directory.",
+    "compatibility_correction": "Mio, Hyper and Httpdate have one kernel-owned source tree each. The kernel uses their native no_std defaults. Built-ins that still require std explicitly enable std-compat (Mio/Hyper) or std-system-time (Httpdate). Mio std-compat selects its Unix descriptor backend; it does not migrate Tokio to native Mio socket handles.",
     "getrandom": {
       "versions_retained": [
         "0.2.17",
@@ -518,6 +515,11 @@
       "rust_src": "Compared all 3545 archived library files: private sysroot preserves the original Blueprint std port, with four expected kernel thread-backend edits and the added current trueos.rs backend.",
       "execution": "The driver runs Linux rustc with a private sysroot. It does not build or execute the native rustc-min/Cranelift Blueprint compiler.",
       "limit": "This verifies consistency; it does not exclude a compiler bug or diagnose the host freezes."
+    },
+    "shared_platform_sources": {
+      "mio": "../TRUEOS/vendor/mio-1.2.0",
+      "hyper": "../TRUEOS/vendor/hyper-1.10.0",
+      "httpdate": "../TRUEOS/vendor/httpdate-1.0.3"
     }
   }
 }

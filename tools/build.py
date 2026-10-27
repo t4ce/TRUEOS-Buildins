@@ -29,6 +29,7 @@ ROOT = Path(__file__).resolve().parents[1]
 TOOLCHAIN = "nightly-2026-07-10"
 COMMIT = "af3d95584dbddcae597890340995509a7fb47a50"
 IGNORED = {".git", "target", "tgt", "__pycache__", "Cargo.lock"}
+KERNEL_PLATFORM_SOURCES = {"hyper": "hyper-1.10.0", "mio": "mio-1.2.0", "httpdate": "httpdate-1.0.3"}
 KERNEL_OVERLAYS = {"crc32fast", "futures-util", "http", "http-body", "httpdate", "hyper", "mio", "ring", "want"}
 # Bump when the stripping or container recipe changes, independently of Rust inputs.
 PACKAGE_REVISION = 2
@@ -188,6 +189,10 @@ def tool_environment(output: Path, kernel: Path, needs_std: bool):
 
 def patches(kernel: Path):
     result = {}
+    for package, directory in KERNEL_PLATFORM_SOURCES.items():
+        manifest = kernel / "vendor" / directory / "Cargo.toml"
+        if not manifest.is_file():
+            raise ValueError(f"missing shared kernel source for {package}: {manifest}")
     # These two vendor directories are the complete local platform overlay set.
     # Distinct versions use Cargo patch aliases (not replacements across versions).
     for vendor in (kernel / "vendor", ROOT / "vendor"):
@@ -197,7 +202,7 @@ def patches(kernel: Path):
                 if vendor == kernel / "vendor" and package["name"] not in KERNEL_OVERLAYS:
                     continue
                 key = (package["name"], package["version"])
-                if vendor == ROOT / "vendor" and package["name"] in {"hyper", "mio"}:
+                if vendor == ROOT / "vendor" and package["name"] in KERNEL_PLATFORM_SOURCES:
                     continue
                 result[key] = manifest.parent
     return result
@@ -225,7 +230,7 @@ def staged_manifest(path: Path, original: Path):
             elif "/vendor/" in relative:
                 suffix = relative.split("/vendor/", 1)[1]
                 dest = ROOT / "vendor" / suffix
-                if suffix.split("/", 1)[0] in {"hyper-1.10.0", "mio-1.2.0"}:
+                if suffix.split("/", 1)[0] in KERNEL_PLATFORM_SOURCES.values():
                     dest = ROOT.parent / "TRUEOS/vendor" / suffix
                 if not dest.exists():
                     dest = ROOT.parent / "TRUEOS/vendor" / relative.split("/vendor/", 1)[1]

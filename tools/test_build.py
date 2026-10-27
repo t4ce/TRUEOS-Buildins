@@ -417,5 +417,33 @@ class CargoObjects(unittest.TestCase):
         self.compress.assert_not_called()
 
 
+class SharedKernelSources(unittest.TestCase):
+    def test_kernel_platform_sources_cannot_be_shadowed_by_local_copies(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            kernel = root / "TRUEOS"
+            builtins = root / "TRUEOS-Buildins"
+            for package, name in build.KERNEL_PLATFORM_SOURCES.items():
+                for repo in (kernel, builtins):
+                    manifest = repo / "vendor" / name / "Cargo.toml"
+                    manifest.parent.mkdir(parents=True)
+                    version = name.removeprefix(package + "-")
+                    manifest.write_text(f'[package]\nname="{package}"\nversion="{version}"\n')
+            with patch.object(build, "ROOT", builtins):
+                selected = build.patches(kernel)
+                for package, name in build.KERNEL_PLATFORM_SOURCES.items():
+                    version = name.removeprefix(package + "-")
+                    self.assertEqual(selected[package, version], kernel / "vendor" / name)
+                app = builtins / "app/Cargo.toml"
+                for package, name in build.KERNEL_PLATFORM_SOURCES.items():
+                    app.parent.mkdir(exist_ok=True)
+                    app.write_text(f'[dependencies]\n{package} = {{path="../../vendor/{name}"}}\n')
+                    staged = build.staged_manifest(root / "stage/Cargo.toml", app).decode()
+                    self.assertIn(str(kernel / "vendor" / name), staged)
+                (kernel / "vendor/mio-1.2.0/Cargo.toml").unlink()
+                with self.assertRaisesRegex(ValueError, "missing shared kernel source for mio"):
+                    build.patches(kernel)
+
+
 if __name__ == "__main__":
     unittest.main()
