@@ -1,6 +1,7 @@
 # Paper
 
-A standalone editable DIN A4 sheet with gridpaper, linepaper, and whitepaper modes.
+A standalone editable sheet with gridpaper, linepaper, and whitepaper modes.
+DIN A4 remains the default; compact sheets use whole 5 mm units.
 The Blueprint owns its UI4 immutable frame through `trueos::ui4_scene`.
 It does not use the Paperr service or its snapshot/font API.
 
@@ -78,6 +79,37 @@ opening a window. The A4 frame stays the same size; each scale centers the
 largest whole-cell grid within the original 195 × 275 mm grid area. Resize
 keeps the selected spacing. Lines remain one pixel wide.
 
+
+## Compact sheets and wrapping
+
+Launch settings also accept `size a4` (default) or `size WIDTHxHEIGHT`, in
+millimetres. For example, Spirit's boot exercise uses:
+
+```text
+mode gridpaper
+size 190x90
+step 2
+wrap on
+```
+
+This opens a 19:9 sheet with 19 × 9 cells at 10 mm spacing. For the same
+cell count at half the physical size, use `size 95x45` with `step 1`. Compact dimensions must be multiples of 5 mm, each between 5 and
+400 mm, and fit within the original A4 budget of 2145 base cells. A step
+that leaves no whole cells is rejected before opening the frame.
+
+Compact sheets omit A4 margins. Each mode centers its largest whole-cell
+layout in the sheet, preserving physical row spacing and native glyph size.
+Ruling, pointer hit testing, glyph placement, and caret placement share that
+layout. Linepaper and whitepaper keep 5 mm character columns as on A4.
+
+`wrap on` (default) advances typing across rows. `wrap off` stops typing at
+the last column of the current row; arrow keys can still select another row.
+Resizing keeps the launch layout's physical spacing, as for A4.
+
+Paper logs cumulative input counts after publishing an edit, including text
+events, backspaces, successful cell clicks, cursor position, and occupied
+cells. Character contents are omitted. These distinguish actual guest editing
+from a virtual-keyboard program merely finishing during boot diagnostics.
 
 ## Editing
 

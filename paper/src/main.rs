@@ -63,7 +63,8 @@ fn run() -> Result<(), i32> {
     } else {
         1
     };
-    let page = ui4_scene::physical_extent(210, 297).map_err(ui)?;
+    let (width_mm, height_mm) = settings.sheet.dimensions();
+    let page = ui4_scene::physical_extent(width_mm, height_mm).map_err(ui)?;
     // Warm only small complete atlases. Large sizes remain strictly demand-only.
     if glyph_scale <= 4 {
         let _ = glyph_pixels(glyph_scale, '?')?;
@@ -83,8 +84,11 @@ fn run() -> Result<(), i32> {
         let shader =
             device.create_shader_module(SHADER_PACKAGE_CLIP_POSITION3_IMMEDIATE_RGBA_FNV1A64)?;
         let pipeline = device.create_render_pipeline(shader, 12, 0)?;
-        let mut editor = Editor::with_mode(scale, settings.mode);
+        let mut editor = Editor::with_settings(settings);
         let mut sprites = vec![GlyphSlot::default(); editor.cells.len()];
+        let mut text_events = 0u64;
+        let mut backspaces = 0u64;
+        let mut cell_clicks = 0u64;
         let mut dirty = true;
         let mut visible = true;
         let mut blink = trueos::clock::Instant::now();
@@ -104,6 +108,7 @@ fn run() -> Result<(), i32> {
                 if event.kind == KEYBOARD_OUTPUT_KIND_TEXT {
                     if let Some(ch) = char::from_u32(event.codepoint) {
                         editor.type_char(ch);
+                        text_events += 1;
                         input = true;
                     }
                 } else if event.kind == KEYBOARD_OUTPUT_KIND_KEY
@@ -112,13 +117,18 @@ fn run() -> Result<(), i32> {
                     // Space is delivered as text by the keyboard translator.
                     if event.key_code != KEYBOARD_KEY_SPACE {
                         editor.key(event.key_code);
+                        if event.key_code == KEYBOARD_KEY_BACKSPACE {
+                            backspaces += 1;
+                        }
                         input = true;
                     }
                 }
             }
             while let Some(event) = frame.take_pointer_event().map_err(ui)? {
                 if event.buttons_pressed & ui4_scene::POINTER_BUTTON_PRIMARY != 0 {
-                    input |= editor.click(event.local_x, event.local_y, page, scale);
+                    let hit = editor.click(event.local_x, event.local_y, page, scale);
+                    cell_clicks += u64::from(hit);
+                    input |= hit;
                 }
             }
             if input {
@@ -143,6 +153,24 @@ fn run() -> Result<(), i32> {
                     &mut sprites,
                     visible,
                 )?;
+                if input {
+                    let _ = trueos::logl::log_record(
+                        trueos::logl::level::INFO,
+                        "paper",
+                        format_args!(
+                            "Paper: input published text_events={} backspaces={} cell_clicks={} cursor={} occupied={}",
+                            text_events,
+                            backspaces,
+                            cell_clicks,
+                            editor.cursor,
+                            editor
+                                .cells
+                                .iter()
+                                .filter(|cell| cell.character.is_some())
+                                .count()
+                        ),
+                    );
+                }
                 dirty = false;
             }
             trueos::vsys::sleep_ms(16);
@@ -190,8 +218,16 @@ fn draw(
             };
         }
     }
-    let (vertices, indices) =
-        paper::geometry_for_mode(page, (frame.width(), frame.height()), scale, editor.mode);
+    let (vertices, indices) = paper::geometry_for_settings(
+        page,
+        (frame.width(), frame.height()),
+        paper::Settings {
+            mode: editor.mode,
+            scale,
+            sheet: editor.sheet,
+            wrap: editor.wrap,
+        },
+    );
     let vb = device.create_buffer(vertices.len(), BUFFER_USAGE_MAP_WRITE | BUFFER_USAGE_VERTEX)?;
     let ib = device.create_buffer(indices.len(), BUFFER_USAGE_MAP_WRITE | BUFFER_USAGE_INDEX)?;
     if device.write_buffer(vb, 0, &vertices)? != vertices.len()

@@ -6,6 +6,38 @@ pub const COLUMNS: u32 = 39;
 pub const ROWS: u32 = 55;
 pub const INDEX_COUNT: u32 = (COLUMNS + ROWS + 2) * 2;
 
+/// Physical sheet dimensions. Compact sheets use whole 5 mm units, with no
+/// A4 margins. Bound storage to the original A4 cell budget.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Sheet {
+    #[default]
+    A4,
+    Compact {
+        width_mm: u32,
+        height_mm: u32,
+    },
+}
+impl Sheet {
+    pub fn dimensions(self) -> (u32, u32) {
+        match self {
+            Self::A4 => (210, 297),
+            Self::Compact {
+                width_mm,
+                height_mm,
+            } => (width_mm, height_mm),
+        }
+    }
+    fn grid_units(self) -> (u32, u32) {
+        match self {
+            Self::A4 => (COLUMNS, ROWS),
+            Self::Compact {
+                width_mm,
+                height_mm,
+            } => (width_mm / 5, height_mm / 5),
+        }
+    }
+}
+
 /// Page ruling is independent of row spacing.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Mode {
@@ -18,12 +50,16 @@ pub enum Mode {
 pub struct Settings {
     pub mode: Mode,
     pub scale: u32,
+    pub sheet: Sheet,
+    pub wrap: bool,
 }
 impl Default for Settings {
     fn default() -> Self {
         Self {
             mode: Mode::Gridpaper,
             scale: 1,
+            sheet: Sheet::A4,
+            wrap: true,
         }
     }
 }
@@ -60,8 +96,42 @@ pub fn script_settings(script: &str) -> Result<Settings, &'static str> {
                     return Err("expected step 1x..8x");
                 }
             }
+            "size" => {
+                settings.sheet = if value == "a4" {
+                    Sheet::A4
+                } else {
+                    let (width, height) = value
+                        .split_once('x')
+                        .ok_or("expected size a4|WIDTHxHEIGHT in mm")?;
+                    let width_mm: u32 = width.parse().map_err(|_| "invalid sheet width")?;
+                    let height_mm: u32 = height.parse().map_err(|_| "invalid sheet height")?;
+                    if !(5..=400).contains(&width_mm)
+                        || !(5..=400).contains(&height_mm)
+                        || width_mm % 5 != 0
+                        || height_mm % 5 != 0
+                        || (width_mm / 5) * (height_mm / 5) > COLUMNS * ROWS
+                    {
+                        return Err("size must use 5 mm steps within the A4 cell budget");
+                    }
+                    Sheet::Compact {
+                        width_mm,
+                        height_mm,
+                    }
+                };
+            }
+            "wrap" => {
+                settings.wrap = match value {
+                    "on" => true,
+                    "off" => false,
+                    _ => return Err("expected wrap on|off"),
+                }
+            }
             _ => return Err("unknown paper setting"),
         }
+    }
+    let (columns, rows) = settings.sheet.grid_units();
+    if columns < settings.scale || rows < settings.scale {
+        return Err("step leaves no complete cells on the sheet");
     }
     Ok(settings)
 }
@@ -82,25 +152,41 @@ pub fn geometry_for_mode(
     scale: u32,
     mode: Mode,
 ) -> (Vec<u8>, Vec<u8>) {
-    assert!((1..=8).contains(&scale));
-    let columns = COLUMNS / scale;
-    let rows = ROWS / scale;
-    let step = 5.0 * scale as f32;
-    let width = if mode == Mode::Gridpaper {
-        columns as f32 * step
-    } else {
-        195.0
-    };
-    let left = (210.0 - width) / 2.0;
-    let top = (297.0 - rows as f32 * step) / 2.0;
-    let right = left + width;
+    geometry_for_settings(
+        page,
+        viewport,
+        Settings {
+            mode,
+            scale,
+            ..Settings::default()
+        },
+    )
+}
+
+pub fn geometry_for_settings(
+    page: (u32, u32),
+    viewport: (u32, u32),
+    settings: Settings,
+) -> (Vec<u8>, Vec<u8>) {
+    let layout = Layout::new(settings);
+    let columns = layout.columns;
+    let rows = layout.rows;
+    let step = layout.row_step;
+    let left = layout.left;
+    let top = layout.top;
+    let right = left + columns as f32 * layout.column_step;
     let bottom = top + rows as f32 * step;
+    let (width_mm, height_mm) = settings.sheet.dimensions();
     let mut vertices = Vec::with_capacity(INDEX_COUNT as usize * 12);
     let mut indices = Vec::with_capacity(INDEX_COUNT as usize * 4);
     let mut vertex = |x_mm: f32, y_mm: f32| {
         // Snap to pixel centers for crisp single-sample one-pixel lines.
-        let x = (x_mm * page.0 as f32 / 210.0) as u32 as f32 + 0.5;
-        let y = (y_mm * page.1 as f32 / 297.0) as u32 as f32 + 0.5;
+        let x = ((x_mm * page.0 as f32 / width_mm as f32) as u32).min(page.0.saturating_sub(1))
+            as f32
+            + 0.5;
+        let y = ((y_mm * page.1 as f32 / height_mm as f32) as u32).min(page.1.saturating_sub(1))
+            as f32
+            + 0.5;
         for value in [
             2.0 * x / viewport.0 as f32 - 1.0,
             1.0 - 2.0 * y / viewport.1 as f32,
@@ -110,7 +196,7 @@ pub fn geometry_for_mode(
         }
         indices.extend_from_slice(&((indices.len() / 4) as u32).to_le_bytes());
     };
-    if mode == Mode::Gridpaper {
+    if settings.mode == Mode::Gridpaper {
         for column in 0..=columns {
             let x = left + column as f32 * step;
             vertex(x, top);
@@ -207,6 +293,44 @@ mod tests {
     }
 }
 
+/// One physical layout shared by ruling, glyph bounds, and pointer hit testing.
+struct Layout {
+    columns: u32,
+    rows: u32,
+    column_step: f32,
+    row_step: f32,
+    left: f32,
+    top: f32,
+}
+impl Layout {
+    fn new(settings: Settings) -> Self {
+        assert!((1..=8).contains(&settings.scale));
+        let (units_x, units_y) = settings.sheet.grid_units();
+        let columns = if settings.mode == Mode::Gridpaper {
+            units_x / settings.scale
+        } else {
+            units_x
+        };
+        let rows = units_y / settings.scale;
+        assert!(columns > 0 && rows > 0);
+        let column_step = if settings.mode == Mode::Gridpaper {
+            5.0 * settings.scale as f32
+        } else {
+            5.0
+        };
+        let row_step = 5.0 * settings.scale as f32;
+        let (width, height) = settings.sheet.dimensions();
+        Self {
+            columns,
+            rows,
+            column_step,
+            row_step,
+            left: (width as f32 - columns as f32 * column_step) / 2.0,
+            top: (height as f32 - rows as f32 * row_step) / 2.0,
+        }
+    }
+}
+
 /// Fixed document storage. Colour is reserved per cell for future editing;
 /// the current raster transport uses black on white.
 #[derive(Clone, Copy, Default)]
@@ -220,25 +344,32 @@ pub struct Editor {
     pub columns: usize,
     pub rows: usize,
     pub mode: Mode,
+    pub sheet: Sheet,
+    pub wrap: bool,
 }
 impl Editor {
     pub fn new(scale: u32) -> Self {
         Self::with_mode(scale, Mode::Gridpaper)
     }
     pub fn with_mode(scale: u32, mode: Mode) -> Self {
-        assert!((1..=8).contains(&scale));
-        let columns = if mode == Mode::Gridpaper {
-            COLUMNS / scale
-        } else {
-            COLUMNS
-        } as usize;
-        let rows = (ROWS / scale) as usize;
+        Self::with_settings(Settings {
+            scale,
+            mode,
+            ..Settings::default()
+        })
+    }
+    pub fn with_settings(settings: Settings) -> Self {
+        let layout = Layout::new(settings);
+        let columns = layout.columns as usize;
+        let rows = layout.rows as usize;
         Self {
             cells: alloc::vec![Cell::default(); columns * rows],
             cursor: 0,
             columns,
             rows,
-            mode,
+            mode: settings.mode,
+            sheet: settings.sheet,
+            wrap: settings.wrap,
         }
     }
     pub fn advance(&mut self) {
@@ -246,9 +377,14 @@ impl Editor {
     }
     pub fn type_char(&mut self, ch: char) {
         if ch == ' ' {
-            self.advance();
+            self.advance_typing();
         } else if !ch.is_control() {
             self.cells[self.cursor].character = Some(ch);
+            self.advance_typing();
+        }
+    }
+    fn advance_typing(&mut self) {
+        if self.wrap || (self.cursor + 1) % self.columns != 0 {
             self.advance();
         }
     }
@@ -262,7 +398,7 @@ impl Editor {
                 }
             }
             KEYBOARD_KEY_DELETE => self.cells[self.cursor].character = None,
-            KEYBOARD_KEY_SPACE => self.advance(),
+            KEYBOARD_KEY_SPACE => self.advance_typing(),
             KEYBOARD_KEY_ARROW_LEFT => self.cursor = self.cursor.saturating_sub(1),
             KEYBOARD_KEY_ARROW_RIGHT => self.advance(),
             KEYBOARD_KEY_ARROW_UP => {
@@ -280,19 +416,24 @@ impl Editor {
     }
     /// Pixel cell bounds aligned with the independently rendered grid lines.
     pub fn bounds(&self, index: usize, page: (u32, u32), scale: u32) -> (u32, u32, u32, u32) {
-        let step = 5.0 * scale as f32;
-        let column_step = if self.mode == Mode::Gridpaper {
-            step
-        } else {
-            5.0
-        };
-        let left = (210.0 - self.columns as f32 * column_step) / 2.0;
-        let top = (297.0 - self.rows as f32 * step) / 2.0;
-        let x = (left + (index % self.columns) as f32 * column_step) * page.0 as f32 / 210.0;
-        let y = (top + (index / self.columns) as f32 * step) * page.1 as f32 / 297.0;
-        let right =
-            (left + (index % self.columns + 1) as f32 * column_step) * page.0 as f32 / 210.0;
-        let bottom = (top + (index / self.columns + 1) as f32 * step) * page.1 as f32 / 297.0;
+        let layout = Layout::new(Settings {
+            scale,
+            mode: self.mode,
+            sheet: self.sheet,
+            wrap: self.wrap,
+        });
+        let (width_mm, height_mm) = self.sheet.dimensions();
+        // Integer cell edges match the pixel-center snapped ruling at every DPI.
+        let x = (layout.left + (index % self.columns) as f32 * layout.column_step) * page.0 as f32
+            / width_mm as f32;
+        let y = (layout.top + (index / self.columns) as f32 * layout.row_step) * page.1 as f32
+            / height_mm as f32;
+        let right = (layout.left + (index % self.columns + 1) as f32 * layout.column_step)
+            * page.0 as f32
+            / width_mm as f32;
+        let bottom = (layout.top + (index / self.columns + 1) as f32 * layout.row_step)
+            * page.1 as f32
+            / height_mm as f32;
         (
             x as u32,
             y as u32,
@@ -347,6 +488,107 @@ mod editor_tests {
             let previous = e.cursor;
             assert!(!e.click(-1, -1, (840, 1188), scale));
             assert_eq!(e.cursor, previous);
+        }
+    }
+}
+
+#[cfg(test)]
+mod compact_tests {
+    use super::*;
+    use trueos::input::*;
+
+    #[test]
+    fn boot_greeting_click_type_and_erase_repeats() {
+        let settings = script_settings("mode gridpaper\nsize 190x90\nstep 2\nwrap on\n").unwrap();
+        let mut editor = Editor::with_settings(settings);
+        assert_eq!((editor.columns, editor.rows), (19, 9));
+        // Nonintegral pixels per 5 mm cell exercises EDID/DPI quantization.
+        let page = (718, 340);
+        for _ in 0..3 {
+            editor.cursor = editor.cells.len() - 1;
+            let (x, y, w, h) = editor.bounds(0, page, 2);
+            assert!(editor.click((x + w / 2) as i32, (y + h / 2) as i32, page, 2));
+            for ch in "Hello from TrueOS §".chars() {
+                editor.type_char(ch);
+            }
+            assert_eq!(editor.cursor, 19);
+            assert_eq!(editor.cells[18].character, Some('§'));
+            assert_eq!(editor.cells[0].character, Some('H'));
+            for _ in "Hello from TrueOS §".chars() {
+                editor.key(KEYBOARD_KEY_BACKSPACE);
+            }
+            assert_eq!(editor.cursor, 0);
+            assert!(editor.cells.iter().all(|cell| cell.character.is_none()));
+        }
+    }
+
+    #[test]
+    fn compact_modes_wrap_and_snap_the_same_bounds_as_ruling() {
+        for mode in [Mode::Gridpaper, Mode::Linepaper, Mode::Whitepaper] {
+            for scale in 1..=8 {
+                let settings = Settings {
+                    mode,
+                    scale,
+                    sheet: Sheet::Compact {
+                        width_mm: 95,
+                        height_mm: 45,
+                    },
+                    wrap: true,
+                };
+                let mut editor = Editor::with_settings(settings);
+                let page = (359, 170);
+                let (vertices, _) = geometry_for_settings(page, page, settings);
+                // All borders, including the right/bottom edge, stay in frame.
+                for vertex in vertices.chunks_exact(12) {
+                    for axis in 0..2 {
+                        let value =
+                            f32::from_le_bytes(vertex[axis * 4..axis * 4 + 4].try_into().unwrap());
+                        assert!((-1.0..=1.0).contains(&value));
+                    }
+                }
+                for index in 0..editor.cells.len() {
+                    let (x, y, w, h) = editor.bounds(index, page, scale);
+                    assert!(w > 0 && h > 0 && x + w <= page.0 && y + h <= page.1);
+                    assert!(editor.click((x + w / 2) as i32, (y + h / 2) as i32, page, scale));
+                    assert_eq!(editor.cursor, index);
+                    if index % editor.columns + 1 < editor.columns {
+                        assert_eq!(x + w, editor.bounds(index + 1, page, scale).0);
+                    }
+                }
+                editor.cursor = editor.columns - 1;
+                editor.type_char('a');
+                assert_eq!(editor.cursor, editor.columns.min(editor.cells.len() - 1));
+                editor.wrap = false;
+                editor.cursor = editor.columns - 1;
+                editor.type_char('b');
+                editor.type_char(' ');
+                assert_eq!(editor.cursor, editor.columns - 1);
+            }
+        }
+    }
+
+    #[test]
+    fn size_and_wrap_settings_are_bounded_and_keep_a4_default() {
+        assert_eq!(script_settings("").unwrap(), Settings::default());
+        assert_eq!(
+            script_settings("size 190x90\nwrap off").unwrap().wrap,
+            false
+        );
+        assert_eq!(
+            script_settings("size 95x45\nsize a4").unwrap().sheet,
+            Sheet::A4
+        );
+        for script in [
+            "size",
+            "size 96x45",
+            "size 0x45",
+            "size 400x400",
+            "size 999999999999x5",
+            "size 5x5\nstep 8",
+            "wrap yes",
+            "wrap on extra",
+        ] {
+            assert!(script_settings(script).is_err(), "{script}");
         }
     }
 }
