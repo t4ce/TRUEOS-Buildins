@@ -519,6 +519,11 @@ impl Spawner {
 
         let rt = rt.clone();
 
+        // The shared pool hosts both async scheduler cores and blocking jobs.
+        // Set admission metadata before std asks TRUEOS to select a carrier.
+        #[cfg(target_os = "trueos")]
+        let _role = crate::runtime::trueos::ChildRoleGuard::tokio_pool();
+
         builder.spawn(move || {
             // Only the reference should be moved into the closure
             let _enter = rt.enter();

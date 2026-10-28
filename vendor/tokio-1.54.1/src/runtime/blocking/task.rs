@@ -39,6 +39,9 @@ where
         // we want it to start without any budgeting.
         crate::task::coop::stop();
 
+        #[cfg(target_os = "trueos")]
+        let _activity = crate::runtime::trueos::ActivityGuard::blocking();
+
         Poll::Ready(func())
     }
 }

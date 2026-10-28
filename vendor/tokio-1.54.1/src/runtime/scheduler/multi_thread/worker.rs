@@ -404,6 +404,9 @@ where
         Err(panic_message) => panic!("{}", panic_message),
     };
 
+    #[cfg(target_os = "trueos")]
+    let _activity = crate::runtime::trueos::ActivityGuard::blocking();
+
     if had_entered {
         // Unset the current task's budget. Blocking sections are not
         // constrained by task budgets.
@@ -541,6 +544,9 @@ fn run(worker: Arc<Worker>) {
         Some(core) => core,
         None => return,
     };
+
+    #[cfg(target_os = "trueos")]
+    let _activity = crate::runtime::trueos::ActivityGuard::async_scheduler();
 
     worker.handle.shared.worker_metrics[worker.index].set_thread_id(thread::current().id());
 

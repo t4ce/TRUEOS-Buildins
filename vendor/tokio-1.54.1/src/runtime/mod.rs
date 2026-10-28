@@ -548,6 +548,9 @@ cfg_rt! {
     #[cfg_attr(target_os = "wasi", allow(unused_imports))]
     pub(crate) use blocking::spawn_blocking;
 
+    #[cfg(any(target_os = "trueos", test))]
+    mod trueos;
+
     cfg_trace! {
         pub(crate) use blocking::Mandatory;
     }

@@ -1079,6 +1079,14 @@ unsafe extern "C" {
     pub fn trueos_cabi_thread_join(handle: usize) -> i32;
     pub fn trueos_cabi_thread_detach(handle: usize) -> i32;
     pub fn trueos_cabi_thread_available_parallelism() -> usize;
+    /// Launch experiment: 0 single, 1 foreground isolated, 2 spread; cap 1..=4.
+    /// Configure before native admission; positive errno reports failure.
+    pub fn trueos_cabi_thread_configure_placement_v1(mode: u32, background_cap: u32) -> i32;
+    /// Continuation-scoped child hint: 0 general, 1 foreground, 2 Tokio pool,
+    /// 3 dedicated blocking. Returns previous value or MAX; restore on the same thread.
+    pub fn trueos_cabi_thread_swap_child_role_v1(role: u32) -> u32;
+    /// Diagnostic activity only: 0 unknown, 1 foreground, 2 scheduler, 3 blocking.
+    pub fn trueos_cabi_thread_swap_activity_v1(activity: u32) -> u32;
     pub fn trueos_cabi_thread_set_name(name: *const core::ffi::c_char) -> i32;
     pub fn trueos_cabi_wls_current_slot() -> u32;
     pub fn trueos_time_monotonic_nanos() -> u64;
