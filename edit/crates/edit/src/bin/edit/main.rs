@@ -18,7 +18,7 @@ mod state;
 
 use std::borrow::Cow;
 use std::path::Path;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use std::{env, process};
 
 use draw_editor::*;
@@ -690,6 +690,10 @@ fn enable_terminal_modes() {
     sys::write_stdout("\x1b[?1049h\x1b[?1002;1006;2004h\x1b[?1036h");
 }
 
+fn terminal_negotiation_timeout(deadline: Instant, now: Instant) -> Option<Duration> {
+    deadline.checked_duration_since(now).filter(|timeout| !timeout.is_zero())
+}
+
 fn setup_terminal(tui: &mut Tui, state: &mut State, vt_parser: &mut vt::Parser) -> RestoreModes {
     enable_terminal_modes();
     sys::write_stdout(concat!(
@@ -722,16 +726,24 @@ fn setup_terminal(tui: &mut Tui, state: &mut State, vt_parser: &mut vt::Parser) 
     let mut indexed_colors = framebuffer::DEFAULT_THEME;
     let mut color_responses = 0;
     let mut ambiguous_width = 1;
+    let deadline = Instant::now() + Duration::from_secs(3);
 
     while !done {
-        let scratch = scratch_arena(None);
-
-        // We explicitly set a high read timeout, because we're not
-        // waiting for user keyboard input. If we encounter a lone ESC,
-        // it's unlikely to be from a ESC keypress, but rather from a VT sequence.
-        let Some(input) = sys::read_stdin(&scratch, Duration::from_secs(3)) else {
+        let Some(timeout) = terminal_negotiation_timeout(deadline, Instant::now()) else {
             break;
         };
+        let scratch = scratch_arena(None);
+
+        // We allow a high read timeout, because we're not
+        // waiting for user keyboard input. If we encounter a lone ESC,
+        // it's unlikely to be from a ESC keypress, but rather from a VT sequence.
+        // Partial replies share one deadline; an unselected terminal may never reply.
+        let Some(input) = sys::read_stdin(&scratch, timeout) else {
+            break;
+        };
+        if input.is_empty() {
+            break;
+        }
 
         let mut vt_stream = vt_parser.parse(&input);
         while let Some(token) = vt_stream.next() {
@@ -808,6 +820,30 @@ fn setup_terminal(tui: &mut Tui, state: &mut State, vt_parser: &mut vt::Parser) 
     }
 
     RestoreModes
+}
+
+#[cfg(test)]
+mod terminal_negotiation_tests {
+    use super::*;
+
+    #[test]
+    fn partial_replies_do_not_extend_the_terminal_deadline() {
+        let started = Instant::now();
+        let deadline = started + Duration::from_secs(3);
+        assert_eq!(
+            terminal_negotiation_timeout(deadline, started),
+            Some(Duration::from_secs(3)),
+        );
+        assert_eq!(
+            terminal_negotiation_timeout(deadline, started + Duration::from_secs(2)),
+            Some(Duration::from_secs(1)),
+        );
+        assert_eq!(terminal_negotiation_timeout(deadline, deadline), None);
+        assert_eq!(
+            terminal_negotiation_timeout(deadline, deadline + Duration::from_secs(1)),
+            None,
+        );
+    }
 }
 
 /// Strips all C0 control characters from the string and replaces them with "_".
