@@ -121,28 +121,31 @@ an absolute or `trueosfs:discN/...` file outside the editor's app directory.
 Command-line file arguments continue to work without a launch script.
 
 The optional `ide` Cargo feature enables a project session and one top-level
-**Compile** action. The builtin artifact enables this feature. From the native
-shell, open or create an Odin project with:
+**Compile** action. The builtin artifact enables this feature. Launchers open
+or create a project through the existing startup-script API:
 
-```text
-edit --ide example
+```rust
+trueos::vshell::launch_with_destination(
+    "edit",
+    "ide-project example\nide-compiler rustc-min\nide-entry main.rs\n",
+    trueos::vshell::LaunchDestination::NewShell3,
+)?;
 ```
 
-For Rust, select its compiler and entry file:
+The script arrives once through `vFile:launch`:
 
 ```text
-edit --ide example-rust --ide-compiler rustc-min --ide-entry main.rs
-```
-
-`--ide-db <path>` selects a different source database. These IDE options each
-take one value and may appear in any order. `--` ends option parsing.
-A launcher can select the same project settings through a script:
-
-```text
-fs-scope trueosfs
 ide-project example
 ide-compiler rustc-min
 ide-entry main.rs
+```
+
+Codex can open the project through its `trueos_ide` tool. The `open` action
+attaches to an existing project owner or launches Edit with the same startup
+script, then returns the endpoint and context for subsequent commands:
+
+```json
+{"action":"open","project":"example","compiler":"rustc-min","entry":"main.rs"}
 ```
 
 `ide-compiler` defaults to `odin-son`, with `main.odin` as its entry.

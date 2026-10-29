@@ -12,7 +12,7 @@ mod localization;
 mod settings;
 #[cfg(feature = "ide")]
 mod ide;
-#[cfg(any(target_os = "trueos", feature = "ide", test))]
+#[cfg(any(target_os = "trueos", test))]
 mod launch_script;
 mod state;
 
@@ -308,22 +308,15 @@ fn run() -> apperr::Result<()> {
 
 // Returns true if the application should exit early.
 fn handle_args(state: &mut State) -> apperr::Result<bool> {
-    handle_args_from(state, env::args_os().skip(1))
-}
-
-fn handle_args_from(state: &mut State, args: impl IntoIterator<Item = std::ffi::OsString>) -> apperr::Result<bool> {
     let scratch = scratch_arena(None);
     let mut paths = BVec::empty();
     let cwd = env::current_dir()?;
     let mut dir = None;
     let mut parse_args = true;
     let mut goto_next = false;
-    #[cfg(feature = "ide")]
-    let mut ide_options = launch_script::IdeCli::default();
-    let mut args = args.into_iter();
 
     // The best CLI argument parser in the world.
-    while let Some(arg) = args.next() {
+    for arg in env::args_os().skip(1) {
         if parse_args {
             if arg == "--" {
                 parse_args = false;
@@ -346,10 +339,6 @@ fn handle_args_from(state: &mut State, args: impl IntoIterator<Item = std::ffi::
                 print_version();
                 return Ok(true);
             }
-            #[cfg(feature = "ide")]
-            if ide_options.consume(&arg, &mut args)? {
-                continue;
-            }
         }
 
         let (arg, goto) = if goto_next {
@@ -369,11 +358,6 @@ fn handle_args_from(state: &mut State, args: impl IntoIterator<Item = std::ffi::
         }
     }
 
-    #[cfg(feature = "ide")]
-    if let Some(launch) = ide_options.launch()? {
-        open_ide_project(state, launch)?;
-    }
-
     for (p, goto) in &paths {
         let doc = state.documents.add_file_path(p)?;
         if let Some(goto) = goto {
@@ -391,18 +375,6 @@ fn handle_args_from(state: &mut State, args: impl IntoIterator<Item = std::ffi::
     Ok(false)
 }
 
-#[cfg(feature = "ide")]
-fn open_ide_project(state: &mut State, launch: launch_script::IdeLaunch<'_>) -> apperr::Result<()> {
-    if state.ide.is_some() {
-        return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput,
-            "An IDE project is already selected; specify it once in argv or the launch script").into());
-    }
-    let session = ide::IdeSession::open_config(Path::new(launch.database), launch.project, launch.backend, launch.entry)?;
-    state.documents.load_project(session.project.clone())?;
-    state.ide = Some(session);
-    Ok(())
-}
-
 #[cfg(target_os = "trueos")]
 fn handle_launch_script(state: &mut State) -> apperr::Result<()> {
     let bytes = match trueos::async_fs::block_on(trueos::async_fs::read_file(b"vFile:launch")) {
@@ -414,7 +386,9 @@ fn handle_launch_script(state: &mut State) -> apperr::Result<()> {
         .map_err(|err| std::io::Error::new(std::io::ErrorKind::InvalidData, err))?;
     #[cfg(feature = "ide")]
     if let Some(launch) = launch_script::ide_project(script)? {
-        open_ide_project(state, launch)?;
+        let session = ide::IdeSession::open_config(Path::new(launch.database), launch.project, launch.backend, launch.entry)?;
+        state.documents.load_project(session.project.clone())?;
+        state.ide = Some(session);
     }
     for path in launch_script::open_paths(script)? {
         state.documents.add_file_path(Path::new(path))?;
@@ -448,15 +422,8 @@ fn print_help() {
         "    -g, --goto <FILE:LINE[:CHARACTER]>    Open a file at the specified line and character position\n",
         "    -h, --help                            Print this help message\n",
         "    -v, --version                         Print the version number\n",
+        "\n"
     ));
-    #[cfg(feature = "ide")]
-    sys::write_stdout(concat!(
-        "        --ide <PROJECT>                   Open or create a shared IDE project\n",
-        "        --ide-compiler <odin-son|rustc-min> Select the compiler (default: odin-son)\n",
-        "        --ide-entry <PATH>                Select a relative project entry file\n",
-        "        --ide-db <PATH>                   Select the project source database\n",
-    ));
-    sys::write_stdout("\n");
 }
 
 fn print_version() {
@@ -860,53 +827,5 @@ fn sanitize_control_chars(text: &str) -> Cow<'_, str> {
         Cow::Owned(sanitized)
     } else {
         Cow::Borrowed(text)
-    }
-}
-
-#[cfg(test)]
-mod cli_tests {
-    use super::*;
-    use std::ffi::OsString;
-
-    #[test]
-    fn double_dash_preserves_option_like_file_arguments() {
-        let mut state = State::new().unwrap();
-        assert!(!handle_args_from(&mut state, [OsString::from("--"), OsString::from("--ide")]).unwrap());
-        assert_eq!(state.documents.len(), 1);
-        assert_eq!(state.documents.active().unwrap().filename, "--ide");
-        #[cfg(feature = "ide")]
-        assert!(state.ide.is_none());
-    }
-
-    #[cfg(feature = "ide")]
-    #[test]
-    fn ide_argv_opens_source_project_without_a_launch_script() {
-        let path = std::env::temp_dir().join(format!("trueos-edit-cli-{}.redb", std::process::id()));
-        let _ = std::fs::remove_file(&path);
-        {
-            let mut state = State::new().unwrap();
-            let args = [OsString::from("--ide-compiler"), OsString::from("rustc-min"),
-                OsString::from("--ide"), OsString::from("CLI project"),
-                OsString::from("--ide-entry"), OsString::from("src/main.rs"),
-                OsString::from("--ide-db"), path.clone().into_os_string()];
-            assert!(!handle_args_from(&mut state, args).unwrap());
-            assert!(state.ide.is_some());
-            assert_eq!(state.documents.len(), 1);
-            assert_eq!(state.documents.active().unwrap().path.as_deref(), Some(Path::new("src/main.rs")));
-        }
-        let store = trueos_ide::SourceDatabase::open(&path).unwrap();
-        assert!(store.get("CLI project", None).unwrap().unwrap().file("src/main.rs").is_some());
-        drop(store);
-        std::fs::remove_file(path).unwrap();
-    }
-
-    #[cfg(feature = "ide")]
-    #[test]
-    fn invalid_ide_argv_does_not_open_a_project() {
-        let mut state = State::new().unwrap();
-        assert!(handle_args_from(&mut state, [OsString::from("--ide"),
-            OsString::from("demo"), OsString::from("--ide-entry")]).is_err());
-        assert!(state.ide.is_none());
-        assert_eq!(state.documents.len(), 0);
     }
 }

@@ -27,57 +27,6 @@ pub struct IdeLaunch<'a> {
 }
 
 #[cfg(feature = "ide")]
-#[derive(Default)]
-pub struct IdeCli {
-    project: Option<String>,
-    database: Option<String>,
-    compiler: Option<String>,
-    entry: Option<String>,
-}
-
-#[cfg(feature = "ide")]
-impl IdeCli {
-    /// Consume one recognized option and its literal UTF-8 value.
-    pub fn consume(&mut self, arg: &std::ffi::OsStr, args: &mut impl Iterator<Item = std::ffi::OsString>) -> io::Result<bool> {
-        let slot = if arg == "--ide" {
-            &mut self.project
-        } else if arg == "--ide-db" {
-            &mut self.database
-        } else if arg == "--ide-compiler" {
-            &mut self.compiler
-        } else if arg == "--ide-entry" {
-            &mut self.entry
-        } else {
-            return Ok(false);
-        };
-        if slot.is_some() {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput,
-                format!("edit {} may only be specified once", arg.to_string_lossy())));
-        }
-        let value = args.next().ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput,
-            format!("edit {} requires a value", arg.to_string_lossy())))?;
-        let value = value.into_string().map_err(|_| io::Error::new(io::ErrorKind::InvalidInput,
-            "edit IDE options require UTF-8 values"))?;
-        if matches!(value.as_str(), "--" | "--ide" | "--ide-db" | "--ide-compiler" | "--ide-entry"
-            | "-g" | "--goto" | "-h" | "--help" | "-v" | "--version")
-        {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput,
-                format!("edit {} requires a value before the next option", arg.to_string_lossy())));
-        }
-        if value.is_empty() || value.contains(['\0', '\r', '\n']) {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, "edit IDE options require nonempty literal values"));
-        }
-        *slot = Some(value);
-        Ok(true)
-    }
-
-    pub fn launch(&self) -> io::Result<Option<IdeLaunch<'_>>> {
-        ide_options(self.project.as_deref(), self.database.as_deref(),
-            self.compiler.as_deref(), self.entry.as_deref())
-    }
-}
-
-#[cfg(feature = "ide")]
 pub fn ide_project(script: &str) -> io::Result<Option<IdeLaunch<'_>>> {
     let mut project = None;
     let mut database = None;
@@ -103,11 +52,6 @@ pub fn ide_project(script: &str) -> io::Result<Option<IdeLaunch<'_>>> {
         }
         *slot = Some(value);
     }
-    ide_options(project, database, compiler, entry)
-}
-
-#[cfg(feature = "ide")]
-fn ide_options<'a>(project: Option<&'a str>, database: Option<&'a str>, compiler: Option<&'a str>, entry: Option<&'a str>) -> io::Result<Option<IdeLaunch<'a>>> {
     use trueos_ide::protocol::CompilerBackend;
     let backend = match compiler {
         None | Some("odin-son") => CompilerBackend::OdinSon,
@@ -121,7 +65,7 @@ fn ide_options<'a>(project: Option<&'a str>, database: Option<&'a str>, compiler
     match project {
         Some(project) => Ok(Some(IdeLaunch { project, database: database.unwrap_or(trueos_ide::IDE_DATABASE_PATH), backend, entry: entry_path })),
         None if database.is_some() || compiler.is_some() || entry.is_some() => Err(io::Error::new(io::ErrorKind::InvalidInput,
-            "edit IDE options require --ide or ide-project")),
+            "edit IDE options require ide-project")),
         None => Ok(None),
     }
 }
@@ -154,32 +98,6 @@ mod tests {
             "ide-project p\nide-entry ../escape.rs\n", "ide-project p\nide-compiler unknown\n",
             "ide-compiler rustc-min\n"] {
             assert!(ide_project(script).is_err(), "{script:?}");
-        }
-    }
-
-    #[cfg(feature = "ide")]
-    #[test]
-    fn ide_cli_uses_the_same_defaults_and_validation_as_launch_directives() {
-        fn parse(args: &[&str]) -> io::Result<IdeCli> {
-            let mut options = IdeCli::default();
-            let mut args = args.iter().map(std::ffi::OsString::from);
-            while let Some(arg) = args.next() {
-                assert!(options.consume(&arg, &mut args)?);
-            }
-            options.launch()?;
-            Ok(options)
-        }
-        let defaults = parse(&["--ide", "example"]).unwrap();
-        assert_eq!(defaults.launch().unwrap(), ide_project("ide-project example\n").unwrap());
-        let explicit = parse(&["--ide-compiler", "rustc-min", "--ide", "My project",
-            "--ide-entry", "src/main.rs", "--ide-db", "/Source DB.redb"]).unwrap();
-        assert_eq!(explicit.launch().unwrap(), ide_project("ide-project My project\nide-compiler rustc-min\nide-entry src/main.rs\nide-db /Source DB.redb\n").unwrap());
-        for args in [vec!["--ide"], vec!["--ide", ""], vec!["--ide", "one", "--ide", "two"],
-            vec!["--ide-db", "only.redb"], vec!["--ide", "--ide-compiler", "rustc-min"],
-            vec!["--ide", "p", "--ide-entry", "../main.rs"],
-            vec!["--ide", "p", "--ide-compiler", "unknown"],
-            vec!["--ide", "p\nide-db injected.redb"]] {
-            assert!(parse(&args).is_err(), "{args:?}");
         }
     }
 }
