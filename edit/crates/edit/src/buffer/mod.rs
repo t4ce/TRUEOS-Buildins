@@ -27,7 +27,7 @@ use std::borrow::Cow;
 use std::cell::UnsafeCell;
 use std::collections::VecDeque;
 use std::fs::File;
-use std::io::{self, Read as _, Write as _};
+use std::io;
 use std::mem::{self, MaybeUninit};
 use std::ops::Range;
 use std::rc::Rc;
@@ -705,6 +705,17 @@ impl TextBuffer {
 
     /// Reads a file from disk into the text buffer, detecting encoding and BOM.
     pub fn read_file(&mut self, file: &mut File, encoding: Option<&'static str>) -> IoResult<()> {
+        let length = file.metadata().ok().map(|metadata| metadata.len() as usize);
+        self.read_stream(file, encoding, length)
+    }
+
+    /// Reads a byte stream using the same encoding and layout detection as a file.
+    pub fn read_stream(
+        &mut self,
+        file: &mut impl io::Read,
+        encoding: Option<&'static str>,
+        length: Option<usize>,
+    ) -> IoResult<()> {
         let scratch = scratch_arena(None);
         let buf = scratch.alloc_uninit_array();
         let mut first_chunk_len = 0;
@@ -732,7 +743,7 @@ impl TextBuffer {
 
         let done = read == 0;
         if self.encoding == "UTF-8" {
-            self.read_file_as_utf8(file, buf, first_chunk_len, done)?;
+            self.read_file_as_utf8(file, buf, first_chunk_len, done, length)?;
         } else {
             self.read_file_with_icu(file, buf, first_chunk_len, done)?;
         }
@@ -849,10 +860,11 @@ impl TextBuffer {
 
     fn read_file_as_utf8(
         &mut self,
-        file: &mut File,
+        file: &mut impl io::Read,
         buf: &mut [MaybeUninit<u8>; 4 * KIBI],
         first_chunk_len: usize,
         done: bool,
+        length: Option<usize>,
     ) -> io::Result<()> {
         {
             let mut first_chunk = unsafe { buf[..first_chunk_len].assume_init_ref() };
@@ -873,12 +885,11 @@ impl TextBuffer {
         let mut chunk_size = 128 * KIBI;
         let mut extra_chunk_size = 128 * KIBI;
 
-        if let Ok(m) = file.metadata() {
+        if let Some(len) = length {
             // Usually the next read of size `chunk_size` will read the entire file,
             // but if the size has changed for some reason, then `extra_chunk_size`
             // should be large enough to read the rest of the file.
             // 4KiB is not too large and not too slow.
-            let len = m.len() as usize;
             chunk_size = len.saturating_sub(first_chunk_len);
             extra_chunk_size = 4 * KIBI;
         }
@@ -903,7 +914,7 @@ impl TextBuffer {
 
     fn read_file_with_icu(
         &mut self,
-        file: &mut File,
+        file: &mut impl io::Read,
         buf: &mut [MaybeUninit<u8>; 4 * KIBI],
         first_chunk_len: usize,
         mut done: bool,
@@ -967,6 +978,13 @@ impl TextBuffer {
 
     /// Writes the text buffer contents to a file, handling BOM and encoding.
     pub fn write_file(&mut self, file: &mut File) -> IoResult<()> {
+        self.write_stream(file)?;
+        self.mark_as_clean();
+        Ok(())
+    }
+
+    /// Serializes the buffer, preserving its dirty state until storage commits.
+    pub fn write_stream(&mut self, file: &mut impl io::Write) -> IoResult<()> {
         let mut offset = 0;
 
         if self.encoding.starts_with("UTF-8") {
@@ -985,11 +1003,10 @@ impl TextBuffer {
             self.write_file_with_icu(file)?;
         }
 
-        self.mark_as_clean();
         Ok(())
     }
 
-    fn write_file_with_icu(&mut self, file: &mut File) -> IoResult<()> {
+    fn write_file_with_icu(&mut self, file: &mut impl io::Write) -> IoResult<()> {
         let scratch = scratch_arena(None);
         let pivot_buffer = scratch.alloc_uninit_slice(4 * KIBI);
         let buf = scratch.alloc_uninit_slice(4 * KIBI);
@@ -3144,6 +3161,20 @@ mod tests {
         let mut str = String::new();
         buf.save_as_string(&mut str);
         str
+    }
+
+    #[test]
+    fn source_stream_roundtrip_preserves_encoding_and_dirty_state() {
+        let bytes = b"\xEF\xBB\xBFfirst\r\nsecond\r\n";
+        let mut buffer = TextBuffer::new(false).unwrap();
+        assert!(buffer.read_stream(&mut bytes.as_slice(), None, Some(bytes.len())).is_ok());
+        assert!(!buffer.is_dirty());
+        assert_eq!(buffer.logical_line_count(), 3);
+        buffer.mark_as_dirty();
+        let mut output = Vec::new();
+        assert!(buffer.write_stream(&mut output).is_ok());
+        assert_eq!(output, bytes);
+        assert!(buffer.is_dirty(), "serializing does not commit a project revision");
     }
 
     #[test]

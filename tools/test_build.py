@@ -18,6 +18,22 @@ spec.loader.exec_module(build)
 
 
 class BuildInputs(unittest.TestCase):
+    def test_declared_app_features_do_not_become_trueos_api_features(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            app = root / "example"
+            (app / "src").mkdir(parents=True)
+            (app / "Cargo.toml").write_text(
+                '[package]\nname="example"\nversion="0.1.0"\n[features]\nide=[]\n')
+            (app / "src/main.rs").write_text(
+                '// trueos-blueprint: features = ["ide", "spirit"]\nfn main() {}\n')
+            original_root, build.ROOT = build.ROOT, root
+            self.addCleanup(setattr, build, "ROOT", original_root)
+            features = build.settings("example")[3]
+            self.assertIn("ide", features)
+            self.assertIn("trueos/spirit", features)
+            self.assertNotIn("trueos/ide", features)
+
     def test_staging_keeps_unchanged_mtimes_and_tracks_edits_and_deletions(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -418,6 +434,35 @@ class CargoObjects(unittest.TestCase):
 
 
 class SharedKernelSources(unittest.TestCase):
+    def test_nested_staging_and_external_dependency_fingerprint(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            builtins = root / "TRUEOS-Buildins"
+            app = builtins / "edit"
+            manifest = app / "crates/edit/Cargo.toml"
+            manifest.parent.mkdir(parents=True)
+            manifest.write_text('[dependencies]\ninternal = { path = "../core" }\n'
+                                'shared = { path = "../../../../TRUEOS-Blueprints/crates/ide" }\n')
+            shared = root / "TRUEOS-Blueprints/crates/ide"
+            shared.mkdir(parents=True)
+            (shared / "Cargo.toml").write_text('[package]\nname="ide"\nversion="0.1.0"\n'
+                                               '[dependencies]\nnested={path="../nested"}\n')
+            (shared / "lib.rs").write_text("first")
+            nested = shared.parent / "nested"
+            nested.mkdir()
+            (nested / "Cargo.toml").write_text('[package]\nname="nested"\nversion="0.1.0"\n')
+            (nested / "lib.rs").write_text("nested")
+            (builtins / "buildins.json").write_text('{"buildins":["edit"]}')
+            staged = root / "output/sources/edit/crates/edit/Cargo.toml"
+            with patch.object(build, "ROOT", builtins), patch.object(build, "input_roots", return_value=[app]), patch.object(build, "patches", return_value={}):
+                text = build.staged_manifest(staged, manifest).decode()
+                self.assertIn(str((staged.parent / "../core").resolve()), text)
+                self.assertIn(str(shared), text)
+                self.assertEqual(build.external_dependency_roots(), sorted([shared, nested]))
+                before = build.source_digest(root / "TRUEOS")
+                (nested / "lib.rs").write_text("changed")
+                self.assertNotEqual(before, build.source_digest(root / "TRUEOS"))
+
     def test_kernel_platform_sources_cannot_be_shadowed_by_local_copies(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

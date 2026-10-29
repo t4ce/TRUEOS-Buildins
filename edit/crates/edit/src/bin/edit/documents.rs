@@ -23,11 +23,26 @@ pub struct Document {
     pub file_id: Option<sys::FileId>,
     pub new_file_counter: usize,
     pub language_override: Option<Option<&'static Language>>,
+    #[cfg(feature = "ide")]
+    pub project: Option<crate::ide::ProjectHandle>,
 }
 
 impl Document {
     pub fn save(&mut self, new_path: Option<PathBuf>) -> apperr::Result<()> {
         let path = new_path.as_deref().unwrap_or_else(|| self.path.as_ref().unwrap().as_path());
+        #[cfg(feature = "ide")]
+        if let Some(project) = &self.project {
+            let path = path.to_str().ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput,
+                "Project source paths must be UTF-8"))?;
+            let mut bytes = Vec::new();
+            self.buffer.borrow_mut().write_stream(&mut bytes)?;
+            project.borrow_mut().save_file(path, bytes)?;
+            self.buffer.borrow_mut().mark_as_clean();
+            if let Some(path) = new_path {
+                self.set_path(path);
+            }
+            return Ok(());
+        }
         let mut file = DocumentManager::open_for_writing(path)?;
 
         {
@@ -48,6 +63,14 @@ impl Document {
 
     pub fn reread(&mut self, encoding: Option<&'static str>) -> apperr::Result<()> {
         let path = self.path.as_ref().unwrap().as_path();
+        #[cfg(feature = "ide")]
+        if let Some(project) = &self.project {
+            let project = project.borrow();
+            let source = project.source.file(path.to_str().unwrap_or_default())
+                .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "Project source no longer exists"))?;
+            self.buffer.borrow_mut().read_stream(&mut source.bytes.as_slice(), encoding, Some(source.bytes.len()))?;
+            return Ok(());
+        }
         let mut file = DocumentManager::open_for_reading(path)?;
 
         {
@@ -124,6 +147,8 @@ impl Document {
 #[derive(Default)]
 pub struct DocumentManager {
     list: Vec<Document>,
+    #[cfg(feature = "ide")]
+    project: Option<crate::ide::ProjectHandle>,
 }
 
 impl DocumentManager {
@@ -188,6 +213,8 @@ impl DocumentManager {
             file_id: None,
             new_file_counter: 0,
             language_override: None,
+            #[cfg(feature = "ide")]
+            project: self.project.clone(),
         };
         self.gen_untitled_name(&mut doc);
 
@@ -208,6 +235,13 @@ impl DocumentManager {
     }
 
     pub fn add_file_path(&mut self, path: &Path) -> apperr::Result<&mut Document> {
+        #[cfg(feature = "ide")]
+        if let Some(project) = self.project.clone()
+            && !path.is_absolute()
+            && project.borrow().source.file(path.to_str().unwrap_or_default()).is_some()
+        {
+            return self.add_project_path(project, path);
+        }
         let path = path::normalize(path);
 
         let mut file = match File::open(&path) {
@@ -240,6 +274,8 @@ impl DocumentManager {
             file_id,
             new_file_counter: 0,
             language_override: None,
+            #[cfg(feature = "ide")]
+            project: None,
         };
         doc.set_path(path);
 
@@ -255,6 +291,158 @@ impl DocumentManager {
 
         self.list.push(doc);
         Ok(self.list.last_mut().unwrap())
+    }
+
+    #[cfg(feature = "ide")]
+    pub fn load_project(&mut self, project: crate::ide::ProjectHandle) -> apperr::Result<()> {
+        let paths: Vec<_> = project.borrow().source.files.iter().map(|file| PathBuf::from(&file.path)).collect();
+        for path in paths {
+            self.add_project_path(project.clone(), &path)?;
+        }
+        self.project = Some(project);
+        Ok(())
+    }
+
+    #[cfg(feature = "ide")]
+    fn add_project_path(&mut self, project: crate::ide::ProjectHandle, path: &Path) -> apperr::Result<&mut Document> {
+        let existing = self.list.iter().position(|doc| doc.project.as_ref().is_some_and(|handle|
+            std::rc::Rc::ptr_eq(handle, &project)) && doc.path.as_deref() == Some(path));
+        if let Some(index) = existing {
+            let doc = self.list.remove(index);
+            self.list.push(doc);
+            return Ok(self.list.last_mut().unwrap());
+        }
+        let buffer = Self::create_buffer()?;
+        {
+            let project = project.borrow();
+            let source = project.source.file(path.to_str().unwrap_or_default())
+                .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "Project source does not exist"))?;
+            buffer.borrow_mut().read_stream(&mut source.bytes.as_slice(), None, Some(source.bytes.len()))?;
+        }
+        let mut doc = Document {
+            buffer, path: None, dir: None, filename: String::new(), file_id: None,
+            new_file_counter: 0, language_override: None, project: Some(project),
+        };
+        doc.set_path(path.to_path_buf());
+        self.list.push(doc);
+        Ok(self.list.last_mut().unwrap())
+    }
+
+    #[cfg(feature = "ide")]
+    pub fn save_project_documents(&mut self) -> apperr::Result<()> {
+        let mut buffers = Vec::new();
+        for doc in &self.list {
+            if doc.project.is_some() && doc.buffer.borrow().is_dirty() {
+                let path = doc.path.as_deref().and_then(Path::to_str)
+                    .ok_or_else(|| io::Error::other("Save new project documents before compiling"))?;
+                let mut bytes = Vec::new();
+                doc.buffer.borrow_mut().write_stream(&mut bytes)?;
+                buffers.push((path.to_owned(), bytes));
+            }
+        }
+        if !buffers.is_empty() {
+            self.project.as_ref().ok_or_else(|| io::Error::other("No IDE project is open"))?
+                .borrow_mut().save_buffers(buffers)?;
+            for doc in &self.list {
+                if doc.project.is_some() {
+                    doc.buffer.borrow_mut().mark_as_clean();
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[cfg(feature = "ide")]
+    pub fn open_project_paths(&self) -> Vec<String> {
+        self.list.iter().filter(|doc| doc.project.is_some())
+            .filter_map(|doc| doc.path.as_deref().and_then(Path::to_str).map(str::to_owned)).collect()
+    }
+
+    #[cfg(feature = "ide")]
+    pub fn has_dirty_project_documents(&self) -> bool {
+        self.list.iter().any(|doc| doc.project.is_some() && doc.buffer.borrow().is_dirty())
+    }
+
+    #[cfg(feature = "ide")]
+    pub fn active_project_path(&self) -> Option<String> {
+        self.active().filter(|doc| doc.project.is_some())
+            .and_then(|doc| doc.path.as_deref()).and_then(Path::to_str).map(str::to_owned)
+    }
+
+    #[cfg(feature = "ide")]
+    pub fn selected_project_text(&self) -> String {
+        self.active().filter(|doc| doc.project.is_some())
+            .and_then(|doc| doc.buffer.borrow_mut().extract_user_selection(false))
+            .map(|bytes| String::from_utf8_lossy(&bytes).into_owned()).unwrap_or_default()
+    }
+
+    #[cfg(feature = "ide")]
+    pub fn project_text(&self, path: &str) -> io::Result<Option<String>> {
+        if let Some(doc) = self.list.iter().find(|doc| doc.project.is_some()
+            && doc.path.as_deref() == Some(Path::new(path)))
+        {
+            let buffer = doc.buffer.borrow();
+            let mut bytes = Vec::new();
+            let mut offset = 0;
+            loop {
+                let chunk = buffer.read_forward(offset);
+                if chunk.is_empty() { break; }
+                bytes.extend_from_slice(chunk);
+                offset += chunk.len();
+            }
+            return String::from_utf8(bytes).map(Some)
+                .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error));
+        }
+        let Some(project) = &self.project else { return Ok(None) };
+        let project = project.borrow();
+        project.source.file(path).map(|file| String::from_utf8(file.bytes.clone())
+            .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))).transpose()
+    }
+
+    #[cfg(feature = "ide")]
+    pub fn write_project_text(&mut self, path: &str, revision: i64, expected: Option<&str>, text: &str) -> apperr::Result<i64> {
+        if !trueos_ide::workspace::valid_source_path(path) || path.trim() != path
+            || path.chars().any(char::is_control) || path.len() > 4096
+        {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "Invalid project source path").into());
+        }
+        let project = self.project.clone().ok_or_else(|| io::Error::other("No IDE project is open"))?;
+        if project.borrow().source.revision.id != revision {
+            return Err(io::Error::other("Project revision changed; read the file again before writing").into());
+        }
+        let current = self.project_text(path)?;
+        if let Some(expected) = expected {
+            if current.as_deref().unwrap_or_default() != expected {
+                return Err(io::Error::other("File contents changed; read the file again before writing").into());
+            }
+        } else if current.is_some() {
+            return Err(io::Error::other("Existing files require expected_text before writing").into());
+        }
+        if current.is_none() {
+            let buffer = Self::create_buffer()?;
+            {
+                let mut buffer = buffer.borrow_mut();
+                buffer.set_insert_final_newline(false);
+                buffer.write_raw(text.as_bytes());
+                buffer.mark_as_dirty();
+            }
+            let mut doc = Document {
+                buffer, path: None, dir: None, filename: String::new(), file_id: None,
+                new_file_counter: 0, language_override: None, project: Some(project.clone()),
+            };
+            doc.set_path(PathBuf::from(path));
+            self.list.push(doc);
+        } else {
+            let doc = self.add_project_path(project.clone(), Path::new(path))?;
+            {
+                let mut buffer = doc.buffer.borrow_mut();
+                buffer.select_all();
+                buffer.write_raw(text.as_bytes());
+            }
+        }
+        self.save_project_documents()?;
+        let revision = project.borrow().source.revision.id;
+        Ok(revision)
     }
 
     pub fn reflow_all(&self) {

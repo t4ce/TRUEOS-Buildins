@@ -119,3 +119,45 @@ The built-in editor also accepts a one-shot `vFile:launch` script. Each
 are filename characters. A launcher can include `fs-scope trueosfs` to open
 an absolute or `trueosfs:discN/...` file outside the editor's app directory.
 Command-line file arguments continue to work without a launch script.
+
+The optional `ide` Cargo feature enables a project session and one top-level
+**Compile** action. The builtin artifact enables this feature. From the native
+shell, open or create an Odin project with:
+
+```text
+edit --ide example
+```
+
+For Rust, select its compiler and entry file:
+
+```text
+edit --ide example-rust --ide-compiler rustc-min --ide-entry main.rs
+```
+
+`--ide-db <path>` selects a different source database. These IDE options each
+take one value and may appear in any order. `--` ends option parsing.
+A launcher can select the same project settings through a script:
+
+```text
+fs-scope trueosfs
+ide-project example
+ide-compiler rustc-min
+ide-entry main.rs
+```
+
+`ide-compiler` defaults to `odin-son`, with `main.odin` as its entry.
+`rustc-min` defaults to `main.rs`. `ide-db <literal path>` overrides the shared
+`/apps/common/ide/projects.redb` database. A new project starts with an empty
+entry file. Project documents use the existing document switcher and save
+immutable source revisions to the shared database.
+
+Compile saves the open project edits as one revision and starts a separate
+compiler VM using an immutable snapshot. Successful results are verified and
+installed through AppDB. The IDE owner exposes live context, source reads,
+guarded writes, compile status, cancellation, and execution through the native
+`vFile:ide` protocol for the existing Codex CLI. Source writes compare both the
+saved revision and the current text and remain undoable in Edit.
+
+Run queues the installed application in a new Shell3/Matrix slot, retaining
+its normal input, output, and lifetime independently of the editor. The launch
+acknowledgment confirms queue admission; later launch errors appear in Shell3.

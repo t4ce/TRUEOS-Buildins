@@ -21,13 +21,17 @@ path = "src/bin/edit/main.rs"
 [features]
 # Display editor latency in the top-right corner
 debug-latency = []
+# Enable the TRUEOS project session and its Compile action.
+ide = ["dep:trueos-ide", "dep:serde_json"]
 
 [dependencies]
 lsh.workspace = true
 stdext.workspace = true
+trueos-ide = { path = "../../../../TRUEOS-Blueprints/crates/trueos-ide", optional = true }
+serde_json = { version = "1.0.142", optional = true }
 
 [target.'cfg(target_os = "trueos")'.dependencies]
-trueos = { path = "../../../../api" }
+trueos = { path = "../../../../TRUEOS-Blueprints/api" }
 
 [target.'cfg(all(unix, not(target_os = "trueos")))'.dependencies]
 libc = "=0.2.186"

@@ -1,5 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
+// trueos-blueprint: features = ["ide"]
 
 mod apperr;
 mod documents;
@@ -9,7 +10,9 @@ mod draw_menubar;
 mod draw_statusbar;
 mod localization;
 mod settings;
-#[cfg(target_os = "trueos")]
+#[cfg(feature = "ide")]
+mod ide;
+#[cfg(any(target_os = "trueos", feature = "ide", test))]
 mod launch_script;
 mod state;
 
@@ -178,6 +181,17 @@ fn run() -> apperr::Result<()> {
         {
             let scratch = scratch_arena(None);
             let read_timeout = vt_parser.read_timeout().min(tui.read_timeout());
+            #[cfg(all(feature = "ide", target_os = "trueos"))]
+            let read_timeout = if state.ide.is_some() { read_timeout.min(Duration::from_millis(100)) } else { read_timeout };
+            #[cfg(all(feature = "ide", target_os = "trueos"))]
+            if let Some(mut session) = state.ide.take() {
+                match session.poll(&mut state.documents) {
+                    Ok(true) => tui.invalidate_terminal(),
+                    Ok(false) => {},
+                    Err(error) => { state.add_error(error.into()); },
+                }
+                state.ide = Some(session);
+            }
             let Some(input) = sys::read_stdin(&scratch, read_timeout) else {
                 trueos_log("editor loop: stdin returned EOF or error");
                 break;
@@ -294,15 +308,22 @@ fn run() -> apperr::Result<()> {
 
 // Returns true if the application should exit early.
 fn handle_args(state: &mut State) -> apperr::Result<bool> {
+    handle_args_from(state, env::args_os().skip(1))
+}
+
+fn handle_args_from(state: &mut State, args: impl IntoIterator<Item = std::ffi::OsString>) -> apperr::Result<bool> {
     let scratch = scratch_arena(None);
     let mut paths = BVec::empty();
     let cwd = env::current_dir()?;
     let mut dir = None;
     let mut parse_args = true;
     let mut goto_next = false;
+    #[cfg(feature = "ide")]
+    let mut ide_options = launch_script::IdeCli::default();
+    let mut args = args.into_iter();
 
     // The best CLI argument parser in the world.
-    for arg in env::args_os().skip(1) {
+    while let Some(arg) = args.next() {
         if parse_args {
             if arg == "--" {
                 parse_args = false;
@@ -325,6 +346,10 @@ fn handle_args(state: &mut State) -> apperr::Result<bool> {
                 print_version();
                 return Ok(true);
             }
+            #[cfg(feature = "ide")]
+            if ide_options.consume(&arg, &mut args)? {
+                continue;
+            }
         }
 
         let (arg, goto) = if goto_next {
@@ -344,6 +369,11 @@ fn handle_args(state: &mut State) -> apperr::Result<bool> {
         }
     }
 
+    #[cfg(feature = "ide")]
+    if let Some(launch) = ide_options.launch()? {
+        open_ide_project(state, launch)?;
+    }
+
     for (p, goto) in &paths {
         let doc = state.documents.add_file_path(p)?;
         if let Some(goto) = goto {
@@ -361,6 +391,18 @@ fn handle_args(state: &mut State) -> apperr::Result<bool> {
     Ok(false)
 }
 
+#[cfg(feature = "ide")]
+fn open_ide_project(state: &mut State, launch: launch_script::IdeLaunch<'_>) -> apperr::Result<()> {
+    if state.ide.is_some() {
+        return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput,
+            "An IDE project is already selected; specify it once in argv or the launch script").into());
+    }
+    let session = ide::IdeSession::open_config(Path::new(launch.database), launch.project, launch.backend, launch.entry)?;
+    state.documents.load_project(session.project.clone())?;
+    state.ide = Some(session);
+    Ok(())
+}
+
 #[cfg(target_os = "trueos")]
 fn handle_launch_script(state: &mut State) -> apperr::Result<()> {
     let bytes = match trueos::async_fs::block_on(trueos::async_fs::read_file(b"vFile:launch")) {
@@ -370,6 +412,10 @@ fn handle_launch_script(state: &mut State) -> apperr::Result<()> {
     };
     let script = std::str::from_utf8(&bytes)
         .map_err(|err| std::io::Error::new(std::io::ErrorKind::InvalidData, err))?;
+    #[cfg(feature = "ide")]
+    if let Some(launch) = launch_script::ide_project(script)? {
+        open_ide_project(state, launch)?;
+    }
     for path in launch_script::open_paths(script)? {
         state.documents.add_file_path(Path::new(path))?;
         if let Some(parent) = Path::new(path).parent() {
@@ -402,8 +448,15 @@ fn print_help() {
         "    -g, --goto <FILE:LINE[:CHARACTER]>    Open a file at the specified line and character position\n",
         "    -h, --help                            Print this help message\n",
         "    -v, --version                         Print the version number\n",
-        "\n"
     ));
+    #[cfg(feature = "ide")]
+    sys::write_stdout(concat!(
+        "        --ide <PROJECT>                   Open or create a shared IDE project\n",
+        "        --ide-compiler <odin-son|rustc-min> Select the compiler (default: odin-son)\n",
+        "        --ide-entry <PATH>                Select a relative project entry file\n",
+        "        --ide-db <PATH>                   Select the project source database\n",
+    ));
+    sys::write_stdout("\n");
 }
 
 fn print_version() {
@@ -429,6 +482,16 @@ fn draw(ctx: &mut Context, state: &mut State) {
     }
     if state.wants_save {
         draw_handle_save(ctx, state);
+    }
+    #[cfg(feature = "ide")]
+    if state.wants_compile {
+        state.wants_compile = false;
+        let result = state.documents.save_project_documents().and_then(|()|
+            state.ide.as_mut().ok_or_else(|| std::io::Error::other("No IDE project is open"))
+                .and_then(ide::IdeSession::compile).map(|_| ()).map_err(apperr::Error::from));
+        if let Err(err) = result {
+            error_log_add(ctx, state, err);
+        }
     }
     if state.wants_language_picker {
         draw_dialog_language_change(ctx, state);
@@ -797,5 +860,53 @@ fn sanitize_control_chars(text: &str) -> Cow<'_, str> {
         Cow::Owned(sanitized)
     } else {
         Cow::Borrowed(text)
+    }
+}
+
+#[cfg(test)]
+mod cli_tests {
+    use super::*;
+    use std::ffi::OsString;
+
+    #[test]
+    fn double_dash_preserves_option_like_file_arguments() {
+        let mut state = State::new().unwrap();
+        assert!(!handle_args_from(&mut state, [OsString::from("--"), OsString::from("--ide")]).unwrap());
+        assert_eq!(state.documents.len(), 1);
+        assert_eq!(state.documents.active().unwrap().filename, "--ide");
+        #[cfg(feature = "ide")]
+        assert!(state.ide.is_none());
+    }
+
+    #[cfg(feature = "ide")]
+    #[test]
+    fn ide_argv_opens_source_project_without_a_launch_script() {
+        let path = std::env::temp_dir().join(format!("trueos-edit-cli-{}.redb", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        {
+            let mut state = State::new().unwrap();
+            let args = [OsString::from("--ide-compiler"), OsString::from("rustc-min"),
+                OsString::from("--ide"), OsString::from("CLI project"),
+                OsString::from("--ide-entry"), OsString::from("src/main.rs"),
+                OsString::from("--ide-db"), path.clone().into_os_string()];
+            assert!(!handle_args_from(&mut state, args).unwrap());
+            assert!(state.ide.is_some());
+            assert_eq!(state.documents.len(), 1);
+            assert_eq!(state.documents.active().unwrap().path.as_deref(), Some(Path::new("src/main.rs")));
+        }
+        let store = trueos_ide::SourceDatabase::open(&path).unwrap();
+        assert!(store.get("CLI project", None).unwrap().unwrap().file("src/main.rs").is_some());
+        drop(store);
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[cfg(feature = "ide")]
+    #[test]
+    fn invalid_ide_argv_does_not_open_a_project() {
+        let mut state = State::new().unwrap();
+        assert!(handle_args_from(&mut state, [OsString::from("--ide"),
+            OsString::from("demo"), OsString::from("--ide-entry")]).is_err());
+        assert!(state.ide.is_none());
+        assert_eq!(state.documents.len(), 0);
     }
 }

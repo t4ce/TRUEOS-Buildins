@@ -31,6 +31,17 @@ pub fn draw_menubar(ctx: &mut Context, state: &mut State) {
                 draw_menu_view(ctx, state);
             }
         }
+        #[cfg(feature = "ide")]
+        if let Some(session) = &state.ide {
+            if session.is_building() {
+                ctx.label("compile", "Compile");
+            } else {
+                if ctx.button("compile", "Compile", ButtonStyle::default().bracketed(false)) {
+                    state.wants_compile = true;
+                }
+            }
+            ctx.attr_padding(Rect::two(0, 1));
+        }
         if ctx.menubar_menu_begin(loc(LocId::Help), 'H') {
             draw_menu_help(ctx, state);
         }

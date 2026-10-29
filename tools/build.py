@@ -209,6 +209,21 @@ def patches(kernel: Path):
     return result
 
 
+def dependency_path(relative: str, original: Path, staged: Path, app_root: Path):
+    if relative.endswith("/api"):
+        return ROOT / "vendor/trueos"
+    if "/vendor/" in relative:
+        suffix = relative.split("/vendor/", 1)[1]
+        dest = ROOT / "vendor" / suffix
+        if suffix.split("/", 1)[0] in KERNEL_PLATFORM_SOURCES.values() or not dest.exists():
+            dest = ROOT.parent / "TRUEOS/vendor" / suffix
+        return dest
+    original_dest = (original.parent / relative).resolve()
+    if original_dest.is_relative_to(app_root.resolve()):
+        return (staged.parent / relative).resolve()
+    return original_dest
+
+
 def staged_manifest(path: Path, original: Path):
     source = original.read_text()
     table = ""
@@ -226,18 +241,8 @@ def staged_manifest(path: Path, original: Path):
         dependency = table.endswith("dependencies") or ".dependencies." in table
         if dependency and (match := re.search(r'\bpath\s*=\s*"([^"]+)"', line)):
             relative = match[1]
-            if relative.endswith("/api"):
-                dest = ROOT / "vendor/trueos"
-            elif "/vendor/" in relative:
-                suffix = relative.split("/vendor/", 1)[1]
-                dest = ROOT / "vendor" / suffix
-                if suffix.split("/", 1)[0] in KERNEL_PLATFORM_SOURCES.values():
-                    dest = ROOT.parent / "TRUEOS/vendor" / suffix
-                if not dest.exists():
-                    dest = ROOT.parent / "TRUEOS/vendor" / relative.split("/vendor/", 1)[1]
-            else:
-                # Keep app-internal dependencies inside the stable staged tree.
-                dest = (path.parent / relative).resolve()
+            app_root = ROOT / original.relative_to(ROOT).parts[0]
+            dest = dependency_path(relative, original, path, app_root)
             line = line[:match.start(1)] + str(dest) + line[match.end(1):]
         lines.append(line)
     if "[workspace]" not in source and original.parent == ROOT / original.parent.name:
@@ -253,7 +258,8 @@ def settings(name: str):
     text = source.read_text()
     features = set()
     for match in re.finditer(r'trueos-blueprint:\s*features\s*=\s*(\[[^\]]*\])', text):
-        features.update("trueos/" + feature for feature in json.loads(match[1]))
+        for feature in json.loads(match[1]):
+            features.add(feature if feature in doc.get("features", {}) else "trueos/" + feature)
     uses_runtime = any(token in text for token in ("runtime", "worker", "task::", "tokio::"))
     needs_std = "#![no_std]" not in text or uses_runtime
     if uses_runtime:
@@ -335,9 +341,46 @@ def input_roots(kernel: Path):
             kernel / "tools/testpy/apply_trueos_rust_std_thread_backend.py", kernel / "tools/rust-std/trueos_thread.rs"]
 
 
+def external_dependency_roots():
+    """Track path crates outside staged apps, including their path dependencies."""
+    names = json.loads((ROOT / "buildins.json").read_text())["buildins"]
+    seen = set()
+    external = set()
+    pending = []
+    for name in names:
+        app = ROOT / name
+        pending.extend((manifest, app) for manifest in app.rglob("Cargo.toml")
+                       if not any(part in IGNORED for part in manifest.relative_to(app).parts))
+    while pending:
+        manifest, app = pending.pop()
+        manifest = manifest.resolve()
+        if manifest in seen or not manifest.is_file():
+            continue
+        seen.add(manifest)
+        doc = tomllib.loads(manifest.read_text())
+        def visit(value):
+            if not isinstance(value, dict):
+                return
+            for key, child in value.items():
+                if key in ("dependencies", "dev-dependencies", "build-dependencies") and isinstance(child, dict):
+                    for spec in child.values():
+                        if isinstance(spec, dict) and isinstance(spec.get("path"), str):
+                            relative = spec["path"]
+                            if relative.endswith("/api") or "/vendor/" in relative:
+                                continue  # Existing SDK and vendor input roots cover these.
+                            dest = dependency_path(relative, manifest, manifest, app).resolve()
+                            if not dest.is_relative_to(app.resolve()):
+                                external.add(dest)
+                                pending.append((dest / "Cargo.toml", app))
+                else:
+                    visit(child)
+        visit(doc)
+    return sorted(external)
+
+
 def source_digest(kernel: Path):
     digest = hashlib.sha256()
-    for root in input_roots(kernel):
+    for root in [*input_roots(kernel), *external_dependency_roots()]:
         for path in sorted(root.rglob("*") if root.is_dir() else [root]):
             if path.is_file() and not any(part in IGNORED for part in path.relative_to(root.parent).parts):
                 digest.update(str(path).encode() + b"\0" + hashlib.sha256(path.read_bytes()).digest())
@@ -390,7 +433,7 @@ def check_ready(output: Path, kernel: Path, profile: str):
         if hashlib.sha256((output / name).read_bytes()).hexdigest() != expected:
             raise ValueError(f"prepared database changed since the complete build: {name}")
     # Cargo watches source directories as well as existing files, catching additions/deletions.
-    for path in [*input_roots(kernel), *patches(kernel).values(), output / "ready.json"]:
+    for path in [*input_roots(kernel), *external_dependency_roots(), *patches(kernel).values(), output / "ready.json"]:
         print(f"cargo:rerun-if-changed={path}")
 
 
