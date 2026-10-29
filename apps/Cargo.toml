@@ -14,3 +14,39 @@ trueos = { path = "../../api", features = ["tokio-net-probe"] }
 crossterm = { path = "../../vendor/crossterm-0.29.0-trueos", default-features = false, features = ["events"] }
 reqwest = { version = "=0.13.3", default-features = false, features = ["rustls"] }
 sha2 = { version = "=0.10.9", default-features = false }
+
+# TLS record encryption and archive hashing must stay fast on the dev rig.
+# Keep the application unoptimized; compile the concrete TLS provider and its
+# bulk crypto dependencies with optimization, including generic call sites.
+[profile.dev.package.rustls-rustcrypto]
+opt-level = 3
+
+[profile.dev.package.aes]
+opt-level = 3
+
+[profile.dev.package.aes-gcm]
+opt-level = 3
+
+[profile.dev.package.ghash]
+opt-level = 3
+
+[profile.dev.package.polyval]
+opt-level = 3
+
+[profile.dev.package.ctr]
+opt-level = 3
+
+[profile.dev.package.cipher]
+opt-level = 3
+
+[profile.dev.package.chacha20]
+opt-level = 3
+
+[profile.dev.package.chacha20poly1305]
+opt-level = 3
+
+[profile.dev.package.poly1305]
+opt-level = 3
+
+[profile.dev.package.sha2]
+opt-level = 3

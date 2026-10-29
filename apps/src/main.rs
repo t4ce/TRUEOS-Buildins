@@ -73,9 +73,14 @@ async fn fetch(client: &reqwest::Client, url: &str, limit: usize) -> Result<Vec<
     let mut response = sent.error_for_status().map_err(|e| e.to_string())?;
     if response.content_length().is_some_and(|len| len > limit as u64) { return Err("Download exceeds size limit".into()); }
     let mut bytes = Vec::with_capacity(response.content_length().unwrap_or(0) as usize);
+    let mut next_progress = 8 * 1024 * 1024;
     while let Some(chunk) = response.chunk().await.map_err(|e| e.to_string())? {
         if chunk.len() > limit.saturating_sub(bytes.len()) { return Err("Download exceeds size limit".into()); }
         bytes.extend_from_slice(&chunk);
+        if bytes.len() >= next_progress {
+            pullbot::report(&format!("http phase=body state=progress endpoint={} elapsed_ms={} bytes={}", endpoint, started.elapsed().as_millis(), bytes.len()));
+            next_progress = bytes.len().saturating_add(8 * 1024 * 1024);
+        }
     }
     pullbot::report(&format!("http phase=body state=complete endpoint={} elapsed_ms={} bytes={}", endpoint, started.elapsed().as_millis(), bytes.len()));
     Ok(bytes)
