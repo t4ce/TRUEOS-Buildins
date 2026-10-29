@@ -72,11 +72,12 @@ async fn fetch(client: &reqwest::Client, url: &str, limit: usize) -> Result<Vec<
     pullbot::report(&format!("http phase=send state=complete endpoint={} elapsed_ms={} status_code={}",endpoint,started.elapsed().as_millis(),sent.status().as_u16()));
     let mut response = sent.error_for_status().map_err(|e| e.to_string())?;
     if response.content_length().is_some_and(|len| len > limit as u64) { return Err("Download exceeds size limit".into()); }
-    let mut bytes = Vec::new();
+    let mut bytes = Vec::with_capacity(response.content_length().unwrap_or(0) as usize);
     while let Some(chunk) = response.chunk().await.map_err(|e| e.to_string())? {
         if chunk.len() > limit.saturating_sub(bytes.len()) { return Err("Download exceeds size limit".into()); }
         bytes.extend_from_slice(&chunk);
     }
+    pullbot::report(&format!("http phase=body state=complete endpoint={} elapsed_ms={} bytes={}", endpoint, started.elapsed().as_millis(), bytes.len()));
     Ok(bytes)
 }
 async fn run() -> Result<Option<String>, String> {
@@ -175,11 +176,15 @@ async fn run() -> Result<Option<String>, String> {
 }
 async fn download(client: &reqwest::Client, app: &catalog::OnlineApp) -> Result<String, String> {
     let bytes = fetch(client, catalog::url(app), MAX_APP).await?;
+    let verify_started = std::time::Instant::now();
     if !catalog::verify(app, &bytes) { return Err("Blueprint SHA-256 mismatch".into()); }
+    pullbot::report(&format!("download phase=verify elapsed_ms={} bytes={}", verify_started.elapsed().as_millis(), bytes.len()));
+    let save_started = std::time::Instant::now();
     let dir = "common/dl/apps";
     trueos::async_fs::create_dir_all(dir.as_bytes()).await.map_err(|e|format!("Create download directory: {e}"))?;
     let path = format!("{dir}/{}", app.archive_name);
     trueos::async_fs::write_file(path.as_bytes(), &bytes).await.map_err(|e|format!("Save download: {e}"))?;
+    pullbot::report(&format!("download phase=save elapsed_ms={} bytes={}", save_started.elapsed().as_millis(), bytes.len()));
     Ok(path)
 }
 fn main() {
