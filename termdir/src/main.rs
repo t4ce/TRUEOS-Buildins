@@ -700,6 +700,7 @@ impl App {
             };
         }
         match self.selected.and_then(|id| self.graph.node(id)) {
+            Some(node) if !node.is_dir && !node.is_placeholder && !node.is_removed && !node.is_moved && node.content_type == trueos::content_identity::ContentTypeId::BLOB => MenuContext::BlobFile,
             Some(node) if self.local_ui4 && graph_view::is_editable_text_file(node) => MenuContext::LocalTextFile,
             Some(node) if node.is_dir && !self.show_paths.is_empty() => MenuContext::ImageFolder,
             Some(node) if node.is_dir => MenuContext::Folder,

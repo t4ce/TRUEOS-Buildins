@@ -24,6 +24,9 @@ fn main() {
         _ => TargetOs::Unix,
     };
 
+    if env_opt("CARGO_CFG_TARGET_OS") == "trueos" {
+        compile_collapse_icon();
+    }
     compile_lsh();
     compile_i18n();
     configure_icu(target_os);
@@ -120,4 +123,21 @@ fn configure_icu(target_os: TargetOs) {
     if renaming_auto_detect {
         println!("cargo::rustc-cfg=edit_icu_renaming_auto_detect");
     }
+}
+
+// Keep PNG decoding on the build host; the editor embeds only packed RGBA.
+fn compile_collapse_icon() {
+    let path = "../../assets/edit.png";
+    println!("cargo::rerun-if-changed={path}");
+    let source = std::fs::File::open(path).expect("open collapse icon");
+    let mut reader = png::Decoder::new(std::io::BufReader::new(source))
+        .read_info().expect("read collapse icon");
+    let mut rgba = vec![0; reader.output_buffer_size().expect("bounded PNG")];
+    let info = reader.next_frame(&mut rgba).expect("decode collapse icon");
+    assert_eq!((info.width, info.height), (128, 128));
+    assert_eq!(info.color_type, png::ColorType::Rgba);
+    assert_eq!(info.bit_depth, png::BitDepth::Eight);
+    rgba.truncate(info.buffer_size());
+    std::fs::write(format!("{}/edit-collapse.rgba", env_opt("OUT_DIR")), rgba)
+        .expect("write embedded collapse icon");
 }

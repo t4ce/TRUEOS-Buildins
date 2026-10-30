@@ -37,6 +37,7 @@ trueos = { path = "../../../../TRUEOS-Blueprints/api" }
 libc = "=0.2.186"
 
 [build-dependencies]
+png = "=0.18.1"
 stdext.workspace = true
 lsh.workspace = true
 # The default toml crate bundles its dependencies with bad compile times. Thanks.

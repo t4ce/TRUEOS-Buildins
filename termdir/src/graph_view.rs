@@ -1021,6 +1021,31 @@ impl GraphView {
         })
     }
 
+    pub fn preview_infer(&self, source: usize) -> io::Result<Option<(PathBuf, Vec<u8>, async_fs::ContentTypeId, [u8; 32])>> {
+        let node = self.node(source).ok_or_else(|| io::Error::other("file disappeared"))?;
+        if node.is_dir || node.is_placeholder || node.is_removed || node.is_moved
+            || node.content_type != async_fs::ContentTypeId::BLOB {
+            return Ok(None);
+        }
+        let path = path_to_utf8(&node.path)?;
+        let metadata = async_fs::block_on(async_fs::typed_metadata(path.as_bytes()))
+            .map_err(|err| trueos_fs_err("infer stat", err))?;
+        // Keep a confirmation snapshot bounded; larger files stay untouched.
+        if metadata.content_type != async_fs::ContentTypeId::BLOB || metadata.len > 16 * 1024 * 1024 {
+            return Err(io::Error::other("infer requires a Blob file up to 16 MiB"));
+        }
+        let bytes = read_file_bytes(&node.path)?;
+        let Some(content_type) = async_fs::infer_named_bytes(path, &bytes) else { return Ok(None); };
+        let digest: [u8; 32] = Sha256::digest(&bytes).into();
+        Ok(Some((node.path.clone(), bytes, content_type, digest)))
+    }
+
+    pub fn apply_infer(&mut self, path: &Path, bytes: &[u8], content_type: async_fs::ContentTypeId, digest: [u8; 32]) -> io::Result<()> {
+        async_fs::block_on(async_fs::infer_blob_checked(path_to_utf8(path)?.as_bytes(), bytes, content_type, digest))
+            .map_err(|err| trueos_fs_err("infer (file may have changed)", err))?;
+        self.reload()
+    }
+
     pub fn node(&self, id: usize) -> Option<&FsNode> {
         self.nodes.get(id)
     }

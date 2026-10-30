@@ -136,6 +136,8 @@ fn run() -> apperr::Result<()> {
     // As such, we call this after `handle_args`.
     sys::switch_modes()?;
     trueos_log("startup: terminal mode ready");
+    #[cfg(target_os = "trueos")]
+    setup_collapse_icon();
 
     let mut vt_parser = vt::Parser::new();
     let mut input_parser = input::Parser::new();
@@ -206,6 +208,7 @@ fn run() -> apperr::Result<()> {
             #[cfg(target_os = "trueos")]
             if sys::take_terminal_restore() {
                 enable_terminal_modes();
+                setup_collapse_icon();
                 sys::write_stdout("\x1b[0m\x1b[r\x1b[2J\x1b[H");
                 tui.invalidate_terminal();
             }
@@ -864,4 +867,14 @@ fn sanitize_control_chars(text: &str) -> Cow<'_, str> {
     } else {
         Cow::Borrowed(text)
     }
+}
+
+#[cfg(target_os = "trueos")]
+static COLLAPSE_AVAILABLE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+#[cfg(target_os = "trueos")]
+fn setup_collapse_icon() {
+    let rgba = include_bytes!(concat!(env!("OUT_DIR"), "/edit-collapse.rgba"));
+    COLLAPSE_AVAILABLE.store(trueos::terminal_ui4::enable_collapse(128, 128, rgba).is_ok(),
+        std::sync::atomic::Ordering::Relaxed);
 }

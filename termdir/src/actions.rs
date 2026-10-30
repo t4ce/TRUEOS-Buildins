@@ -24,6 +24,7 @@ pub enum MenuCommand {
     Edit,
     Show,
     Play,
+    Infer,
     Sha256,
     Zip,
     Rename,
@@ -36,6 +37,7 @@ pub enum MenuCommand {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MenuContext {
     None,
+    BlobFile,
     File,
     LocalTextFile,
     ImageFile,
@@ -80,7 +82,7 @@ pub struct MenuEntry {
 
 // The visual order is the contract from ☰enu_Rework.txt. Local hotkeys are
 // assigned after contextual filtering, so every section reuses 🯰..🯹/0..9.
-pub const MENU_ENTRIES: [MenuEntry; 17] = [
+pub const MENU_ENTRIES: [MenuEntry; 18] = [
     MenuEntry {
         label: "center",
         command: MenuCommand::Center,
@@ -151,6 +153,7 @@ pub const MENU_ENTRIES: [MenuEntry; 17] = [
         command: MenuCommand::Delete,
         section: MenuSection::Action,
     },
+    MenuEntry { label: "infer", command: MenuCommand::Infer, section: MenuSection::Action },
     MenuEntry {
         label: "sha ＃",
         command: MenuCommand::Sha256,
@@ -389,8 +392,9 @@ impl MenuState {
             // it unavailable rather than implying a made-up combined hash.
             MenuCommand::Sha256 => matches!(
                 context,
-                MenuContext::File | MenuContext::LocalTextFile | MenuContext::ImageFile | MenuContext::VideoFile
+                MenuContext::BlobFile | MenuContext::File | MenuContext::LocalTextFile | MenuContext::ImageFile | MenuContext::VideoFile
             ),
+            MenuCommand::Infer => context == MenuContext::BlobFile,
             MenuCommand::Zip => context != MenuContext::None,
             MenuCommand::Enter => matches!(context, MenuContext::Folder | MenuContext::ImageFolder),
             MenuCommand::Show => matches!(
@@ -408,7 +412,7 @@ impl MenuState {
             MenuCommand::Delete => {
                 matches!(
                     context,
-                    MenuContext::File
+                    MenuContext::BlobFile | MenuContext::File
                         | MenuContext::LocalTextFile
                         | MenuContext::ImageFile
                         | MenuContext::VideoFile
@@ -420,7 +424,7 @@ impl MenuState {
             }
             MenuCommand::Rename => matches!(
                 context,
-                MenuContext::File
+                MenuContext::BlobFile | MenuContext::File
                     | MenuContext::LocalTextFile
                     | MenuContext::ImageFile
                     | MenuContext::VideoFile
@@ -565,6 +569,7 @@ impl MenuState {
 
 #[derive(Clone, Debug)]
 pub enum PendingAction {
+    Infer { path: PathBuf, bytes: Vec<u8>, content_type: trueos::content_identity::ContentTypeId, digest: [u8; 32] },
     Move {
         source: usize,
         target: usize,
@@ -998,6 +1003,23 @@ pub fn dispatch_menu_selected(
                 "NAME · select a file or folder first".to_string(),
             )),
         },
+        MenuCommand::Infer => {
+            let Some(source) = single_selected(selected, selected_files) else {
+                return Ok(Dispatch::Status("INFER · select one Blob file".into()));
+            };
+            match graph.preview_infer(source)? {
+                Some((path, bytes, content_type, digest)) => {
+                    let info = trueos::content_identity::content_type_info(content_type).unwrap();
+                    Ok(Dispatch::Modal(Modal {
+                        title: "Apply inferred type?".into(),
+                        lines: vec![format!("{}", path.display()), format!("Blob → {} ({})", info.canonical_name, info.mime_type), "Known extension and file bytes agree. Apply this type?".into()],
+                        pending: PendingAction::Infer { path, bytes, content_type, digest },
+                        mode: ModalMode::Confirm, trash_origin_y: None,
+                    }))
+                }
+                None => Ok(Dispatch::Status("INFER · no matching known extension and byte classification; file unchanged".into())),
+            }
+        }
         MenuCommand::NewFolder => {
             let parent = selected
                 .filter(|id| graph.node(*id).map(|n| n.is_dir).unwrap_or(false))
@@ -1034,6 +1056,10 @@ fn single_selected(selected: Option<usize>, selected_files: &[usize]) -> Option<
 pub fn execute_modal(modal: Modal, graph: &mut GraphView) -> io::Result<ActionOutcome> {
     let pending = modal.pending.clone();
     match pending {
+        PendingAction::Infer { path, bytes, content_type, digest } => {
+            graph.apply_infer(&path, &bytes, content_type, digest)?;
+            Ok(ActionOutcome { status: "INFER · type applied".into(), trashed_label: None })
+        }
         PendingAction::Move { source, target } => {
             let status = graph.move_node(source, target)?;
             Ok(ActionOutcome {
@@ -1347,6 +1373,17 @@ fn print_at(frame: &mut Frame, x: u16, y: u16, text: &str, style: Style) {
 #[cfg(test)]
 mod tests {
     use super::{MenuCommand, MenuContext, MenuState, Modal, PendingAction};
+
+    #[test]
+    fn infer_is_only_visible_for_one_blob_file() {
+        let infer = MenuState::index_for_command(MenuCommand::Infer).unwrap();
+        assert!(MenuState::is_visible(infer, MenuContext::BlobFile));
+        for context in [MenuContext::None, MenuContext::File, MenuContext::LocalTextFile,
+            MenuContext::ImageFile, MenuContext::VideoFile, MenuContext::Files,
+            MenuContext::ImageFiles, MenuContext::Folder, MenuContext::ImageFolder] {
+            assert!(!MenuState::is_visible(infer, context));
+        }
+    }
 
     #[test]
     fn edit_is_the_first_action_only_for_one_local_txt_file() {

@@ -614,6 +614,23 @@ pub async fn write_file_typed_checked(
     write.commit().await
 }
 
+/// Confirm a soft inference proposal for unchanged Blob bytes.
+/// Flag 6 requires both the expected-content digest and guarded Blob promotion.
+/// The kernel revalidates the extension, bytes, stored type, and digest atomically.
+pub async fn infer_blob_checked(
+    path: &[u8], bytes: &[u8], content_type: ContentTypeId, expected_sha256: [u8; 32],
+) -> Result<(), i32> {
+    let operation = Operation::from_start(unsafe {
+        vcabi::trueos_cabi_async_fs_checked_write_begin_v1(
+            path.as_ptr(), path.len(), bytes.len(), content_type.raw(), 6,
+            expected_sha256.as_ptr(),
+        )
+    })?;
+    let mut write = TypedWrite { operation, total_len: bytes.len(), next_offset: 0 };
+    for chunk in bytes.chunks(WRITE_CHUNK_BYTES) { write.write_chunk(chunk)?; }
+    write.commit().await
+}
+
 /// Admit a streamed typed write before accepting any body chunks.
 pub fn write_file_begin_typed(
     path: &[u8],
@@ -835,4 +852,14 @@ pub async fn select_files(
     }
     operation.discard();
     trueos_fs::selection::decode(&bytes).ok_or(ERR_IO)
+}
+
+/// Soft compatibility proposal for an untyped foreign file. No filesystem I/O.
+/// The final known extension must agree exactly with the complete byte detector.
+pub fn infer_named_bytes(path: &str, bytes: &[u8]) -> Option<ContentTypeId> {
+    let name = path.rsplit('/').next()?;
+    let (_, extension) = name.rsplit_once('.')?;
+    let expected = infer::content_type_from_extension(extension)?;
+    (expected != ContentTypeId::BLOB && infer::detect_content_type(bytes) == Some(expected))
+        .then_some(expected)
 }

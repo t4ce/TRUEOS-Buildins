@@ -17,6 +17,15 @@ You can also download binaries from [our Releases page](https://github.com/micro
 This professional grade Terminal Texteditor from Microsoft has been successfully packed
 as an App to run on the TrueOS Operating System.
 
+Choose **View → Compact** to shrink the local UI4 terminal frame
+to the Edit icon. UI4 also provides its collapse/restore context menu. Click
+the compact icon to restore the editor; open documents remain in memory.
+The menu item is available when a local UI4 terminal lease supports it.
+
+`assets/edit.png` is a transparent 128×128 raster of `assets/edit.svg`. The
+build decodes the PNG on the host and embeds its RGBA bytes, so the editor
+needs no image decoder at runtime.
+
 ### Linux (build from source)
 
 If your distribution does not provide binaries, or if you'd like to build your own, you can use our install script, provided you have installed:

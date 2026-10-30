@@ -133,6 +133,14 @@ fn draw_menu_edit(ctx: &mut Context, state: &mut State) {
 }
 
 fn draw_menu_view(ctx: &mut Context, state: &mut State) {
+    #[cfg(target_os = "trueos")]
+    if crate::COLLAPSE_AVAILABLE.load(std::sync::atomic::Ordering::Relaxed)
+        && ctx.menubar_menu_button("Compact", 'C', vk::NULL)
+        && let Err(code) = trueos::terminal_ui4::collapse()
+    {
+        error_log_add(ctx, state, std::io::Error::other(format!("compact: {code}")).into());
+    }
+
     if let Some(doc) = state.documents.active() {
         let mut tb = doc.buffer.borrow_mut();
         let word_wrap = tb.is_word_wrap_enabled();
