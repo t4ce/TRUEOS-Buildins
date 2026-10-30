@@ -27,6 +27,12 @@ pub fn draw_menubar(ctx: &mut Context, state: &mut State) {
             if ctx.menubar_menu_begin(loc(LocId::Edit), 'E') {
                 draw_menu_edit(ctx, state);
             }
+        }
+        #[cfg(feature = "ide")]
+        if ctx.menubar_menu_begin("IDE", 'I') {
+            draw_menu_ide(ctx, state);
+        }
+        if state.documents.active().is_some() {
             if ctx.menubar_menu_begin(loc(LocId::View), 'V') {
                 draw_menu_view(ctx, state);
             }
@@ -47,6 +53,22 @@ pub fn draw_menubar(ctx: &mut Context, state: &mut State) {
         }
     }
     ctx.menubar_end();
+}
+
+#[cfg(feature = "ide")]
+fn draw_menu_ide(ctx: &mut Context, state: &mut State) {
+    if ctx.menubar_menu_button("New Project…", 'N', vk::NULL) {
+        state.project_picker.show_new();
+    }
+    if ctx.menubar_menu_button("Open Project…", 'O', vk::NULL) {
+        state.project_picker.show_open();
+    }
+    if state.ide.is_some()
+        && ctx.menubar_menu_button("Close Project", 'C', vk::NULL)
+    {
+        state.wants_close_project = true;
+    }
+    ctx.menubar_menu_end();
 }
 
 fn draw_menu_file(ctx: &mut Context, state: &mut State) {

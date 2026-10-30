@@ -7,6 +7,8 @@ mod documents;
 mod draw_editor;
 mod draw_filepicker;
 mod draw_menubar;
+#[cfg(feature = "ide")]
+mod draw_projectpicker;
 mod draw_statusbar;
 mod localization;
 mod settings;
@@ -391,6 +393,7 @@ fn handle_launch_script(state: &mut State) -> apperr::Result<()> {
     if let Some(launch) = launch_script::ide_project(script)? {
         let session = ide::IdeSession::open_config(Path::new(launch.database), launch.project, launch.backend, launch.entry)?;
         state.documents.load_project(session.project.clone())?;
+        session.focus_entry(&mut state.documents);
         state.ide = Some(session);
     }
     for path in launch_script::open_paths(script)? {
@@ -453,6 +456,8 @@ fn draw(ctx: &mut Context, state: &mut State) {
     if state.wants_save {
         draw_handle_save(ctx, state);
     }
+    #[cfg(feature = "ide")]
+    draw_projectpicker::draw_project_picker(ctx, state);
     #[cfg(feature = "ide")]
     if state.wants_compile {
         state.wants_compile = false;

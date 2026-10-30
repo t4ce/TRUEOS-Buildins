@@ -129,8 +129,30 @@ are filename characters. A launcher can include `fs-scope trueosfs` to open
 an absolute or `trueosfs:discN/...` file outside the editor's app directory.
 Command-line file arguments continue to work without a launch script.
 
-The optional `ide` Cargo feature enables a project session and one top-level
-**Compile** action. The builtin artifact enables this feature. Launchers open
+The builtin enables the optional `ide` Cargo feature. Launch **edit** normally
+and choose **IDE → New Project…** or **IDE → Open Project…** beside the Edit menu.
+Open Project lists the saved project names from the shared
+`/apps/common/ide/projects.redb` database; it does not ask for a filesystem path.
+New Project asks for a name and creates an empty Odin SON `main.odin`.
+
+Opening a project promotes that same editor instance into an IDE workspace.
+Its files use Edit's existing bottom-right document switcher (or **Ctrl+P**),
+and the top-level **Compile** action appears. **File → New** adds a document to
+the project; saving it asks for a project-relative file name and stores it in
+the database. Reopening the active project restores closed project documents
+without replacing live edits. Codex can then attach with
+`/ide on` or discover the workspace through `trueos_ide`; Codex is not needed
+to open the project. The project's compiler and entry point are saved for
+subsequent opens. Older projects with a standard `main.odin` or `main.rs` can
+also be opened from the list.
+
+Save modified project documents before switching or closing a project, and
+wait for an active build to finish. **IDE → Close Project** returns to ordinary
+editing and preserves unrelated documents. One Edit instance owns the shared
+database at a time; close its project before opening that database in another
+Edit instance.
+
+Launchers can also open
 or create a project through the existing startup-script API:
 
 ```rust
@@ -164,7 +186,10 @@ entry file. Project documents use the existing document switcher and save
 immutable source revisions to the shared database.
 
 Compile saves the open project edits as one revision and starts a separate
-compiler VM using an immutable snapshot. Successful results are verified and
+compiler VM using an immutable snapshot. If its compiler is absent from AppDB,
+Edit runs Apps' `install <compiler>` startup command to download and verify it
+from the normal `trueos.eu/apps` catalog, then retries that same build snapshot.
+Installed compilers are reused for subsequent builds. Successful results are verified and
 installed through AppDB. The IDE owner exposes live context, source reads,
 guarded writes, compile status, cancellation, and execution through the native
 `vFile:ide` protocol for the existing Codex CLI. Source writes compare both the

@@ -18,6 +18,13 @@ use crate::localization::*;
 use crate::state::*;
 
 pub fn draw_file_picker(ctx: &mut Context, state: &mut State) {
+    #[cfg(feature = "ide")]
+    if matches!(state.wants_file_picker, StateFilePicker::SaveAs | StateFilePicker::SaveAsShown)
+        && state.documents.active().is_some_and(|doc| doc.project.is_some())
+    {
+        draw_project_save_as(ctx, state);
+        return;
+    }
     // The save dialog is pre-filled with the current document filename.
     if state.wants_file_picker == StateFilePicker::SaveAs {
         state.wants_file_picker = StateFilePicker::SaveAsShown;
@@ -264,6 +271,49 @@ pub fn draw_file_picker(ctx: &mut Context, state: &mut State) {
         state.file_picker_entries = Default::default();
         state.file_picker_overwrite_warning = Default::default();
         state.file_picker_autocomplete = Default::default();
+    }
+}
+
+#[cfg(feature = "ide")]
+fn draw_project_save_as(ctx: &mut Context, state: &mut State) {
+    if state.wants_file_picker == StateFilePicker::SaveAs {
+        state.wants_file_picker = StateFilePicker::SaveAsShown;
+        state.file_picker_pending_name = state.documents.active().map(|doc|
+            doc.path.clone().unwrap_or_else(|| doc.filename.as_str().into())).unwrap_or_default();
+    }
+    let mut save = false;
+    let mut done;
+    ctx.modal_begin("project-save-as", "Save Project File");
+    ctx.attr_intrinsic_size(Size { width: (ctx.size().width - 20).max(10), height: 6 });
+    {
+        let contains_focus = ctx.contains_focus();
+        ctx.block_begin("name");
+        ctx.attr_padding(Rect::two(1, 1));
+        ctx.inherit_focus();
+        ctx.label("label", "Project file name:");
+        ctx.editline("name", &mut state.file_picker_pending_name);
+        ctx.focus_on_first_present();
+        ctx.block_end();
+        if contains_focus && ctx.consume_shortcut(vk::RETURN) { save = true; }
+        ctx.table_begin("choices");
+        ctx.attr_padding(Rect::two(0, 1));
+        ctx.table_set_cell_gap(Size { width: 2, height: 0 });
+        ctx.inherit_focus();
+        ctx.table_next_row();
+        save |= ctx.button("save", "Save", ButtonStyle::default());
+        done = ctx.button("cancel", "Cancel", ButtonStyle::default());
+        ctx.table_end();
+    }
+    done |= ctx.modal_end();
+    if save && !done {
+        match state.documents.save_project_file_as(state.file_picker_pending_name.clone()) {
+            Ok(()) => { done = true; ctx.needs_rerender(); },
+            Err(error) => error_log_add(ctx, state, error),
+        }
+    }
+    if done {
+        state.wants_file_picker = StateFilePicker::None;
+        state.file_picker_pending_name = Default::default();
     }
 }
 

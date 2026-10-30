@@ -131,6 +131,10 @@ pub struct State {
     pub ide: Option<crate::ide::IdeSession>,
     #[cfg(feature = "ide")]
     pub wants_compile: bool,
+    #[cfg(feature = "ide")]
+    pub project_picker: crate::draw_projectpicker::ProjectPicker,
+    #[cfg(feature = "ide")]
+    pub wants_close_project: bool,
 
     // A ring buffer of the last 10 errors.
     pub error_log: [String; 10],
@@ -186,6 +190,10 @@ impl State {
             ide: None,
             #[cfg(feature = "ide")]
             wants_compile: false,
+            #[cfg(feature = "ide")]
+            project_picker: Default::default(),
+            #[cfg(feature = "ide")]
+            wants_close_project: false,
 
             error_log: [const { String::new() }; 10],
             error_log_index: 0,

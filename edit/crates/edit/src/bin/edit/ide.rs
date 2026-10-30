@@ -8,7 +8,7 @@ use std::io;
 use std::path::Path;
 use std::rc::Rc;
 
-use trueos_ide::{LoadedSource, SourceDatabase, SourceFileInput};
+use trueos_ide::{LoadedSource, ProjectBuildConfig, ProjectSummary, SourceDatabase, SourceFileInput};
 #[cfg(target_os = "trueos")]
 use trueos_ide::protocol;
 #[cfg(any(target_os = "trueos", test))]
@@ -19,13 +19,19 @@ use crate::documents::DocumentManager;
 
 pub type ProjectHandle = Rc<RefCell<IdeProject>>;
 
+pub enum ProjectOpen {
+    Existing,
+    New,
+    Configured(ProjectBuildConfig),
+}
+
 pub struct IdeSession {
     pub project: ProjectHandle,
     tracker: BuildTracker,
     backend: CompilerBackend,
     entry: String,
     #[cfg(target_os = "trueos")]
-    compiler: Option<OwnedChild>,
+    compiler: Option<CompilerJob>,
     #[cfg(target_os = "trueos")]
     reply_errors: u8,
     #[cfg(target_os = "trueos")]
@@ -46,6 +52,12 @@ impl IdeSession {
     }
 
     pub fn open_config(database: &Path, project: &str, backend: CompilerBackend, entry: &str) -> io::Result<Self> {
+        Self::open_project(database, project, ProjectOpen::Configured(ProjectBuildConfig {
+            compiler: backend, entry: entry.to_owned(),
+        }))
+    }
+
+    pub fn open_project(database: &Path, project: &str, mode: ProjectOpen) -> io::Result<Self> {
         #[cfg(target_os = "trueos")]
         let registration = OwnerRegistration::open(database, project)?;
         #[cfg(target_os = "trueos")]
@@ -58,12 +70,7 @@ impl IdeSession {
             std::fs::create_dir_all(parent)?;
         }
         let mut database = SourceDatabase::open(database).map_err(io::Error::other)?;
-        if database.get(project, None).map_err(io::Error::other)?.is_none() {
-            database.import_local(project, None, vec![SourceFileInput::new(entry, Vec::new())])
-                .map_err(io::Error::other)?;
-        }
-        let source = database.get(project, None).map_err(io::Error::other)?
-            .ok_or_else(|| io::Error::other("IDE project is missing after creation"))?;
+        let (source, config) = select_project(&mut database, project, mode)?;
         Ok(Self {
             project: Rc::new(RefCell::new(IdeProject {
                 database, source,
@@ -71,8 +78,8 @@ impl IdeSession {
                 _registration: registration,
             })),
             tracker,
-            backend,
-            entry: entry.to_owned(),
+            backend: config.compiler,
+            entry: config.entry,
             #[cfg(target_os = "trueos")]
             compiler: None,
             #[cfg(target_os = "trueos")]
@@ -80,6 +87,57 @@ impl IdeSession {
             #[cfg(target_os = "trueos")]
             poll_error_reported: false,
         })
+    }
+
+    pub fn name(&self) -> String { self.project.borrow().source.revision.project.clone() }
+
+    pub fn focus_entry(&self, documents: &mut DocumentManager) {
+        documents.update_active(|doc| doc.project.is_some() && doc.path.as_deref() == Some(Path::new(&self.entry)));
+    }
+
+    pub fn list_projects(&self) -> io::Result<Vec<ProjectSummary>> {
+        self.project.borrow().database.list_projects().map_err(io::Error::other)
+    }
+
+    pub fn change_project(&mut self, documents: &mut DocumentManager, name: &str, mode: ProjectOpen) -> crate::apperr::Result<()> {
+        if self.name() == name && matches!(mode, ProjectOpen::Existing) {
+            let paths: Vec<_> = self.project.borrow().source.files.iter().map(|file| file.path.clone()).collect();
+            for path in paths { documents.add_file_path(Path::new(&path))?; }
+            self.focus_entry(documents);
+            return Ok(());
+        }
+        self.check_project_change(documents)?;
+        let (source, config) = select_project(&mut self.project.borrow_mut().database, name, mode)?;
+        let prepared = DocumentManager::prepare_project(self.project.clone(), &source)?;
+        #[cfg(target_os = "trueos")]
+        {
+            let mut project = self.project.borrow_mut();
+            let database = project.database.path().to_owned();
+            let previous = project.source.revision.project.clone();
+            if let Err(error) = project._registration.change_project(&database, name) {
+                let _ = project._registration.change_project(&database, &previous);
+                return Err(error.into());
+            }
+            self.tracker = BuildTracker::new_owned(workspace_epoch(), project._registration.endpoint);
+        }
+        #[cfg(not(target_os = "trueos"))]
+        { self.tracker = BuildTracker::new(workspace_epoch()); }
+        self.project.borrow_mut().source = source;
+        self.backend = config.compiler;
+        self.entry = config.entry;
+        documents.replace_project(prepared);
+        self.focus_entry(documents);
+        Ok(())
+    }
+
+    pub fn check_project_change(&self, documents: &DocumentManager) -> io::Result<()> {
+        if self.is_building() {
+            return Err(io::Error::other("Wait for the current build before changing projects"));
+        }
+        if documents.has_dirty_project_documents() {
+            return Err(io::Error::other("Save your project changes before changing projects"));
+        }
+        Ok(())
     }
 
     pub fn is_building(&self) -> bool { self.tracker.active().is_some() }
@@ -96,7 +154,7 @@ impl IdeSession {
                 CompilerBackend::RustcMin => "rustc-min.bp",
             };
             let path = prepared.request_path.to_str().ok_or_else(|| io::Error::other("Compiler request path must be UTF-8"))?;
-            match OwnedChild::spawn(program, &["--ide-build", path], true) {
+            match CompilerJob::start(program, path) {
                 Ok(child) => {
                     self.compiler = Some(child);
                     Ok(prepared.request.build_id)
@@ -114,7 +172,7 @@ impl IdeSession {
             return Err(io::Error::other("No compiler job is active"));
         }
         #[cfg(target_os = "trueos")]
-        if let Some(mut child) = self.compiler.take() { child.stop()?; }
+        if let Some(mut job) = self.compiler.take() { job.child.stop()?; }
         Ok(())
     }
 
@@ -216,7 +274,8 @@ impl IdeSession {
 
     #[cfg(target_os = "trueos")]
     fn poll_children(&mut self) -> io::Result<bool> {
-        let Some(child) = &mut self.compiler else { return Ok(false) };
+        let Some(job) = &mut self.compiler else { return Ok(false) };
+        let child = &mut job.child;
         let result = child.poll();
         match result {
             Ok(false) if child.started.elapsed() < std::time::Duration::from_secs(600) => Ok(false),
@@ -233,7 +292,19 @@ impl IdeSession {
                 Err(error)
             }
             Ok(true) => {
-                let child = self.compiler.take().unwrap();
+                let job = self.compiler.take().unwrap();
+                if let Some((program, path)) = job.pending {
+                    match OwnedChild::spawn(&program, &["--ide-build", &path], true) {
+                        Ok(child) => {
+                            self.compiler = Some(CompilerJob { child, pending: None });
+                            return Ok(true);
+                        }
+                        Err(error) => return Err(compiler_failure(&mut self.tracker,
+                            io::Error::other(format!("Compiler download did not make {program} available: {error}")),
+                            job.child.diagnostics.as_ref())),
+                    }
+                }
+                let child = job.child;
                 let artifact = match self.tracker.finish() {
                     Ok(artifact) => artifact,
                     Err(error) => return Err(compiler_failure(&mut self.tracker, error, child.diagnostics.as_ref())),
@@ -273,6 +344,58 @@ impl IdeSession {
         }
         Ok(changed)
     }
+}
+
+pub fn list_database_projects(database: &Path) -> io::Result<Vec<ProjectSummary>> {
+    match std::fs::metadata(database) {
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(error) => return Err(error),
+        Ok(_) => {},
+    }
+    SourceDatabase::open(database).map_err(io::Error::other)?
+        .list_projects().map_err(io::Error::other)
+}
+
+fn select_project(database: &mut SourceDatabase, name: &str, mode: ProjectOpen) -> io::Result<(LoadedSource, ProjectBuildConfig)> {
+    let existing = database.get(name, None).map_err(io::Error::other)?;
+    match (&mode, &existing) {
+        (ProjectOpen::Existing, None) => return Err(io::Error::new(io::ErrorKind::NotFound, "Project no longer exists")),
+        (ProjectOpen::New, Some(_)) => return Err(io::Error::new(io::ErrorKind::AlreadyExists, "A project with that name already exists")),
+        _ => {},
+    }
+    let config = match mode {
+        ProjectOpen::Configured(config) => config,
+        ProjectOpen::New => ProjectBuildConfig { compiler: CompilerBackend::OdinSon, entry: "main.odin".into() },
+        ProjectOpen::Existing => match database.project_build_config(name).map_err(io::Error::other)? {
+            Some(config) => config,
+            None => {
+                let source = existing.as_ref().expect("existing project checked above");
+                let entry = source.files.iter().find(|file| file.path == "main.odin")
+                    .or_else(|| source.files.iter().find(|file| file.path == "main.rs"))
+                    .or_else(|| {
+                        let mut candidates = source.files.iter().filter(|file|
+                            Path::new(&file.path).file_name().is_some_and(|name| name == "main.odin" || name == "main.rs"));
+                        let first = candidates.next();
+                        first.filter(|_| candidates.next().is_none())
+                    })
+                    .ok_or_else(|| io::Error::other("This project has no saved compiler entry point"))?;
+                ProjectBuildConfig {
+                    compiler: if entry.path.ends_with(".rs") { CompilerBackend::RustcMin } else { CompilerBackend::OdinSon },
+                    entry: entry.path.clone(),
+                }
+            }
+        },
+    };
+    if existing.is_none() {
+        database.import_local(name, None, vec![SourceFileInput::new(&config.entry, Vec::new())])
+            .map_err(io::Error::other)?;
+    }
+    let source = database.get(name, None).map_err(io::Error::other)?
+        .ok_or_else(|| io::Error::other("IDE project is missing after creation"))?;
+    if database.project_build_config(name).map_err(io::Error::other)?.as_ref() != Some(&config) {
+        database.set_project_build_config(name, config.clone()).map_err(io::Error::other)?;
+    }
+    Ok((source, config))
 }
 
 /// Keep bytes until rendering so split UTF-8 sequences survive stream reads.
@@ -326,6 +449,29 @@ fn workspace_epoch() -> u64 {
 }
 
 #[cfg(target_os = "trueos")]
+struct CompilerJob {
+    child: OwnedChild,
+    // A missing AppDB entry is fetched by Apps before the original job retries.
+    pending: Option<(String, String)>,
+}
+
+#[cfg(target_os = "trueos")]
+impl CompilerJob {
+    fn start(program: &str, path: &str) -> io::Result<Self> {
+        match OwnedChild::spawn(program, &["--ide-build", path], true) {
+            Ok(child) => Ok(Self { child, pending: None }),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                let selector = program.strip_suffix(".bp").unwrap_or(program);
+                let script = format!("install {selector}\n");
+                let child = OwnedChild::spawn_script("apps.bp", &script)?;
+                Ok(Self { child, pending: Some((program.to_owned(), path.to_owned())) })
+            }
+            Err(error) => Err(error),
+        }
+    }
+}
+
+#[cfg(target_os = "trueos")]
 struct OwnedChild {
     handle: u64,
     started: std::time::Instant,
@@ -335,12 +481,22 @@ struct OwnedChild {
 #[cfg(target_os = "trueos")]
 impl OwnedChild {
     fn spawn(program: &str, args: &[&str], capture_diagnostics: bool) -> io::Result<Self> {
-        let request = serde_json::to_vec(&serde_json::json!({
+        Self::spawn_request(program, serde_json::json!({
             "program": program,
             "args": args,
-        })).map_err(io::Error::other)?;
+        }), capture_diagnostics)
+    }
+
+    fn spawn_script(program: &str, script: &str) -> io::Result<Self> {
+        Self::spawn_request(program, serde_json::json!({ "program": program, "script": script }), true)
+    }
+
+    fn spawn_request(program: &str, request: serde_json::Value, capture_diagnostics: bool) -> io::Result<Self> {
+        let request = serde_json::to_vec(&request).map_err(io::Error::other)?;
         let handle = trueos::child_hull::spawn_program(&request)
-            .map_err(|code| io::Error::other(format!("Cannot launch {program} ({code})")))?;
+            .map_err(|code| io::Error::new(
+                if code == trueos::child_hull::ERR_NOT_FOUND { io::ErrorKind::NotFound } else { io::ErrorKind::Other },
+                format!("Cannot launch {program} ({code})")))?;
         Ok(Self {
             handle, started: std::time::Instant::now(),
             diagnostics: capture_diagnostics.then(DiagnosticTail::new),
@@ -396,6 +552,12 @@ struct OwnerRegistration { endpoint: u64 }
 #[cfg(target_os = "trueos")]
 impl OwnerRegistration {
     fn open(database: &Path, project: &str) -> io::Result<Self> {
+        let mut lease = Self { endpoint: 0 };
+        lease.change_project(database, project)?;
+        Ok(lease)
+    }
+
+    fn change_project(&mut self, database: &Path, project: &str) -> io::Result<()> {
         let registration = protocol::Registration {
             version: protocol::VERSION, project: project.to_owned(),
             database: database.to_str().ok_or_else(|| io::Error::other("IDE database path must be UTF-8"))?.to_owned(),
@@ -404,18 +566,17 @@ impl OwnerRegistration {
         // Hold the lease while discovering its host-issued endpoint. Register
         // established exclusive ownership of the resolved database. Reject
         // ambiguous relative paths that resolve under different app roots.
-        let mut lease = Self { endpoint: 0 };
         let endpoints: Vec<protocol::Endpoint> = protocol::decode(&read_endpoint(protocol::DISCOVER)?)
             .map_err(io::Error::other)?;
         let mut matching = endpoints.into_iter()
             .filter(|endpoint| endpoint.project == registration.project && endpoint.database == registration.database);
-        lease.endpoint = matching.next().map(|endpoint| endpoint.endpoint)
+        self.endpoint = matching.next().map(|endpoint| endpoint.endpoint)
             .filter(|endpoint| *endpoint != 0)
             .ok_or_else(|| io::Error::other("Registered IDE workspace is unavailable"))?;
         if matching.next().is_some() {
             return Err(io::Error::other("IDE database path is ambiguous; use an absolute path"));
         }
-        Ok(lease)
+        Ok(())
     }
 }
 
@@ -489,6 +650,109 @@ mod tests {
     }
     impl Drop for TestDatabase {
         fn drop(&mut self) { let _ = std::fs::remove_file(&self.0); }
+    }
+
+    #[test]
+    fn regular_editor_can_open_project_without_losing_unrelated_edits() {
+        let database = TestDatabase::new();
+        assert!(list_database_projects(&database.0).unwrap().is_empty());
+        assert!(!database.0.exists(), "browsing an empty catalog does not create a database");
+        let mut documents = DocumentManager::default();
+        documents.add_untitled().unwrap().buffer.borrow_mut().write_raw(b"keep this draft");
+        let mut session = IdeSession::open_project(&database.0, "hello", ProjectOpen::New).unwrap();
+        documents.load_project(session.project.clone()).unwrap();
+        assert_eq!(documents.len(), 2);
+        assert_eq!(documents.open_project_paths(), ["main.odin"]);
+        assert_eq!(documents.project_text("main.odin").unwrap().unwrap(), "");
+        assert!(documents.update_active(|doc| doc.project.is_none()));
+        assert!(documents.active().unwrap().buffer.borrow().is_dirty());
+        let context = session.handle_request(&mut documents, IdeRequest::Context {});
+        assert!(matches!(context, IdeResponse::Context { context: WorkspaceContext { project, .. } } if project == "hello"));
+    }
+
+    #[test]
+    fn project_picker_reopens_saved_compiler_and_custom_entry_without_source_changes() {
+        let database = TestDatabase::new();
+        {
+            let mut store = SourceDatabase::open(&database.0).unwrap();
+            store.import_local("rust demo", None, vec![SourceFileInput::new("src/custom.rs", b"fn main() {}\n".to_vec())]).unwrap();
+        }
+        let original_revision;
+        {
+            let session = IdeSession::open_config(&database.0, "rust demo", CompilerBackend::RustcMin, "src/custom.rs").unwrap();
+            original_revision = session.project.borrow().source.revision.id;
+        }
+        let projects = list_database_projects(&database.0).unwrap();
+        assert_eq!(projects.len(), 1);
+        assert_eq!(projects[0].name, "rust demo");
+        let session = IdeSession::open_project(&database.0, "rust demo", ProjectOpen::Existing).unwrap();
+        assert_eq!(session.backend, CompilerBackend::RustcMin);
+        assert_eq!(session.entry, "src/custom.rs");
+        assert_eq!(session.project.borrow().source.revision.id, original_revision);
+    }
+
+    #[test]
+    fn switching_projects_preserves_saved_sources_and_rejects_dirty_buffers() {
+        let database = TestDatabase::new();
+        {
+            let mut store = SourceDatabase::open(&database.0).unwrap();
+            store.import_local("second", None, vec![SourceFileInput::new("main.rs", b"fn main() {}\n".to_vec())]).unwrap();
+        }
+        let mut session = IdeSession::open_project(&database.0, "first", ProjectOpen::New).unwrap();
+        let mut documents = DocumentManager::default();
+        documents.load_project(session.project.clone()).unwrap();
+        documents.active().unwrap().buffer.borrow_mut().write_raw(b"package main\n");
+        assert!(session.change_project(&mut documents, "second", ProjectOpen::Existing).is_err());
+        assert_eq!(session.name(), "first");
+        assert!(documents.has_dirty_project_documents());
+        documents.save_project_documents().unwrap();
+        session.change_project(&mut documents, "second", ProjectOpen::Existing).unwrap();
+        assert_eq!(session.name(), "second");
+        assert_eq!(session.backend, CompilerBackend::RustcMin);
+        assert_eq!(documents.open_project_paths(), ["main.rs"]);
+        assert!(documents.project_text("main.odin").unwrap().is_none());
+        assert_eq!(session.project.borrow().database.get("first", None).unwrap().unwrap().file("main.odin").unwrap().bytes, b"package main\n");
+        assert!(matches!(session.handle_request(&mut documents, IdeRequest::Context {}),
+            IdeResponse::Context { context: WorkspaceContext { project, entry, .. } } if project == "second" && entry == "main.rs"));
+    }
+
+    #[test]
+    fn opening_missing_or_creating_duplicate_project_does_not_replace_workspace() {
+        let database = TestDatabase::new();
+        let mut session = IdeSession::open_project(&database.0, "first", ProjectOpen::New).unwrap();
+        let mut documents = DocumentManager::default();
+        documents.load_project(session.project.clone()).unwrap();
+        let revision = session.project.borrow().source.revision.id;
+        assert!(session.change_project(&mut documents, "missing", ProjectOpen::Existing).is_err());
+        assert!(session.change_project(&mut documents, "first", ProjectOpen::New).is_err());
+        assert_eq!(session.name(), "first");
+        assert_eq!(session.project.borrow().source.revision.id, revision);
+        assert_eq!(session.list_projects().unwrap().len(), 1);
+        assert_eq!(documents.open_project_paths(), ["main.odin"]);
+    }
+
+    #[test]
+    fn editor_new_file_saves_to_project_and_reopening_keeps_live_edits() {
+        let database = TestDatabase::new();
+        let mut session = IdeSession::open_project(&database.0, "demo", ProjectOpen::New).unwrap();
+        let mut documents = DocumentManager::default();
+        documents.load_project(session.project.clone()).unwrap();
+        documents.add_untitled().unwrap().buffer.borrow_mut().write_raw(b"package helper\n");
+        documents.save_project_file_as("helper/answer.odin".into()).unwrap();
+        assert_eq!(session.project.borrow().source.file("helper/answer.odin").unwrap().bytes, b"package helper\n");
+        assert!(!documents.active().unwrap().buffer.borrow().is_dirty());
+        documents.active().unwrap().buffer.borrow_mut().write_raw(b"// unsaved\n");
+        assert!(documents.save_project_file_as("main.odin".into()).is_err());
+        assert!(documents.save_project_file_as("/outside.odin".into()).is_err());
+        assert!(documents.active().unwrap().buffer.borrow().is_dirty());
+        session.change_project(&mut documents, "demo", ProjectOpen::Existing).unwrap();
+        assert_eq!(documents.active_project_path().as_deref(), Some("main.odin"));
+        assert_eq!(documents.project_text("helper/answer.odin").unwrap().unwrap(), "package helper\n// unsaved\n");
+        assert_eq!(documents.len(), 2);
+        documents.remove_active();
+        session.change_project(&mut documents, "demo", ProjectOpen::Existing).unwrap();
+        assert_eq!(documents.open_project_paths().len(), 2);
+        assert_eq!(documents.project_text("helper/answer.odin").unwrap().unwrap(), "package helper\n// unsaved\n");
     }
 
     #[test]

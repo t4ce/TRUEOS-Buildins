@@ -29,3 +29,10 @@ shared host launch queue. It cannot be combined with `--sh3`. Autostart uses
 launches a cached copy of the requested app. A single-line `launch_script` is
 forwarded after ` -- `. Guest arguments and named instances are unsupported by
 this pullbot protocol and autostart reports an error if either is configured.
+
+## Fetch without launching
+
+The one-shot startup command `install NAME_OR_ID` uses the normal
+`https://trueos.eu/apps` catalog, download verification and AppDB import, then
+exits without starting the downloaded app. IDE compiler jobs use this when
+their compiler is missing from AppDB and then retry the original build.

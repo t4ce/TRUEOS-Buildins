@@ -295,12 +295,56 @@ impl DocumentManager {
 
     #[cfg(feature = "ide")]
     pub fn load_project(&mut self, project: crate::ide::ProjectHandle) -> apperr::Result<()> {
-        let paths: Vec<_> = project.borrow().source.files.iter().map(|file| PathBuf::from(&file.path)).collect();
-        for path in paths {
-            self.add_project_path(project.clone(), &path)?;
-        }
-        self.project = Some(project);
+        let prepared = Self::prepare_project(project.clone(), &project.borrow().source)?;
+        self.replace_project(prepared);
         Ok(())
+    }
+
+    /// Build every buffer before replacing the current project. A load error
+    /// must leave the current documents and their undo histories intact.
+    #[cfg(feature = "ide")]
+    pub fn prepare_project(project: crate::ide::ProjectHandle, source: &trueos_ide::LoadedSource) -> apperr::Result<Self> {
+        let mut prepared = Self { list: Vec::new(), project: Some(project.clone()) };
+        for file in &source.files {
+            let buffer = Self::create_buffer()?;
+            buffer.borrow_mut().read_stream(&mut file.bytes.as_slice(), None, Some(file.bytes.len()))?;
+            let mut doc = Document {
+                buffer, path: None, dir: None, filename: String::new(), file_id: None,
+                new_file_counter: 0, language_override: None, project: Some(project.clone()),
+            };
+            doc.set_path(PathBuf::from(&file.path));
+            prepared.list.push(doc);
+        }
+        Ok(prepared)
+    }
+
+    #[cfg(feature = "ide")]
+    pub fn replace_project(&mut self, mut prepared: Self) {
+        self.close_project();
+        if self.active().is_some_and(|doc| doc.path.is_none() && !doc.buffer.borrow().is_dirty()) {
+            self.remove_active();
+        }
+        self.list.append(&mut prepared.list);
+        self.project = prepared.project;
+    }
+
+    #[cfg(feature = "ide")]
+    pub fn close_project(&mut self) {
+        self.list.retain(|doc| doc.project.is_none());
+        self.project = None;
+    }
+
+    #[cfg(feature = "ide")]
+    pub fn save_project_file_as(&mut self, path: PathBuf) -> apperr::Result<()> {
+        let doc = self.active_mut().ok_or_else(|| io::Error::other("No document is open"))?;
+        let project = doc.project.as_ref().ok_or_else(|| io::Error::other("This document is not part of a project"))?;
+        if doc.path.as_deref() != Some(path.as_path())
+            && project.borrow().source.file(path.to_str().unwrap_or_default()).is_some()
+        {
+            return Err(io::Error::new(io::ErrorKind::AlreadyExists,
+                "A project file with that name already exists; open that file to edit it").into());
+        }
+        doc.save(Some(path))
     }
 
     #[cfg(feature = "ide")]

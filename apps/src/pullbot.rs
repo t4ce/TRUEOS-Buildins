@@ -1,8 +1,10 @@
-//! One-shot launch stream: `pull [--sh3 | --headless] NAME_OR_ID` (one request per line).
+//! One-shot stream: `pull [--sh3 | --headless] NAME_OR_ID` or `install NAME_OR_ID`.
+//! Install downloads, verifies and imports into AppDB without launching the app.
 //! Empty lines and # comments are ignored; duplicates intentionally launch twice.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Request {
     pub selector: String,
+    pub install_only: bool,
     pub start_script: String,
     pub new_shell3: bool,
     pub headless: bool,
@@ -19,6 +21,12 @@ pub fn requests(script: &str) -> Vec<Result<Request, String>> {
                 return None;
             }
             Some(match line.split_once(char::is_whitespace) {
+                Some(("install", selector)) if !selector.trim().is_empty()
+                    && !selector.trim().chars().any(char::is_whitespace)
+                    && !selector.trim().starts_with('-') => Ok(Request {
+                        selector: selector.trim().to_string(), install_only: true,
+                        start_script: String::new(), new_shell3: false, headless: false,
+                    }),
                 Some(("pull" | "launch", value)) if !value.trim().is_empty() => {
                     let value = value.trim();
                     let (new_shell3, value) = match value.strip_prefix("--sh3") {
@@ -40,6 +48,7 @@ pub fn requests(script: &str) -> Vec<Result<Request, String>> {
                     } else {
                         Ok(Request {
                             selector: selector.to_string(),
+                            install_only: false,
                             new_shell3,
                             headless,
                             start_script: if command.is_empty() {
@@ -61,6 +70,7 @@ mod tests {
     fn plain(selector: &str) -> Result<Request, String> {
         Ok(Request {
             selector: selector.into(),
+            install_only: false,
             start_script: String::new(),
             new_shell3: false, headless: false,
         })
@@ -71,6 +81,7 @@ mod tests {
             requests("launch Frog -- weather -74.123456 40.987654\n"),
             vec![Ok(Request {
                 selector: "Frog".into(),
+                install_only: false,
                 start_script: "weather -74.123456 40.987654\n".into(),
                 new_shell3: false, headless: false,
             })]
@@ -92,8 +103,8 @@ mod tests {
     #[test]
     fn shell_destination_does_not_change_the_child_script() {
         let batch = requests("launch --sh3 Frog -- weather 13 51\npull --sh3 12\nlaunch --sh3\n");
-        assert_eq!(batch[0], Ok(Request { selector: "Frog".into(), start_script: "weather 13 51\n".into(), new_shell3: true, headless: false }));
-        assert_eq!(batch[1], Ok(Request { selector: "12".into(), start_script: String::new(), new_shell3: true, headless: false }));
+        assert_eq!(batch[0], Ok(Request { selector: "Frog".into(), install_only: false, start_script: "weather 13 51\n".into(), new_shell3: true, headless: false }));
+        assert_eq!(batch[1], Ok(Request { selector: "12".into(), install_only: false, start_script: String::new(), new_shell3: true, headless: false }));
         assert!(batch[2].is_err());
         assert!(!requests("launch Frog -- weather --sh3 51\n")[0].as_ref().unwrap().new_shell3);
     }
@@ -115,7 +126,7 @@ mod tests {
     #[test]
     fn headless_autostart_forwards_the_child_script() {
         assert_eq!(requests("pull --headless voxy\n"), vec![Ok(Request {
-            selector: "voxy".into(), start_script: String::new(), new_shell3: false, headless: true,
+            selector: "voxy".into(), install_only: false, start_script: String::new(), new_shell3: false, headless: true,
         })]);
         let batch = requests("pull --headless Frog -- weather 13 51\n");
         assert_eq!(batch[0].as_ref().unwrap().start_script, "weather 13 51\n");
@@ -125,6 +136,16 @@ mod tests {
     #[test]
     fn blank_script_is_an_empty_headless_batch() {
         assert!(requests("\n# empty\n").is_empty());
+    }
+    #[test]
+    fn install_fetches_without_launch_options_or_commands() {
+        assert_eq!(requests("install odin-son\n"), vec![Ok(Request {
+            selector: "odin-son".into(), install_only: true, start_script: String::new(),
+            new_shell3: false, headless: false,
+        })]);
+        for invalid in ["install", "install --headless odin-son", "install odin-son -- build", "install --sh3"] {
+            assert!(requests(invalid)[0].is_err(), "{invalid}");
+        }
     }
 }
 pub fn report(message: &str) {
@@ -161,11 +182,13 @@ pub async fn drain(bytes: &[u8]) {
         Ok(bytes) => match std::str::from_utf8(&bytes) {
             Ok(html) => super::catalog::parse(html),
             Err(_) => {
+                eprintln!("apps: catalog is not UTF-8");
                 report("catalog is not UTF-8");
                 return;
             }
         },
         Err(error) => {
+            eprintln!("apps: catalog: {error}");
             report(&format!("catalog: {error}"));
             return;
         }
@@ -176,6 +199,7 @@ pub async fn drain(bytes: &[u8]) {
         let result = async {
             let Request {
                 selector,
+                install_only,
                 start_script,
                 new_shell3,
                 headless,
@@ -183,6 +207,12 @@ pub async fn drain(bytes: &[u8]) {
             let app = super::catalog::resolve(&catalog, &selector)
                 .ok_or_else(|| format!("not in catalog: {selector}"))?;
             let path = super::download(&client, app).await?;
+            if install_only {
+                trueos::async_fs::write_file(b"vFile:appdb-install", path.as_bytes()).await
+                    .map_err(|error| format!("AppDB import failed: {error}"))?;
+                report(&format!("installed {}", app.archive_name));
+                return Ok::<(), String>(());
+            }
             // Backpressure preserves requests when the host launch worker pool is full.
             for _ in 0..1800 {
                 let destination = if headless {
@@ -210,6 +240,7 @@ pub async fn drain(bytes: &[u8]) {
             Ok(()) => queued += 1,
             Err(error) => {
                 failed += 1;
+                eprintln!("apps: {error}");
                 report(&error);
             }
         }
