@@ -146,11 +146,21 @@ to open the project. The project's compiler and entry point are saved for
 subsequent opens. Older projects with a standard `main.odin` or `main.rs` can
 also be opened from the list.
 
+Choose the top-level **Codex** button or **IDE → Start Codex** to start Codex
+in its own Shell3 window and VM. Its startup script binds it to this Edit
+workspace and enables IDE context automatically, including when other projects
+are open. If Codex is absent from AppDB, the standard Apps helper downloads and
+installs it first. Edit remains responsive while this runs. Codex keeps its own
+lifetime; closing or switching the original workspace makes that attachment
+unavailable rather than redirecting it to another editor. Ordinary editing
+shows no Codex action until an IDE project is open.
+
 Save modified project documents before switching or closing a project, and
 wait for an active build to finish. **IDE → Close Project** returns to ordinary
-editing and preserves unrelated documents. One Edit instance owns the shared
-database at a time; close its project before opening that database in another
-Edit instance.
+editing and preserves unrelated documents. Each project has one Edit owner;
+different projects can stay open in different Edit VMs. The kernel source
+service owns the single shared redb image and serializes durable commits.
+Opening the same project in another Edit requires closing its current owner.
 
 Launchers can also open
 or create a project through the existing startup-script API:

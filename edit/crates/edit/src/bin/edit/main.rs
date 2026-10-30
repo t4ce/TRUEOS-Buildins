@@ -14,6 +14,8 @@ mod localization;
 mod settings;
 #[cfg(feature = "ide")]
 mod ide;
+#[cfg(all(feature = "ide", target_os = "trueos"))]
+mod ide_store;
 #[cfg(any(target_os = "trueos", test))]
 mod launch_script;
 mod state;
@@ -458,6 +460,16 @@ fn draw(ctx: &mut Context, state: &mut State) {
     }
     #[cfg(feature = "ide")]
     draw_projectpicker::draw_project_picker(ctx, state);
+    #[cfg(feature = "ide")]
+    if state.wants_codex {
+        state.wants_codex = false;
+        if let Err(error) = state.ide.as_mut()
+            .ok_or_else(|| std::io::Error::other("Open an IDE project before starting Codex"))
+            .and_then(ide::IdeSession::start_codex)
+        {
+            error_log_add(ctx, state, error.into());
+        }
+    }
     #[cfg(feature = "ide")]
     if state.wants_compile {
         state.wants_compile = false;

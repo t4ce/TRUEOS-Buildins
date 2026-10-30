@@ -132,6 +132,8 @@ pub struct State {
     #[cfg(feature = "ide")]
     pub wants_compile: bool,
     #[cfg(feature = "ide")]
+    pub wants_codex: bool,
+    #[cfg(feature = "ide")]
     pub project_picker: crate::draw_projectpicker::ProjectPicker,
     #[cfg(feature = "ide")]
     pub wants_close_project: bool,
@@ -190,6 +192,8 @@ impl State {
             ide: None,
             #[cfg(feature = "ide")]
             wants_compile: false,
+            #[cfg(feature = "ide")]
+            wants_codex: false,
             #[cfg(feature = "ide")]
             project_picker: Default::default(),
             #[cfg(feature = "ide")]

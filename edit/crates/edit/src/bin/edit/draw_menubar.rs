@@ -47,6 +47,12 @@ pub fn draw_menubar(ctx: &mut Context, state: &mut State) {
                 }
             }
             ctx.attr_padding(Rect::two(0, 1));
+            if session.is_starting_codex() {
+                ctx.label("codex", "Starting Codex…");
+            } else if ctx.button("codex", "Codex", ButtonStyle::default().bracketed(false)) {
+                state.wants_codex = true;
+            }
+            ctx.attr_padding(Rect::two(0, 1));
         }
         if ctx.menubar_menu_begin(loc(LocId::Help), 'H') {
             draw_menu_help(ctx, state);
@@ -62,6 +68,12 @@ fn draw_menu_ide(ctx: &mut Context, state: &mut State) {
     }
     if ctx.menubar_menu_button("Open Project…", 'O', vk::NULL) {
         state.project_picker.show_open();
+    }
+    if state.ide.is_some()
+        && !state.ide.as_ref().unwrap().is_starting_codex()
+        && ctx.menubar_menu_button("Start Codex", 'S', vk::NULL)
+    {
+        state.wants_codex = true;
     }
     if state.ide.is_some()
         && ctx.menubar_menu_button("Close Project", 'C', vk::NULL)

@@ -700,3 +700,335 @@ mod tests {
         assert_eq!(node(&doc, &json, "last")["rect"]["width"], 42.0);
     }
 }
+
+// The image service mock transports handles and metadata only, just like the SDK.
+pub mod image_mock {
+    use super::ui4_scene::HullImageInfo;
+    use std::cell::RefCell;
+    use std::collections::HashMap;
+    #[derive(Default)]
+    pub struct Service {
+        pub generation: u64,
+        pub requests: Vec<(String, String, String, u32, u32, u64)>,
+        pub statuses: usize,
+        pub live: HashMap<u32, HullImageInfo>,
+        pub released: Vec<u32>,
+        pub next: u32,
+        pub reset_busy: bool,
+        pub request_busy: bool,
+        pub status_busy: bool,
+        pub release_busy: bool,
+    }
+    thread_local! { pub static SERVICE: RefCell<Service> = RefCell::new(Service::default()); }
+    pub fn reset() {
+        SERVICE.with(|service| *service.borrow_mut() = Service::default());
+    }
+}
+pub mod ui4_scene {
+    use super::{image_mock::SERVICE, ui4_winit::Error};
+    pub const HULL_IMAGE_READY: u32 = 1;
+    pub const HULL_IMAGE_FAILED: u32 = 2;
+    #[derive(Clone, Copy, Default)]
+    pub struct HullImageInfo {
+        pub state: u32,
+        pub sprite_id: u32,
+        pub width: u32,
+        pub height: u32,
+        pub generation: u64,
+        pub error: i32,
+    }
+    pub fn hull_image_reset(_: u32, generation: u64) -> Result<(), Error> {
+        SERVICE.with(|service| {
+            let mut service = service.borrow_mut();
+            if std::mem::take(&mut service.reset_busy) {
+                return Err(Error::Busy);
+            }
+            service.generation = generation;
+            service.live.clear();
+            Ok(())
+        })
+    }
+    pub fn hull_image_request(
+        _: u32,
+        url: &str,
+        root: &str,
+        host: &str,
+        width: u32,
+        height: u32,
+        generation: u64,
+    ) -> Result<u32, Error> {
+        SERVICE.with(|service| {
+            let mut service = service.borrow_mut();
+            if std::mem::take(&mut service.request_busy) {
+                return Err(Error::Busy);
+            }
+            service.next += 1;
+            let ticket = service.next;
+            service.requests.push((
+                url.into(),
+                root.into(),
+                host.into(),
+                width,
+                height,
+                generation,
+            ));
+            service.live.insert(
+                ticket,
+                HullImageInfo {
+                    generation,
+                    width,
+                    height,
+                    ..Default::default()
+                },
+            );
+            Ok(ticket)
+        })
+    }
+    pub fn hull_image_status(_: u32, ticket: u32) -> Result<HullImageInfo, Error> {
+        SERVICE.with(|service| {
+            let mut service = service.borrow_mut();
+            service.statuses += 1;
+            if std::mem::take(&mut service.status_busy) {
+                return Err(Error::Busy);
+            }
+            service.live.get(&ticket).copied().ok_or(Error::NotFound)
+        })
+    }
+    pub fn hull_image_release(_: u32, ticket: u32) -> Result<(), Error> {
+        SERVICE.with(|service| {
+            let mut service = service.borrow_mut();
+            if std::mem::take(&mut service.release_busy) {
+                return Err(Error::Busy);
+            }
+            service.released.push(ticket);
+            service.live.remove(&ticket);
+            Ok(())
+        })
+    }
+}
+pub mod ui4_winit {
+    #[derive(Clone, Copy, Debug, PartialEq)]
+    pub enum Error {
+        Busy,
+        NotFound,
+        Invalid,
+        InvalidState,
+    }
+    #[derive(Clone, Copy, Debug, Default)]
+    pub struct SpriteCorner {
+        pub x: f32,
+        pub y: f32,
+        pub u: f32,
+        pub v: f32,
+    }
+    #[derive(Clone, Copy, Debug, Default)]
+    pub struct SpriteQuad {
+        pub sprite_id: u32,
+        pub c0: SpriteCorner,
+        pub c1: SpriteCorner,
+        pub c2: SpriteCorner,
+        pub c3: SpriteCorner,
+        pub color_rgba: u32,
+        pub source_over: bool,
+    }
+    #[derive(Default)]
+    pub struct SceneTarget {
+        pub draws: Vec<SpriteQuad>,
+        pub fail_sprite: Option<u32>,
+        pub draw_error: Option<Error>,
+        pub lease: bool,
+        pub quarantined: bool,
+        pub unretired: bool,
+        pub cancel_on_sprite_error: bool,
+        pub sprite_calls: usize,
+    }
+    impl SceneTarget {
+        pub fn render_target(&self) -> u32 {
+            1
+        }
+        pub fn begin(&mut self, _: u32) -> Result<(), Error> {
+            if self.quarantined {
+                return Err(Error::Busy);
+            }
+            if self.lease {
+                return Err(Error::InvalidState);
+            }
+            self.lease = true;
+            Ok(())
+        }
+        pub fn text_probe(&self) -> Result<(), Error> {
+            if !self.lease || self.unretired {
+                Err(Error::InvalidState)
+            } else {
+                Ok(())
+            }
+        }
+        pub fn draw_sprite_quads(&mut self, quads: &[SpriteQuad]) -> Result<(), Error> {
+            self.sprite_calls += 1;
+            let error = self.draw_error.or_else(|| {
+                if quads
+                    .iter()
+                    .any(|quad| Some(quad.sprite_id) == self.fail_sprite)
+                {
+                    Some(Error::NotFound)
+                } else {
+                    None
+                }
+            });
+            if let Some(error) = error {
+                if self.cancel_on_sprite_error {
+                    self.lease = false;
+                }
+                return Err(error);
+            }
+            self.draws.extend_from_slice(quads);
+            Ok(())
+        }
+    }
+}
+#[path = "../../../src/snapshot.rs"]
+mod snapshot;
+pub mod env {
+    pub fn var(_: &str) -> Result<String, ()> {
+        Err(())
+    }
+}
+pub mod fs_mock {
+    use std::cell::RefCell;
+    #[derive(Default)]
+    pub struct State {
+        pub calls: usize,
+        pub polls: usize,
+        pub ready: bool,
+        pub fail: bool,
+    }
+    thread_local! { pub static STATE: RefCell<State> = RefCell::new(State::default()); }
+}
+pub mod async_fs {
+    use super::fs_mock::STATE;
+    use std::task::Poll;
+    pub async fn create_dir_all(_: &[u8]) -> Result<(), i32> {
+        operation().await
+    }
+    pub async fn write_file(_: &[u8], _: &[u8]) -> Result<(), i32> {
+        operation().await
+    }
+    async fn operation() -> Result<(), i32> {
+        STATE.with(|state| state.borrow_mut().calls += 1);
+        std::future::poll_fn(|_| {
+            STATE.with(|state| {
+                let mut state = state.borrow_mut();
+                state.polls += 1;
+                if !state.ready {
+                    Poll::Pending
+                } else if state.fail {
+                    Poll::Ready(Err(-2))
+                } else {
+                    Poll::Ready(Ok(()))
+                }
+            })
+        })
+        .await
+    }
+}
+#[path = "../../../src/images.rs"]
+mod images;
+#[path = "../../../src/scripts.rs"]
+mod scripts;
+
+#[cfg(test)]
+mod image_layout_tests {
+    use super::*;
+    fn output(html: &str) -> layout::Export {
+        let document = rp5::parse(html);
+        let mut css = css::Css::default();
+        css.parse_document(&document, "https://example.com/");
+        layout::compute(&document, &css, (1280, 720)).unwrap()
+    }
+    #[test]
+    fn image_css_dimensions_override_html_and_aspect_ratio_fills_missing_axis() {
+        let result = output(
+            "<style>.css{width:120px;height:45px}.ratio{width:160px;aspect-ratio:4/1}</style><img class=css width=500 height=300><img class=ratio><img width=2000 height=1000><img><p>after</p>",
+        );
+        let sizes: Vec<_> = result
+            .image_boxes
+            .iter()
+            .map(|image| (image.rect[2], image.rect[3]))
+            .collect();
+        assert_eq!(
+            sizes,
+            [(120., 45.), (160., 40.), (1024., 512.), (300., 150.)]
+        );
+        assert!(result.text_runs.iter().any(|run| run.text == "after"));
+    }
+    #[test]
+    fn malicious_image_sizes_remain_bounded_and_overbudget_images_reserve_flow() {
+        let mut html = String::from(
+            "<style>img{display:block;width:1e30px;height:1e30px;min-width:1e30px;min-height:1e30px}</style>",
+        );
+        for i in 0..12 {
+            html.push_str(&format!(
+                "<img src='{i}.png' width='99999999999999999999999' height='NaN'>"
+            ));
+        }
+        html.push_str("<p>after</p>");
+        let result = output(&html);
+        assert_eq!(result.image_boxes.len(), 12);
+        assert!(
+            result
+                .image_boxes
+                .iter()
+                .all(|image| image.rect.iter().all(|v| v.is_finite())
+                    && image.rect[2] <= 1024.
+                    && image.rect[3] <= 1024.)
+        );
+        let last = result.image_boxes.last().unwrap().rect;
+        assert!(last[1] >= 11. * 1024.);
+        assert!(
+            result
+                .text_runs
+                .iter()
+                .any(|run| run.text == "after" && run.baseline_y >= last[1] + last[3])
+        );
+    }
+    #[test]
+    fn hidden_images_do_not_fetch_or_paint_and_zero_geometry_stays_empty() {
+        let result = output(
+            "<img hidden src=a.png><img style='display:none' src=b.png><img style='visibility:hidden' src=c.png><img width=0 height=0 src=d.png><img src=e.png>",
+        );
+        assert_eq!(result.image_boxes.len(), 2);
+        assert_eq!(result.image_boxes[0].rect[2..], [0., 0.]);
+        assert_eq!(result.image_boxes[1].rect[2..], [300., 150.]);
+    }
+    #[test]
+    fn extreme_finite_html_dimensions_do_not_overflow_aspect_projection() {
+        let result = output(
+            "<img height='3e38' style='aspect-ratio:1024/1'><img width='3e38' style='aspect-ratio:1/1024'><img width='1e-38' height='3e38'>",
+        );
+        assert_eq!(result.image_boxes.len(), 3);
+        assert!(result.image_boxes.iter().all(|image| {
+            image.rect.iter().all(|value| value.is_finite())
+                && image.rect[2] <= 1024.0
+                && image.rect[3] <= 1024.0
+        }));
+    }
+    #[test]
+    fn external_scripts_are_inspected_without_network_admission() {
+        let document = rp5::parse(
+            "<base href='https://cdn.example/scripts/'><script src=a.js></script><script src='a.js#dup'></script><script>inline()</script>",
+        );
+        let mut scripts = scripts::Scripts::default();
+        scripts.extract(&document, "https://example.com/");
+        assert_eq!(scripts.sources.len(), 2);
+        assert_eq!(
+            scripts.sources[0].origin,
+            "https://cdn.example/scripts/a.js"
+        );
+        assert_eq!(scripts.sources[0].nodes.len(), 2);
+        assert!(scripts.sources[0].bytes.is_none());
+        assert_eq!(
+            scripts.sources[1].bytes.as_deref(),
+            Some(b"inline()".as_slice())
+        );
+    }
+}

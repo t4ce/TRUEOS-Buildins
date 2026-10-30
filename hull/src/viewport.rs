@@ -110,6 +110,26 @@ impl Viewport {
         ])
     }
 
+    /// Crop texture coordinates together with the image rectangle, so scrolling
+    /// reveals the original pixels instead of squeezing the whole image into
+    /// the visible remainder. UVs are normalized over the full frozen box.
+    pub fn clip_image(&self, rect: [f32; 4]) -> Option<([f32; 4], [f32; 4])> {
+        let clipped = self.clip_rect(rect)?;
+        let [x, y, width, height] = rect;
+        let [left, top, visible_width, visible_height] = clipped;
+        let u0 = ((f64::from(left) + self.x - f64::from(x)) / f64::from(width)).clamp(0.0, 1.0);
+        let v0 = ((f64::from(top) + self.y - f64::from(y)) / f64::from(height)).clamp(0.0, 1.0);
+        Some((
+            clipped,
+            [
+                u0 as f32,
+                v0 as f32,
+                (u0 + f64::from(visible_width) / f64::from(width)).min(1.0) as f32,
+                (v0 + f64::from(visible_height) / f64::from(height)).min(1.0) as f32,
+            ],
+        ))
+    }
+
     /// Borrow only visible Unicode scalar columns, plus one column at each
     /// horizontal edge. The returned whole-run advance retains the original
     /// glyph spacing, including for multibyte UTF-8 text.

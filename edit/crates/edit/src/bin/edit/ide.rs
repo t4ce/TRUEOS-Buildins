@@ -8,7 +8,11 @@ use std::io;
 use std::path::Path;
 use std::rc::Rc;
 
-use trueos_ide::{LoadedSource, ProjectBuildConfig, ProjectSummary, SourceDatabase, SourceFileInput};
+use trueos_ide::{LoadedSource, ProjectBuildConfig, ProjectSummary, SourceFileInput};
+#[cfg(not(target_os = "trueos"))]
+use trueos_ide::SourceDatabase;
+#[cfg(target_os = "trueos")]
+use crate::ide_store::SourceDatabase;
 #[cfg(target_os = "trueos")]
 use trueos_ide::protocol;
 #[cfg(any(target_os = "trueos", test))]
@@ -33,6 +37,8 @@ pub struct IdeSession {
     #[cfg(target_os = "trueos")]
     compiler: Option<CompilerJob>,
     #[cfg(target_os = "trueos")]
+    codex_download: Option<(OwnedChild, String)>,
+    #[cfg(target_os = "trueos")]
     reply_errors: u8,
     #[cfg(target_os = "trueos")]
     poll_error_reported: bool,
@@ -41,7 +47,7 @@ pub struct IdeSession {
 pub struct IdeProject {
     database: SourceDatabase,
     pub source: LoadedSource,
-    // The writer lease outlives the database, including document-held handles.
+    // The project lease outlives document-held handles. The kernel owns redb.
     #[cfg(target_os = "trueos")]
     _registration: OwnerRegistration,
 }
@@ -83,6 +89,8 @@ impl IdeSession {
             #[cfg(target_os = "trueos")]
             compiler: None,
             #[cfg(target_os = "trueos")]
+            codex_download: None,
+            #[cfg(target_os = "trueos")]
             reply_errors: 0,
             #[cfg(target_os = "trueos")]
             poll_error_reported: false,
@@ -107,8 +115,6 @@ impl IdeSession {
             return Ok(());
         }
         self.check_project_change(documents)?;
-        let (source, config) = select_project(&mut self.project.borrow_mut().database, name, mode)?;
-        let prepared = DocumentManager::prepare_project(self.project.clone(), &source)?;
         #[cfg(target_os = "trueos")]
         {
             let mut project = self.project.borrow_mut();
@@ -118,8 +124,28 @@ impl IdeSession {
                 let _ = project._registration.change_project(&database, &previous);
                 return Err(error.into());
             }
-            self.tracker = BuildTracker::new_owned(workspace_epoch(), project._registration.endpoint);
         }
+        let selected = (|| -> crate::apperr::Result<_> {
+            let (source, config) = select_project(&mut self.project.borrow_mut().database, name, mode)?;
+            let prepared = DocumentManager::prepare_project(self.project.clone(), &source)?;
+            Ok((source, config, prepared))
+        })();
+        let (source, config, prepared) = match selected {
+            Ok(selected) => selected,
+            Err(error) => {
+                #[cfg(target_os = "trueos")]
+                {
+                    let mut project = self.project.borrow_mut();
+                    let database = project.database.path().to_owned();
+                    let previous = project.source.revision.project.clone();
+                    let _ = project._registration.change_project(&database, &previous);
+                    self.tracker = BuildTracker::new_owned(workspace_epoch(), project._registration.endpoint);
+                }
+                return Err(error);
+            }
+        };
+        #[cfg(target_os = "trueos")]
+        { self.tracker = BuildTracker::new_owned(workspace_epoch(), self.project.borrow()._registration.endpoint); }
         #[cfg(not(target_os = "trueos"))]
         { self.tracker = BuildTracker::new(workspace_epoch()); }
         self.project.borrow_mut().source = source;
@@ -131,6 +157,9 @@ impl IdeSession {
     }
 
     pub fn check_project_change(&self, documents: &DocumentManager) -> io::Result<()> {
+        if self.is_starting_codex() {
+            return Err(io::Error::other("Wait for Codex startup before changing projects"));
+        }
         if self.is_building() {
             return Err(io::Error::other("Wait for the current build before changing projects"));
         }
@@ -141,6 +170,35 @@ impl IdeSession {
     }
 
     pub fn is_building(&self) -> bool { self.tracker.active().is_some() }
+
+    pub fn is_starting_codex(&self) -> bool {
+        #[cfg(target_os = "trueos")]
+        return self.codex_download.is_some();
+        #[cfg(not(target_os = "trueos"))]
+        return false;
+    }
+
+    /// Codex has its own Shell3/Matrix lifetime. Only the download helper is
+    /// owned by Edit; closing the workspace never terminates a Codex session.
+    pub fn start_codex(&mut self) -> io::Result<()> {
+        #[cfg(not(target_os = "trueos"))]
+        return Err(io::Error::new(io::ErrorKind::Unsupported, "Codex VMs require TRUEOS"));
+        #[cfg(target_os = "trueos")]
+        {
+            if self.is_starting_codex() { return Ok(()); }
+            let script = protocol::codex_start_script(self.project.borrow()._registration.endpoint)
+                .map_err(io::Error::other)?;
+            match launch_codex(&script) {
+                Ok(()) => Ok(()),
+                Err(-2) => {
+                    let child = OwnedChild::spawn_script("apps.bp", "install codex\n")?;
+                    self.codex_download = Some((child, script));
+                    Ok(())
+                }
+                Err(code) => Err(io::Error::other(format!("Cannot start Codex ({code})"))),
+            }
+        }
+    }
 
     pub fn compile(&mut self) -> io::Result<u64> {
         #[cfg(not(target_os = "trueos"))]
@@ -257,7 +315,8 @@ impl IdeSession {
 
     #[cfg(target_os = "trueos")]
     pub fn poll(&mut self, documents: &mut DocumentManager) -> io::Result<bool> {
-        let changed = self.poll_children()?;
+        let codex_changed = self.poll_codex_download()?;
+        let changed = self.poll_children()? || codex_changed;
         let result = self.poll_requests(documents);
         match result {
             Ok(requests) => {
@@ -270,6 +329,31 @@ impl IdeSession {
             }
             Err(_) => Ok(changed),
         }
+    }
+
+    #[cfg(target_os = "trueos")]
+    fn poll_codex_download(&mut self) -> io::Result<bool> {
+        let Some((child, _)) = &mut self.codex_download else { return Ok(false) };
+        let result = child.poll();
+        match result {
+            Ok(false) if child.started.elapsed() < std::time::Duration::from_secs(600) => return Ok(false),
+            Ok(true) => {},
+            other => {
+                self.codex_download.take();
+                return Err(other.err().unwrap_or_else(||
+                    io::Error::new(io::ErrorKind::TimedOut, "Codex download timed out")));
+            }
+        }
+        let (child, script) = self.codex_download.take().unwrap();
+        launch_codex(&script).map_err(|code| {
+            let mut message = format!("Cannot start Codex after download ({code})");
+            if let Some(tail) = &child.diagnostics {
+                message.push('\n');
+                message.push_str(&String::from_utf8_lossy(&tail.bytes));
+            }
+            io::Error::other(message)
+        })?;
+        Ok(true)
     }
 
     #[cfg(target_os = "trueos")]
@@ -347,6 +431,7 @@ impl IdeSession {
 }
 
 pub fn list_database_projects(database: &Path) -> io::Result<Vec<ProjectSummary>> {
+    #[cfg(not(target_os = "trueos"))]
     match std::fs::metadata(database) {
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
         Err(error) => return Err(error),
@@ -456,6 +541,11 @@ struct CompilerJob {
 }
 
 #[cfg(target_os = "trueos")]
+fn launch_codex(script: &str) -> Result<(), i32> {
+    trueos::vshell::launch_with_destination("codex", script, trueos::vshell::LaunchDestination::NewShell3)
+}
+
+#[cfg(target_os = "trueos")]
 impl CompilerJob {
     fn start(program: &str, path: &str) -> io::Result<Self> {
         match OwnedChild::spawn(program, &["--ide-build", path], true) {
@@ -509,7 +599,7 @@ impl OwnedChild {
         let mut drained = false;
         for _ in 0..16 {
             let read = trueos::child_hull::read(self.handle, &mut buffer)
-                .map_err(|code| io::Error::other(format!("Compiler stream failed ({code})")))?;
+                .map_err(|code| io::Error::other(format!("Child stream failed ({code})")))?;
             if read == 0 { drained = true; break; }
             if let Some(diagnostics) = &mut self.diagnostics {
                 diagnostics.append(&buffer[..read]);
@@ -564,7 +654,7 @@ impl OwnerRegistration {
         };
         write_endpoint(protocol::REGISTER, &protocol::encode(&registration).map_err(io::Error::other)?)?;
         // Hold the lease while discovering its host-issued endpoint. Register
-        // established exclusive ownership of the resolved database. Reject
+        // established exclusive ownership of this project. Reject
         // ambiguous relative paths that resolve under different app roots.
         let endpoints: Vec<protocol::Endpoint> = protocol::decode(&read_endpoint(protocol::DISCOVER)?)
             .map_err(io::Error::other)?;
@@ -594,7 +684,10 @@ fn read_endpoint(path: &str) -> io::Result<Vec<u8>> {
 #[cfg(target_os = "trueos")]
 fn write_endpoint(path: &str, bytes: &[u8]) -> io::Result<()> {
     trueos::async_fs::block_on(trueos::async_fs::write_file(path.as_bytes(), bytes))
-        .map_err(|code| io::Error::other(format!("IDE write {path} failed ({code})")))
+        .map_err(|code| if path == protocol::REGISTER && code == -9 {
+            io::Error::new(io::ErrorKind::WouldBlock,
+                "This project is already open in another Edit window. Use that window, or close its project before opening it here.")
+        } else { io::Error::other(format!("IDE write {path} failed ({code})")) })
 }
 
 impl IdeProject {

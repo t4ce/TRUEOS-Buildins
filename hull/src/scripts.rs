@@ -2,13 +2,12 @@
 use std::collections::HashMap;
 
 use rp5::{Document, Namespace, NodeId};
-use trueos::{logl, netfs};
+use trueos::logl;
 use url::Url;
 
 #[derive(Default)]
 pub(super) struct Scripts {
     pub sources: Vec<ScriptSource>,
-    downloads: HashMap<u32, usize>,
 }
 
 pub(super) struct ScriptSource {
@@ -73,18 +72,8 @@ impl Scripts {
                     kind,
                     bytes: None,
                 });
-                if url.scheme() != "https" {
-                    report(format_args!(
-                        "script URL unsupported by HTTPS downloader: {url}"
-                    ));
-                    continue;
-                }
-                match netfs::fetch_bytes(url.as_str().as_bytes()) {
-                    Ok(operation) => {
-                        self.downloads.insert(operation, index);
-                    }
-                    Err(code) => report(format_args!("script download start {url}: {code}")),
-                }
+                // Keep the resolved source reference for inspection. Scripts
+                // cannot affect this static renderer and consume no network work.
             } else {
                 self.sources.push(ScriptSource {
                     nodes: vec![id],
@@ -97,49 +86,14 @@ impl Scripts {
         self.report_counts();
     }
 
-    pub fn poll_downloads(&mut self) {
-        let completed: Vec<_> = self
-            .downloads
-            .keys()
-            .copied()
-            .filter(|&operation| !matches!(netfs::fetch_bytes_result_len(operation), Err(-8)))
-            .collect();
-        for operation in completed {
-            let index = self.downloads.remove(&operation).unwrap();
-            let result = netfs::fetch_bytes_read(operation);
-            let _ = netfs::fetch_bytes_discard(operation);
-            match result {
-                Ok(bytes) => self.sources[index].bytes = Some(bytes),
-                Err(code) => report(format_args!(
-                    "script download {}: {code}",
-                    self.sources[index].origin
-                )),
-            }
-            self.report_counts();
-        }
-    }
-
     fn report_counts(&self) {
         logl::log(
             logl::level::INFO,
             format_args!(
-                "hull: scripts collected={} pending={} (inspection only)",
+                "hull: scripts collected={} (inspection only; external sources are not fetched)",
                 self.sources.len(),
-                self.downloads.len(),
             ),
         );
-    }
-
-    pub fn is_pending(&self) -> bool {
-        !self.downloads.is_empty()
-    }
-}
-
-impl Drop for Scripts {
-    fn drop(&mut self) {
-        for &operation in self.downloads.keys() {
-            let _ = netfs::fetch_bytes_discard(operation);
-        }
     }
 }
 

@@ -24,7 +24,19 @@ pub(super) struct Export {
     pub line_rects: Vec<[f32; 4]>,
     pub line_extent: (u32, u32),
     pub text_runs: Vec<TextRun>,
+    /// Frozen content boxes. Image completion changes paint only.
+    pub image_boxes: Vec<ImageBox>,
 }
+
+#[derive(Clone, Copy, Debug)]
+pub(super) struct ImageBox {
+    pub node: HtmlId,
+    pub rect: [f32; 4],
+}
+
+pub(super) const MAX_IMAGE_EDGE: f32 = 1024.0;
+const MAX_LAYOUT_LENGTH: f32 = 32_768.0;
+const MAX_DOCUMENT_EDGE: f32 = 1_000_000.0;
 
 /// The same baseline and textLength geometry written into the SVG snapshot.
 pub(super) struct TextRun {
@@ -100,6 +112,11 @@ pub(super) fn compute(
                     &mut inline[id],
                     &mut contents[id],
                 );
+                if name == "img" {
+                    image_style(&mut style, attrs, viewport);
+                    // A replaced element always owns its image content box.
+                    contents[id] = false;
+                }
                 if name == "html" {
                     root_font_size = metrics.font_size;
                 }
@@ -174,7 +191,8 @@ pub(super) fn compute(
                 let mut style = styles[id].clone();
                 let mut children = Vec::new();
                 let mut run = Vec::new();
-                let is_line_container = inline[id] && style.display == Display::Block;
+                let is_line_container =
+                    inline[id] && style.display == Display::Block && document.name(id) != "img";
                 if is_line_container {
                     style.display = Display::Flex;
                     style.flex_wrap = FlexWrap::Wrap;
@@ -283,19 +301,41 @@ pub(super) fn compute(
     let mut fragments: Vec<Vec<BoxRect>> = vec![vec![]; document.nodes.len()];
     let mut text_svg = String::new();
     let mut text_runs = Vec::new();
+    let mut image_boxes = Vec::new();
     let mut pending = vec![(root, 0.0f32, 0.0f32)];
     while let Some((tid, parent_x, parent_y)) = pending.pop() {
         let box_layout = tree.layout(tid)?;
-        let left = parent_x + box_layout.location.x;
-        let top = parent_y + box_layout.location.y;
+        let left = project_position(parent_x + box_layout.location.x);
+        let top = project_position(parent_y + box_layout.location.y);
         if let Some(&id) = owners.get(&tid) {
             if !hidden[id] && !contents[id] {
                 fragments[id].push(BoxRect {
                     left,
                     top,
-                    width: box_layout.size.width,
-                    height: box_layout.size.height,
+                    width: project_extent(box_layout.size.width),
+                    height: project_extent(box_layout.size.height),
                 });
+                if document.name(id) == "img" && text_metrics[id].paints() {
+                    let horizontal = box_layout.border.left + box_layout.padding.left;
+                    let vertical = box_layout.border.top + box_layout.padding.top;
+                    image_boxes.push(ImageBox {
+                        node: id,
+                        rect: [
+                            project_position(left + horizontal),
+                            project_position(top + vertical),
+                            (box_layout.size.width
+                                - horizontal
+                                - box_layout.border.right
+                                - box_layout.padding.right)
+                                .clamp(0.0, MAX_IMAGE_EDGE),
+                            (box_layout.size.height
+                                - vertical
+                                - box_layout.border.bottom
+                                - box_layout.padding.bottom)
+                                .clamp(0.0, MAX_IMAGE_EDGE),
+                        ],
+                    });
+                }
                 if let Some(context) = tree.get_node_context(tid) {
                     if !context.metrics.paints()
                         || !context.metrics.font_size.is_finite()
@@ -403,7 +443,7 @@ pub(super) fn compute(
     let json = serde_json::to_string_pretty(
         &serde_json::json!({"engine":"taffy","engine_version":"0.15.0","viewport":{"width":viewport.0,"height":viewport.1},"units":"layout units; CSS lengths currently map 1:1 for compatibility; SVG uses the same numeric coordinates","coordinates":"absolute layout units; right/bottom are rectangle edges, not CSS insets","text_metrics":"synthetic monospace cell metrics: 6 layout units advance by 11 layout units line height at 11-unit default font-size, scaled by inherited CSS font-size and line-height; no font shaping","limitations":["opacity:0 suppresses subtree paint and visibility is inherited; partial-opacity groups and compositing are not implemented","text widths and wrapping use synthetic monospace metrics; no font shaping","dynamic pseudo-classes, pseudo-elements, :has and namespace selectors are not implemented","media conditions cover viewport sizes and orientation; device preference queries, variables, calc, grid tracks, cascade layers and supports conditions are not implemented","inline flow uses approximate flex line boxes; nested inline boxes may wrap as a single item; no complete browser default stylesheet"],"unsupported_rule_count":unsupported_rules,"properties_not_used_for_layout":unused,"nodes":rows}),
     )?;
-    let extent = tree.layout(root)?.size.height.max(viewport.1 as f32);
+    let extent = project_extent(tree.layout(root)?.size.height).max(viewport.1 as f32);
     let mut svg = format!(
         "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{}\" height=\"{}\" viewBox=\"0 0 {} {}\"><rect width=\"100%\" height=\"100%\" fill=\"white\"/>",
         viewport.0, extent, viewport.0, extent
@@ -426,7 +466,130 @@ pub(super) fn compute(
         line_rects,
         line_extent: (viewport.0, extent.ceil() as u32),
         text_runs,
+        image_boxes,
     })
+}
+
+fn project_position(value: f32) -> f32 {
+    if value.is_finite() {
+        value.clamp(-MAX_DOCUMENT_EDGE, MAX_DOCUMENT_EDGE)
+    } else {
+        0.0
+    }
+}
+
+fn project_extent(value: f32) -> f32 {
+    if value.is_finite() {
+        value.clamp(0.0, MAX_DOCUMENT_EDGE)
+    } else {
+        0.0
+    }
+}
+
+/// Use CSS sizes first, HTML dimensions next, then the 300x150 replaced-element
+/// fallback. These sizes never depend on downloaded pixels. Percentages remain
+/// relative to the containing block. Percentage min/max constraints are projected
+/// against the viewport for this bounded static image policy.
+fn image_style(style: &mut Style, attrs: &[rp5::Attribute], viewport: (u32, u32)) {
+    style.item_is_replaced = true;
+    let attribute = |name: &str| {
+        attrs
+            .iter()
+            .find(|attr| attr.namespace.is_none() && attr.name == name)
+            .and_then(|attr| attr.value.trim().parse::<f32>().ok())
+            .filter(|value| value.is_finite() && *value >= 0.0)
+    };
+    let width = attribute("width");
+    let height = attribute("height");
+    if style.aspect_ratio.is_none() {
+        style.aspect_ratio =
+            width
+                .zip(height)
+                .filter(|&(w, h)| w > 0.0 && h > 0.0)
+                .map(|(w, h)| {
+                    (f64::from(w) / f64::from(h))
+                        .clamp(1.0 / f64::from(MAX_IMAGE_EDGE), f64::from(MAX_IMAGE_EDGE))
+                        as f32
+                });
+    }
+    if style.size.width.is_auto() {
+        if let Some(width) = width {
+            style.size.width = Dimension::from_length(width);
+        }
+    }
+    if style.size.height.is_auto() {
+        if let Some(height) = height {
+            style.size.height = Dimension::from_length(height);
+        }
+    }
+    style.aspect_ratio = style
+        .aspect_ratio
+        .filter(|ratio| ratio.is_finite() && *ratio > 0.0);
+    let ratio = style
+        .aspect_ratio
+        .unwrap_or(2.0)
+        .clamp(1.0 / MAX_IMAGE_EDGE, MAX_IMAGE_EDGE);
+    if style.size.width.is_auto() && style.size.height.is_auto() {
+        style.size.width = Dimension::from_length(300.0);
+        style.size.height = Dimension::from_length((300.0 / ratio).min(MAX_IMAGE_EDGE));
+    } else if style.size.width.is_auto() {
+        if let Some(height) = style.size.height.into_option() {
+            style.size.width = Dimension::from_length(
+                (f64::from(height) * f64::from(ratio)).min(f64::from(f32::MAX)) as f32,
+            );
+        } else {
+            style.aspect_ratio = Some(ratio);
+        }
+    } else if style.size.height.is_auto() {
+        if let Some(width) = style.size.width.into_option() {
+            style.size.height = Dimension::from_length(
+                (f64::from(width) / f64::from(ratio)).min(f64::from(f32::MAX)) as f32,
+            );
+        } else {
+            style.aspect_ratio = Some(ratio);
+        }
+    }
+    // When both axes are known, fit the pair together to retain its ratio.
+    if let Some((width, height)) = style
+        .size
+        .width
+        .into_option()
+        .zip(style.size.height.into_option())
+    {
+        let scale = (MAX_IMAGE_EDGE / width.max(height)).min(1.0);
+        style.size.width = Dimension::from_length(width * scale);
+        style.size.height = Dimension::from_length(height * scale);
+    }
+    for dimension in [&mut style.size.width, &mut style.size.height] {
+        if let Some(value) = dimension.into_option() {
+            *dimension = Dimension::from_length(value.clamp(0.0, MAX_IMAGE_EDGE));
+        }
+    }
+    for (minimum, maximum, context) in [
+        (
+            &mut style.min_size.width,
+            &mut style.max_size.width,
+            viewport.0 as f32,
+        ),
+        (
+            &mut style.min_size.height,
+            &mut style.max_size.height,
+            viewport.1 as f32,
+        ),
+    ] {
+        *minimum = LengthPercentageAuto::from_length(
+            minimum
+                .resolve_to_option(context, |_, _| 0.0)
+                .unwrap_or(0.0)
+                .clamp(0.0, MAX_IMAGE_EDGE),
+        );
+        *maximum = LengthPercentageAuto::from_length(
+            maximum
+                .resolve_to_option(context, |_, _| 0.0)
+                .unwrap_or(MAX_IMAGE_EDGE)
+                .clamp(0.0, MAX_IMAGE_EDGE),
+        );
+    }
 }
 
 fn matches_selector(
@@ -813,7 +976,7 @@ fn font_size(value: &CssFontSize, parent: f32, context: ResolveContext) -> Optio
             RelativeFontSize::Smaller => parent / 1.2,
         },
     };
-    size.is_finite().then_some(size.max(0.0))
+    size.is_finite().then_some(size.clamp(0.0, 1_440.0))
 }
 
 fn line_height(
@@ -823,7 +986,7 @@ fn line_height(
 ) -> Option<LineHeightMetric> {
     let metric = match value {
         CssLineHeight::Normal => LineHeightMetric::Normal,
-        CssLineHeight::Number(value) => LineHeightMetric::Number(*value),
+        CssLineHeight::Number(value) => LineHeightMetric::Number(value.clamp(0.0, 64.0)),
         CssLineHeight::Length(CssLengthPercentage::Dimension(value)) => {
             LineHeightMetric::Absolute(scalar(
                 value,
@@ -834,7 +997,7 @@ fn line_height(
             )?)
         }
         CssLineHeight::Length(CssLengthPercentage::Percentage(value)) => {
-            LineHeightMetric::Absolute(font_size * value.0)
+            LineHeightMetric::Absolute((font_size * value.0).clamp(0.0, MAX_LAYOUT_LENGTH))
         }
         CssLineHeight::Length(_) => return None,
     };
@@ -870,7 +1033,9 @@ fn scalar(value: &LengthValue, context: ResolveContext) -> Option<f32> {
         Pc(v) => *v * 16.0,
         _ => return None,
     };
-    result.is_finite().then_some(result)
+    result
+        .is_finite()
+        .then_some(result.clamp(-MAX_LAYOUT_LENGTH, MAX_LAYOUT_LENGTH))
 }
 fn raw_length(
     value: &CssLengthPercentage,
@@ -880,9 +1045,9 @@ fn raw_length(
         CssLengthPercentage::Dimension(value) => {
             scalar(value, context).map(taffy::style::LengthPercentage::from_length)
         }
-        CssLengthPercentage::Percentage(value) => {
-            Some(taffy::style::LengthPercentage::from_percent(value.0))
-        }
+        CssLengthPercentage::Percentage(value) => Some(
+            taffy::style::LengthPercentage::from_percent(value.0.clamp(-16.0, 16.0)),
+        ),
         _ => None,
     }
 }
@@ -901,9 +1066,9 @@ fn auto(value: &LengthPercentageOrAuto, context: ResolveContext) -> Option<Lengt
         LengthPercentageOrAuto::LengthPercentage(CssLengthPercentage::Dimension(value)) => {
             scalar(value, context).map(LengthPercentageAuto::from_length)
         }
-        LengthPercentageOrAuto::LengthPercentage(CssLengthPercentage::Percentage(value)) => {
-            Some(LengthPercentageAuto::from_percent(value.0))
-        }
+        LengthPercentageOrAuto::LengthPercentage(CssLengthPercentage::Percentage(value)) => Some(
+            LengthPercentageAuto::from_percent(value.0.clamp(-16.0, 16.0)),
+        ),
         _ => None,
     }
 }
@@ -914,7 +1079,7 @@ fn dimension(value: &CssSize, context: ResolveContext) -> Option<Dimension> {
             scalar(value, context).map(Dimension::from_length)
         }
         CssSize::LengthPercentage(CssLengthPercentage::Percentage(value)) => {
-            Some(Dimension::from_percent(value.0))
+            Some(Dimension::from_percent(value.0.clamp(0.0, 16.0)))
         }
         _ => None,
     }
@@ -975,6 +1140,14 @@ fn apply_property(style: &mut Style, property: &Property<'_>, context: ResolveCo
         };
     }
     match property {
+        Property::AspectRatio(value) => {
+            style.aspect_ratio = value
+                .ratio
+                .as_ref()
+                .map(|ratio| ratio.0 / ratio.1)
+                .filter(|ratio| ratio.is_finite() && *ratio > 0.0)
+                .map(|ratio| ratio.clamp(1.0 / MAX_IMAGE_EDGE, MAX_IMAGE_EDGE));
+        }
         Property::MaxWidth(value) => set!(style.max_size.width, value, maximum),
         Property::MaxHeight(value) => set!(style.max_size.height, value, maximum),
         Property::BoxSizing(value, _) => {
@@ -1052,8 +1225,8 @@ fn apply_property(style: &mut Style, property: &Property<'_>, context: ResolveCo
                 _ => Position::Relative,
             }
         }
-        Property::FlexGrow(value, _) => style.flex_grow = *value,
-        Property::FlexShrink(value, _) => style.flex_shrink = *value,
+        Property::FlexGrow(value, _) => style.flex_grow = value.clamp(0.0, 1000.0),
+        Property::FlexShrink(value, _) => style.flex_shrink = value.clamp(0.0, 1000.0),
         Property::FlexDirection(value, _) => {
             style.flex_direction = match value {
                 lightningcss::properties::flex::FlexDirection::Row => FlexDirection::Row,
@@ -1691,6 +1864,7 @@ fn used_for_layout(name: &str) -> bool {
         name,
         "width"
             | "height"
+            | "aspect-ratio"
             | "min-width"
             | "min-height"
             | "max-width"

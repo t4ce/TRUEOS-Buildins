@@ -1,5 +1,6 @@
 //! One-shot CSS parsing. HTML extraction stays in rp5; CSS syntax belongs to Lightning CSS.
 use std::collections::{HashMap, HashSet};
+use std::time::{Duration, Instant};
 
 use lightningcss::rules::CssRule;
 use lightningcss::stylesheet::{ParserOptions, StyleAttribute, StyleSheet};
@@ -21,7 +22,15 @@ pub(super) struct Css {
     pub sources: Vec<CssSource>,
     pub roots: Vec<RootStylesheet>,
     pub external_sheets: HashMap<String, usize>,
+    started: Option<Instant>,
+    source_bytes: usize,
+    frozen: bool,
 }
+
+const MAX_STYLESHEETS: usize = 16;
+const MAX_SHEET_BYTES: usize = 512 * 1024;
+const MAX_CSS_BYTES: usize = 2 * 1024 * 1024;
+const CSS_WAIT: Duration = Duration::from_millis(2_000);
 
 pub(super) struct RootStylesheet {
     pub source: SheetReference,
@@ -41,6 +50,7 @@ pub(super) struct CssSource {
 
 impl Css {
     pub fn parse_document(&mut self, document: &rp5::Document, page_url: &str) {
+        self.started = Some(Instant::now());
         let Ok(mut base) = Url::parse(page_url) else {
             return;
         };
@@ -66,6 +76,9 @@ impl Css {
                 continue;
             };
             if let Some(code) = attribute(attrs, "style") {
+                if !self.admit_source(code.len()) {
+                    continue;
+                }
                 self.sources.push(CssSource {
                     node: Some(id),
                     inline: true,
@@ -83,6 +96,9 @@ impl Css {
                     .is_none_or(|value| value.is_empty() || value.eq_ignore_ascii_case("text/css"))
             {
                 let code = document.text_content(id);
+                if !self.admit_source(code.len()) {
+                    continue;
+                }
                 self.sources.push(CssSource {
                     node: Some(id),
                     inline: false,
@@ -154,6 +170,9 @@ impl Css {
     }
 
     fn request(&mut self, base: &Url, reference: &str) -> Option<String> {
+        if self.frozen || reference.len() > 4096 {
+            return None;
+        }
         let mut url = match base.join(reference) {
             Ok(url) => url,
             Err(error) => {
@@ -162,7 +181,7 @@ impl Css {
             }
         };
         url.set_fragment(None);
-        if !self.requested.insert(url.to_string()) {
+        if self.requested.contains(url.as_str()) {
             return Some(url.to_string());
         }
         if url.scheme() != "https" {
@@ -171,6 +190,10 @@ impl Css {
             ));
             return None;
         }
+        if self.requested.len() >= MAX_STYLESHEETS {
+            return None;
+        }
+        self.requested.insert(url.to_string());
         match netfs::fetch_bytes(url.as_str().as_bytes()) {
             Ok(operation) => {
                 self.downloads.insert(operation, url.clone());
@@ -181,15 +204,27 @@ impl Css {
     }
 
     pub fn poll_downloads(&mut self) {
+        if self
+            .started
+            .is_some_and(|started| started.elapsed() >= CSS_WAIT)
+        {
+            self.freeze();
+            return;
+        }
         let completed: Vec<_> = self
             .downloads
             .keys()
             .copied()
             .filter(|&operation| !matches!(netfs::fetch_bytes_result_len(operation), Err(-8)))
+            .take(4)
             .collect();
         for operation in completed {
             let source = self.downloads.remove(&operation).unwrap();
-            let result = netfs::fetch_bytes_read(operation);
+            let result = match netfs::fetch_bytes_result_len(operation) {
+                Ok(len) if self.admit_source(len) => netfs::fetch_bytes_read(operation),
+                Ok(_) => Err(-4),
+                Err(code) => Err(code),
+            };
             let _ = netfs::fetch_bytes_discard(operation);
             match result {
                 Ok(bytes) => {
@@ -212,6 +247,28 @@ impl Css {
 
     pub fn is_pending(&self) -> bool {
         !self.downloads.is_empty()
+    }
+
+    fn admit_source(&mut self, len: usize) -> bool {
+        if len > MAX_SHEET_BYTES || len > MAX_CSS_BYTES.saturating_sub(self.source_bytes) {
+            return false;
+        }
+        self.source_bytes += len;
+        true
+    }
+
+    /// Layout uses the styles collected so far. Late CSS never moves an already
+    /// published image box or delays text indefinitely.
+    pub fn freeze(&mut self) {
+        if !self.downloads.is_empty() {
+            report(format_args!(
+                "stylesheet deadline reached; using collected styles"
+            ));
+        }
+        for (operation, _) in self.downloads.drain() {
+            let _ = netfs::fetch_bytes_discard(operation);
+        }
+        self.frozen = true;
     }
 
     fn report_counts(&self) {
@@ -262,5 +319,42 @@ fn parse_media(value: Option<&str>) -> Option<lightningcss::media_query::MediaLi
                 }],
             })
         }
+    }
+}
+
+#[cfg(test)]
+mod budget_tests {
+    use super::*;
+
+    #[test]
+    fn recursive_css_requests_are_bounded_and_deadline_freezes_collected_styles() {
+        let mut html = String::from("<style>p{width:120px}</style>");
+        for i in 0..100 {
+            html.push_str(&format!("<link rel='stylesheet' href='{i}.css'>"));
+        }
+        let document = rp5::parse(&html);
+        let mut css = Css::default();
+        css.parse_document(&document, "https://example.com/");
+        assert_eq!(css.downloads.len(), MAX_STYLESHEETS);
+        assert_eq!(css.sheets.len(), 1);
+        css.started = Some(Instant::now() - CSS_WAIT);
+        css.poll_downloads();
+        assert!(!css.is_pending());
+        assert_eq!(css.sheets.len(), 1);
+        assert!(
+            css.request(&Url::parse("https://example.com/").unwrap(), "late.css")
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn stylesheet_byte_budget_refuses_oversized_sources_before_parsing() {
+        let mut css = Css::default();
+        assert!(!css.admit_source(MAX_SHEET_BYTES + 1));
+        assert_eq!(css.source_bytes, 0);
+        for _ in 0..MAX_CSS_BYTES / MAX_SHEET_BYTES {
+            assert!(css.admit_source(MAX_SHEET_BYTES));
+        }
+        assert!(!css.admit_source(1));
     }
 }

@@ -11,6 +11,7 @@ use winit::platform::trueos::{ActiveEventLoopExtTrueOS, WindowExtTrueOS};
 use winit::window::{Window, WindowAttributes, WindowId};
 
 mod css;
+mod images;
 mod layout;
 mod scripts;
 mod shellio;
@@ -26,6 +27,7 @@ struct Hull {
     window: Option<Box<dyn Window>>,
     target: Option<SceneTarget>,
     pending_publish: bool,
+    image_frame_recovery: bool,
     quads_dirty: bool,
     redraw_reason: &'static str,
     frame_counter: shellio::FrameCounter,
@@ -40,7 +42,12 @@ struct Hull {
     document: Option<rp5::Document>,
     css: css::Css,
     scripts: scripts::Scripts,
-    save_attempted: bool,
+    layout_attempted: bool,
+    generation: u64,
+    layout_generation: Option<u64>,
+    published_generation: Option<u64>,
+    images: images::Images,
+    snapshot: snapshot::Snapshot,
     page_url: String,
     shell_input: shellio::ShellInput,
     queued_urls: VecDeque<String>,
@@ -93,7 +100,20 @@ impl Hull {
                 self.document = None;
                 self.css = css::Css::default();
                 self.scripts = scripts::Scripts::default();
-                self.save_attempted = false;
+                self.layout_attempted = false;
+                self.generation = self.generation.wrapping_add(1).max(1);
+                self.layout_generation = None;
+                self.published_generation = None;
+                self.snapshot = snapshot::Snapshot::default();
+                if let Some(target) = &self.target {
+                    self.images.reset(target.render_target(), self.generation);
+                }
+                // A pending old frame must not publish after its assets retire.
+                self.pending_publish = false;
+                self.quads_dirty = true;
+                if let Some(window) = &self.window {
+                    window.request_redraw();
+                }
                 self.page_url = url;
                 self.download = Some(operation);
                 vshell::linef(format_args!("hull: downloading {}", self.page_url));
@@ -130,7 +150,11 @@ impl Hull {
     fn page_pending(&self) -> bool {
         self.download.is_some()
             || self.css.is_pending()
-            || (self.document.is_some() && !self.save_attempted)
+            || (self.document.is_some()
+                && (!self.layout_attempted
+                    || self
+                        .layout_generation
+                        .is_some_and(|generation| self.published_generation != Some(generation))))
     }
 
     fn poll_download(&mut self) {
@@ -142,6 +166,10 @@ impl Hull {
             Err(code) => logl::log(
                 logl::level::ERROR,
                 format_args!("hull: download failed: {code}"),
+            ),
+            Ok(len) if len > 4 * 1024 * 1024 => logl::log(
+                logl::level::ERROR,
+                format_args!("hull: HTML exceeds 4 MiB page budget"),
             ),
             Ok(_) => match netfs::fetch_bytes_read(operation) {
                 Ok(bytes) => {
@@ -187,24 +215,53 @@ impl ApplicationHandler for Hull {
         self.poll_shell_input();
         self.poll_download();
         self.css.poll_downloads();
-        self.scripts.poll_downloads();
-        // Scripts are inspection-only; their downloads cannot block CSS layout.
-        if !self.save_attempted && self.document.is_some() && !self.css.is_pending() {
-            self.save_attempted = true;
-            let result = snapshot::save_svg(
+        // Images and persistence can only begin after this navigation's initial
+        // layout and text have successfully published. Neither gates navigation.
+        if self.images.poll() {
+            self.quads_dirty = true;
+            self.redraw_reason = "image";
+            if let Some(window) = &self.window {
+                window.request_redraw();
+            }
+        }
+        if self.published_generation == Some(self.generation) {
+            self.snapshot.poll();
+        }
+        if !self.layout_attempted && self.document.is_some() && !self.css.is_pending() {
+            self.layout_attempted = true;
+            self.css.freeze();
+            let started = std::time::Instant::now();
+            let result = layout::compute(
                 self.document.as_ref().unwrap(),
                 &self.css,
-                &self.page_url,
                 self.window
                     .as_ref()
                     .map(|window| window.surface_size())
                     .map(|size| (size.width, size.height))
                     .unwrap_or((1280, 720)),
             )
+            .map_err(|error| error.to_string())
             .and_then(|layout| {
                 if self.quads.is_none() {
-                    self.quads = Some(xxx::Quads::new()?);
+                    self.quads =
+                        Some(xxx::Quads::new().map_err(|code| format!("quad setup: {code}"))?);
                 }
+                logl::log(
+                    logl::level::INFO,
+                    format_args!(
+                        "hull: layout complete boxes={} images={} elapsed_ms={}",
+                        layout.line_rects.len(),
+                        layout.image_boxes.len(),
+                        started.elapsed().as_millis()
+                    ),
+                );
+                self.images.collect(
+                    self.document.as_ref().unwrap(),
+                    &self.page_url,
+                    layout.image_boxes,
+                );
+                self.snapshot.prepare(&self.page_url, layout.svg);
+                self.layout_generation = Some(self.generation);
                 self.layout_extent = layout.line_extent;
                 self.text_runs = layout.text_runs;
                 self.rectangles = layout.line_rects;
@@ -338,7 +395,10 @@ impl ApplicationHandler for Hull {
                         .iter()
                         .filter_map(|&rect| self.viewport.clip_rect(rect))
                         .collect();
-                    if let Some(quads) = &mut self.quads {
+                    let mut drew_native = false;
+                    if self.image_frame_recovery {
+                        images::recover_frame(target)?;
+                    } else if let Some(quads) = &mut self.quads {
                         quads
                             .set_layout(size.width, size.height, &visible_rectangles)
                             .map_err(|code| {
@@ -349,8 +409,16 @@ impl ApplicationHandler for Hull {
                                 }
                             })?;
                         quads.draw(target)?;
+                        drew_native = true;
                     } else {
                         target.begin(rgba(35, 39, 39, 255))?;
+                    }
+                    if !self.image_frame_recovery && self.images.draw(&self.viewport, target) {
+                        // The failed scene may have canceled its lease. Do not
+                        // submit text or publish until recovery checks it again.
+                        self.image_frame_recovery = true;
+                        self.quads_dirty = true;
+                        return Err(Error::Busy);
                     }
                     if !self.text_runs.is_empty() {
                         // Document pixels remain document pixels. Cull and trim
@@ -379,7 +447,12 @@ impl ApplicationHandler for Hull {
                                 })
                             })
                             .collect();
-                        target.draw_hull_text_runs(&runs)?;
+                        match target.draw_hull_text_runs(&runs) {
+                            Err(Error::InvalidState) if self.image_frame_recovery => {
+                                return Err(Error::Busy);
+                            }
+                            result => result?,
+                        }
                         let (x, y) = self.viewport.offset();
                         let (doc_width, doc_height) = self.viewport.document_extent();
                         vshell::linef(format_args!(
@@ -403,7 +476,7 @@ impl ApplicationHandler for Hull {
                         self.redraw_reason,
                         size.width,
                         size.height,
-                        self.quads.is_some(),
+                        drew_native,
                     );
                     self.quads_dirty = false;
                     self.pending_publish = true;
@@ -411,9 +484,21 @@ impl ApplicationHandler for Hull {
                 window.pre_present_notify();
                 let size = window.surface_size();
                 self.frame_counter.publishing();
-                target.publish(Damage::full(size.width, size.height))?;
+                match target.publish(Damage::full(size.width, size.height)) {
+                    Err(Error::InvalidState) if self.image_frame_recovery => {
+                        self.pending_publish = false;
+                        self.quads_dirty = true;
+                        return Err(Error::Busy);
+                    }
+                    result => result?,
+                }
                 self.frame_counter.published();
                 self.pending_publish = false;
+                self.image_frame_recovery = false;
+                if self.layout_generation == Some(self.generation) {
+                    self.published_generation = Some(self.generation);
+                    self.images.published();
+                }
                 if self.quads_dirty {
                     window.request_redraw();
                 }
