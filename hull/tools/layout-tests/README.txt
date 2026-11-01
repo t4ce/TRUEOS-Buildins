@@ -41,12 +41,13 @@ Quad painting:
 
 Native border pass:
 - Runs over either fill pass, before images/text, using PotatoStamps' V2
-  LINE_LOOP geometry type. Each pink diagnostic box contributes exactly one
+  LINE_LOOP geometry type. Borders default to zero: only boxes with a positive
+  used CSS border width contribute a loop. Each such diagnostic box contributes one
   loop: four unrepeated vertices for square corners, plus one vertex/segment
   per nonzero corner radius (eight segments for four rounded corners).
 - Rounded corners are straight chords between shortened sides. Pixel and
   percentage radii are resolved per box and reduced together if they overlap.
-- Width stays at the native 3px default. The uniform loop color defaults to
+- Visible borders keep the native 3px width. The uniform loop color defaults to
   black; authored border/border-color/border-top-color uses the cascaded top
   border color, including currentColor and alpha. Per-side colors/styles and
   authored widths are intentionally not reproduced by this baseline pass.
@@ -55,3 +56,5 @@ Native border pass:
   in batches of at most 340 native draws with LOAD_COLOR, preserving the
   existing fill and order. The 600-entry ABI array is only wire capacity.
 - The kernel and built-in vGPU facade must both include the V2 LOAD_COLOR flag.
+
+Hyperlinks with href default to blue; authored CSS color overrides that default.

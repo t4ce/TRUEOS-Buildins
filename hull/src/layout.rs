@@ -122,6 +122,10 @@ pub(super) fn compute(
         };
         match &node.kind {
             NodeKind::Element { name, attrs, .. } => {
+                // Minimal link default; authored CSS still wins below.
+                if name == "a" && attrs.iter().any(|attr| attr.name == "href") {
+                    metrics.color = [0, 0, 255, 255];
+                }
                 let context = ResolveContext {
                     viewport,
                     font_size: inherited.font_size,
@@ -435,16 +439,22 @@ pub(super) fn compute(
             {
                 if let Some(rect) = rect {
                     rectangles.push((id, rect.left, rect.top, rect.width, rect.height));
-                    border_quads.push(BorderQuad {
-                        rect: [rect.left, rect.top, rect.width, rect.height],
-                        color: text_metrics[id].border_color,
-                        radii: text_metrics[id].border_radii.map(|[x, y]| {
-                            [
-                                x.pixels + x.fraction * rect.width,
-                                y.pixels + y.fraction * rect.height,
-                            ]
-                        }),
-                    });
+                    let border = styles[id].border;
+                    if [border.top, border.right, border.bottom, border.left]
+                        .iter()
+                        .any(|width| *width != taffy::style::LengthPercentage::from_length(0.0))
+                    {
+                        border_quads.push(BorderQuad {
+                            rect: [rect.left, rect.top, rect.width, rect.height],
+                            color: text_metrics[id].border_color,
+                            radii: text_metrics[id].border_radii.map(|[x, y]| {
+                                [
+                                    x.pixels + x.fraction * rect.width,
+                                    y.pixels + y.fraction * rect.height,
+                                ]
+                            }),
+                        });
+                    }
                 }
                 if !contents[id] && text_metrics[id].background[3] != 0 {
                     for rect in &fragments[id] {

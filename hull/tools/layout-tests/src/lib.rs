@@ -149,14 +149,14 @@ mod tests {
     }
 
     #[test]
-    fn border_defaults_and_authored_radius_and_color_use_the_same_pink_boxes() {
+    fn authored_border_radius_and_color_use_the_same_pink_boxes() {
         let (_, output) = export(
             r#"<div id="plain"><div id="child"></div></div><div id="round" style="border-radius:10px 20%;border-top-left-radius:5px 8px;color:blue;border-color:currentColor"></div>"#,
-            "div { width:100px; height:50px } #plain { border-radius:12px; border-color:red }",
+            "div { width:100px; height:50px; box-sizing:border-box } #plain, #round { border:3px solid } #plain { border-radius:12px; border-color:red }",
         );
-        assert_eq!(output.border_quads.len(), output.line_rects.len());
-        for (border, rect) in output.border_quads.iter().zip(&output.line_rects) {
-            assert_eq!(&border.rect, rect);
+        assert_eq!(output.border_quads.len(), 2);
+        for border in &output.border_quads {
+            assert!(output.line_rects.contains(&border.rect));
         }
         let round = output.border_quads.last().unwrap();
         assert_eq!(round.color, [0, 0, 255, 255]);
@@ -164,9 +164,41 @@ mod tests {
             round.radii,
             [[5.0, 8.0], [20.0, 10.0], [10.0, 10.0], [20.0, 10.0]]
         );
-        let plain_child = &output.border_quads[output.border_quads.len() - 2];
-        assert_eq!(plain_child.color, [0, 0, 0, 255]);
-        assert_eq!(plain_child.radii, [[0.0; 2]; 4]);
+        assert_eq!(output.border_quads[0].color, [255, 0, 0, 255]);
+    }
+
+    #[test]
+    fn hyperlinks_default_blue_and_authored_css_overrides_it() {
+        let (_, output) = export(
+            r#"<div style="color:red"><a href="/">blue<span>child</span></a><a>plain</a><a href="/" style="color:green">styled</a></div>"#,
+            "",
+        );
+        for (text, expected) in [
+            ("blue", [0, 0, 255, 255]),
+            ("child", [0, 0, 255, 255]),
+            ("plain", [255, 0, 0, 255]),
+            ("styled", [0, 128, 0, 255]),
+        ] {
+            assert_eq!(
+                output
+                    .text_runs
+                    .iter()
+                    .find(|run| run.text == text)
+                    .unwrap()
+                    .color,
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn default_zero_and_none_borders_emit_no_native_loops() {
+        let (_, output) = export(
+            r#"<div></div><a href="/">link</a><div style="border-radius:10px;border-color:red"></div><div style="border:0 solid red"></div><div style="border:3px solid red;border:none"></div>"#,
+            "div { width:100px; height:50px }",
+        );
+        assert!(!output.line_rects.is_empty());
+        assert!(output.border_quads.is_empty());
     }
 
     fn node<'a>(

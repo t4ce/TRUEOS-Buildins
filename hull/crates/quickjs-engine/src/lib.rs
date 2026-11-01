@@ -326,6 +326,26 @@ mod tests {
     }
 
     #[test]
+    fn unavailable_exception_message_replaces_previous_diagnostic_and_recovers() {
+        let mut engine = Engine::new().unwrap();
+        // Prime the reusable buffer so a missing terminator would expose stale
+        // message or stack bytes after the shorter fixed fallback.
+        let previous = engine
+            .eval(b"throw new Error('x'.repeat(200))", "previous.js", false)
+            .unwrap_err();
+        assert!(previous.len() > 100);
+        let error = engine
+            .eval(
+                b"throw { toString() { throw 0; }, get stack() { throw 0; } }",
+                "unprintable.js",
+                false,
+            )
+            .unwrap_err();
+        assert_eq!(error, "JavaScript exception (message unavailable)");
+        engine.eval(b"1 + 1", "recovery.js", false).unwrap();
+    }
+
+    #[test]
     fn persistent_state_is_local_to_one_engine() {
         let mut engine = Engine::new().unwrap();
         engine

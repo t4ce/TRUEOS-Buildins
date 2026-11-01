@@ -158,7 +158,11 @@ const char *hull_quickjs_exception(void *pointer) {
         JS_FreeValue(context, stack);
     }
     JS_FreeValue(context, exception);
-    if (!engine->error[0]) strcpy(engine->error, "JavaScript exception (message unavailable)");
+    if (!engine->error[0]) {
+        static const char fallback[] = "JavaScript exception (message unavailable)";
+        // Include the terminator and use the existing TRUEOS memcpy binding.
+        memcpy(engine->error, fallback, sizeof(fallback));
+    }
     return engine->error;
 }
 "#;
