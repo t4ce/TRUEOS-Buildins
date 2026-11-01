@@ -12,12 +12,14 @@ use url::Url;
 
 use super::{favicon, layout::ImageBox, viewport::Viewport};
 
-const MAX_ASSETS: usize = 8;
+const MAX_ASSETS: usize = 42;
 const POLLS_PER_TICK: usize = 2;
 const MAX_VISIBLE_BOXES: usize = 2048;
-// Allow all eight tickets to queue behind the kernel's two fetch workers.
-// The kernel owns per-stage deadlines; this is only an orphan/admission guard.
-const IMAGE_DEADLINE: Duration = Duration::from_secs(90);
+// Only repeated admission failure is aged out here. Accepted tickets can wait
+// behind 42 jobs on two fetch workers (or the kernel's one-worker fallback),
+// which can legitimately exceed 90 seconds. Kernel stages and navigation own
+// accepted-ticket deadlines and cancellation.
+const IMAGE_ADMISSION_DEADLINE: Duration = Duration::from_secs(90);
 
 #[derive(Default)]
 pub(super) struct Images {
@@ -81,7 +83,7 @@ impl Images {
         self.poll();
     }
 
-    /// Call immediately after reset on successful navigation. One of the eight
+    /// Call immediately after reset on successful navigation. One of the 42
     /// service slots is reserved for favicon work, sharing this generation.
     pub fn start_favicon(&mut self, page_url: &str) {
         self.favicon_enabled = true;
@@ -306,7 +308,7 @@ impl Images {
             if let Some(index) = request {
                 let asset = &mut self.assets[index];
                 let started = asset.started.get_or_insert_with(Instant::now);
-                if started.elapsed() > IMAGE_DEADLINE {
+                if started.elapsed() > IMAGE_ADMISSION_DEADLINE {
                     asset.finished = true;
                 } else {
                     match hull_image_request(
@@ -346,9 +348,6 @@ impl Images {
             let Some(ticket) = asset.ticket else {
                 continue;
             };
-            let expired = asset
-                .started
-                .is_some_and(|started| started.elapsed() > IMAGE_DEADLINE);
             match hull_image_status(window, ticket) {
                 Ok(info) if info.generation != self.generation => asset.finished = true,
                 Ok(info)
@@ -373,8 +372,7 @@ impl Images {
                         ));
                     }
                 }
-                Ok(_) | Err(Error::Busy) if !expired => {}
-                Ok(_) => asset.finished = true,
+                Ok(_) | Err(Error::Busy) => {}
                 Err(error) => {
                     asset.finished = true;
                     if Some(index) != self.favicon_asset {
@@ -618,18 +616,18 @@ mod tests {
     #[test]
     fn favicon_reserves_one_shared_ticket_and_page_images_still_wait_for_publication() {
         let mut html = String::from("<link rel='icon' href='/icon.png' sizes='32x32'>");
-        for n in 0..12 {
+        for n in 0..43 {
             html.push_str(&format!("<img src='{n}.png'>"));
         }
         let mut images = collect_icons(&html);
-        assert_eq!(images.boxes.len(), 12);
+        assert_eq!(images.boxes.len(), 43);
         assert_eq!(
             images
                 .boxes
                 .iter()
                 .filter(|(_, asset)| asset.is_some())
                 .count(),
-            7
+            41
         );
         for _ in 0..4 {
             images.poll();
@@ -645,13 +643,24 @@ mod tests {
             assert_eq!(service.requests[0].5, 9);
             assert!(service.statuses <= 2);
         });
-        for _ in 0..12 {
+        assert!(images.boxes[40].1.is_some());
+        assert!(images.boxes[41].1.is_none());
+        for _ in 0..45 {
+            let (requests, statuses) = SERVICE.with(|service| {
+                let service = service.borrow();
+                (service.requests.len(), service.statuses)
+            });
             images.poll();
+            SERVICE.with(|service| {
+                let service = service.borrow();
+                assert!(service.requests.len() - requests <= 1);
+                assert!(service.statuses - statuses <= 2);
+            });
         }
         SERVICE.with(|service| {
             let service = service.borrow();
-            assert_eq!(service.requests.len(), 8);
-            assert_eq!(service.live.len(), 8);
+            assert_eq!(service.requests.len(), 42);
+            assert_eq!(service.live.len(), 42);
         });
     }
 
@@ -921,11 +930,11 @@ mod tests {
         let mut html = String::from(
             "<img data-src='same.jpg?x=1#one'><img src='data:image/gif;base64,placeholder' data-original='same.jpg?x=1#two'>",
         );
-        for index in 0..10 {
+        for index in 0..42 {
             html.push_str(&format!("<img data-src='{index}.png'>"));
         }
         let images = collect_icons(&html);
-        assert_eq!(images.boxes.len(), 12);
+        assert_eq!(images.boxes.len(), 44);
         assert_eq!(images.boxes[0].1, images.boxes[1].1);
         assert_eq!(
             images
@@ -934,8 +943,10 @@ mod tests {
                 .filter_map(|(_, asset)| *asset)
                 .collect::<HashSet<_>>()
                 .len(),
-            7
+            41
         );
+        assert!(images.boxes[41].1.is_some());
+        assert!(images.boxes[42].1.is_none());
         assert!(images.boxes.last().unwrap().1.is_none());
         SERVICE.with(|service| assert!(service.borrow().requests.is_empty()));
     }
@@ -958,18 +969,49 @@ mod tests {
     }
 
     #[test]
-    fn queued_assets_outlive_the_kernel_stage_deadlines() {
+    fn admitted_pending_tickets_outlive_queue_delays_until_kernel_terminal_status() {
         let mut images = collect("<img src='queued.png'>");
         images.published();
         images.poll();
-        images.assets[0].started = Some(Instant::now() - Duration::from_secs(80));
-        assert!(!images.poll());
-        assert!(!images.assets[0].finished);
-        assert_eq!(images.assets[0].ticket, Some(1));
-        images.assets[0].started = Some(Instant::now() - Duration::from_secs(91));
-        assert!(!images.poll());
+        for age in [316, 631, 3600] {
+            images.assets[0].started = Some(Instant::now() - Duration::from_secs(age));
+            assert!(!images.poll());
+            assert!(!images.assets[0].finished);
+            assert_eq!(images.assets[0].ticket, Some(1));
+        }
+        SERVICE.with(|service| {
+            let mut service = service.borrow_mut();
+            let info = service.live.get_mut(&1).unwrap();
+            info.state = HULL_IMAGE_FAILED;
+            info.error = -6;
+        });
+        images.poll();
         assert!(images.assets[0].finished);
         assert!(images.assets[0].ticket.is_none());
+        SERVICE.with(|service| assert!(service.borrow().live.is_empty()));
+    }
+
+    #[test]
+    fn repeated_busy_admission_still_expires_after_ninety_seconds_without_a_ticket() {
+        let mut images = collect("<img src='not-admitted.png'>");
+        images.published();
+        SERVICE.with(|service| service.borrow_mut().request_busy = true);
+        images.poll();
+        assert!(images.assets[0].started.is_some());
+        assert!(!images.assets[0].finished);
+        assert!(images.assets[0].ticket.is_none());
+        SERVICE.with(|service| assert!(!service.borrow().request_busy));
+        images.assets[0].started = Some(Instant::now() - Duration::from_secs(91));
+        SERVICE.with(|service| service.borrow_mut().request_busy = true);
+        images.poll();
+        assert!(images.assets[0].finished);
+        assert!(images.assets[0].ticket.is_none());
+        SERVICE.with(|service| {
+            let service = service.borrow();
+            assert!(service.request_busy); // No new admission attempted after expiry.
+            assert!(service.requests.is_empty());
+            assert!(service.live.is_empty());
+        });
     }
 
     fn collect(html: &str) -> Images {
@@ -993,18 +1035,21 @@ mod tests {
         let mut html = String::from(
             "<base href='https://CDN.example:443/assets/'><base href='https://ignored.example/'><img src='./a.png?q=1#one'><img src='a.png?q=1#two'><img src='a.png?q=2'><img src='http://example.com/insecure.png'><img src='data:image/png;base64,no'>",
         );
-        for index in 0..12 {
+        for index in 0..42 {
             html.push_str(&format!("<img src='{index}.png'>"));
         }
         let images = collect(&html);
-        assert_eq!(images.boxes.len(), 17);
-        assert_eq!(images.assets.len(), 8);
+        assert_eq!(images.boxes.len(), 47);
+        assert_eq!(images.assets.len(), 42);
         assert_eq!(images.assets[0].url, "https://cdn.example/assets/a.png?q=1");
         assert_eq!(images.assets[1].url, "https://cdn.example/assets/a.png?q=2");
         assert_eq!(images.boxes[0].1, images.boxes[1].1);
         assert!(images.boxes[3].1.is_none());
         assert!(images.boxes[4].1.is_none());
-        assert!(images.boxes[16].1.is_none());
+        assert_eq!(images.assets[41].url, "https://cdn.example/assets/39.png");
+        assert!(images.boxes[44].1.is_some());
+        assert!(images.boxes[45].1.is_none());
+        assert!(images.boxes[46].1.is_none());
         assert!(
             images
                 .boxes
