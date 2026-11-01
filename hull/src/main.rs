@@ -1,5 +1,5 @@
 use std::collections::VecDeque;
-use trueos::ui4_scene::{output_dimensions, rgba};
+use trueos::ui4_scene::output_dimensions;
 use trueos::ui4_winit::{Damage, Error, HullTextRun, SceneTarget};
 use trueos::{logl, netfs, vshell};
 use winit::application::ApplicationHandler;
@@ -605,7 +605,7 @@ impl ApplicationHandler for Hull {
                             })?;
                         quads.draw(target)?;
                     } else {
-                        target.begin(rgba(35, 39, 39, 255))?;
+                        target.begin(u32::MAX)?;
                     }
                     if !self.image_frame_recovery && self.layout_generation == Some(self.generation)
                     {
