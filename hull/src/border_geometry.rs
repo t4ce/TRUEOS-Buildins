@@ -16,7 +16,8 @@ pub(super) struct Mesh {
 }
 
 pub(super) fn geometry(borders: &[BorderQuad], viewport: &Viewport) -> Mesh {
-    let (width, height) = viewport.extent();
+    let (width, height) = viewport.frame_extent();
+    let (origin_x, origin_y) = viewport.origin();
     let (scroll_x, scroll_y) = viewport.offset();
     let mut mesh = Mesh::default();
     if width == 0 || height == 0 {
@@ -73,8 +74,8 @@ pub(super) fn geometry(borders: &[BorderQuad], viewport: &Viewport) -> Mesh {
             let n = if rx == 0.0 || ry == 0.0 { 1 } else { 2 };
             for [px, py] in points.into_iter().take(n) {
                 for value in [
-                    2.0 * (px - scroll_x) / width as f32 - 1.0,
-                    1.0 - 2.0 * (py - scroll_y) / height as f32,
+                    2.0 * (px - scroll_x + origin_x as f32) / width as f32 - 1.0,
+                    1.0 - 2.0 * (py - scroll_y + origin_y as f32) / height as f32,
                     0.0,
                 ] {
                     mesh.vertices.extend_from_slice(&value.to_le_bytes());
@@ -141,6 +142,33 @@ mod tests {
                 (actual[0] - expected[0]).abs() < 0.0001
                     && (actual[1] - expected[1]).abs() < 0.0001
             );
+        }
+    }
+
+    #[test]
+    fn frame_projection_moves_page_borders_below_chrome_without_scaling() {
+        let mut viewport = Viewport::default();
+        viewport.resize_with_origin(100, 132, 0, 32);
+        viewport.set_document(200, 300);
+        viewport.scroll_by(5.0, 10.0);
+        let mesh = geometry(&[border([[0.0; 2]; 4])], &viewport);
+        let points: Vec<_> = mesh
+            .vertices
+            .chunks_exact(12)
+            .map(|point| {
+                [
+                    (f32::from_le_bytes(point[..4].try_into().unwrap()) + 1.0) * 50.0,
+                    (1.0 - f32::from_le_bytes(point[4..8].try_into().unwrap())) * 66.0,
+                ]
+            })
+            .collect();
+        for (point, expected) in
+            points
+                .iter()
+                .zip([[5.0, 42.0], [65.0, 42.0], [65.0, 82.0], [5.0, 82.0]])
+        {
+            assert!((point[0] - expected[0]).abs() < 0.0001);
+            assert!((point[1] - expected[1]).abs() < 0.0001);
         }
     }
     #[test]

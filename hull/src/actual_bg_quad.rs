@@ -30,10 +30,12 @@ pub(super) fn draw(
     viewport: &Viewport,
     target: &mut SceneTarget,
 ) -> Result<(), Error> {
-    let (width, height) = viewport.extent();
     // Sprite draws require a GPU frame. Paint white first so the transparent
     // native-frame clear never changes the page's default background.
-    let mut quads = vec![quad([0.0, 0.0, width as f32, height as f32], [255; 4])];
+    let mut quads = vec![quad(
+        viewport.content_rect().map(|value| value as f32),
+        [255; 4],
+    )];
     quads.extend(backgrounds.iter().filter_map(|background| {
         Some(quad(viewport.clip_rect(background.rect)?, background.color))
     }));
@@ -86,6 +88,17 @@ mod tests {
         assert!(target.gpu_frame);
         assert_eq!(target.draws.len(), 1);
         assert_eq!(target.draws[0].color_rgba, u32::MAX);
+    }
+
+    #[test]
+    fn white_page_background_begins_below_window_chrome() {
+        let mut viewport = Viewport::default();
+        viewport.resize_with_origin(1280, 752, 0, 32);
+        let mut target = SceneTarget::default();
+        draw(&[], &viewport, &mut target).unwrap();
+        let page = target.draws[0];
+        assert_eq!((page.c0.x, page.c0.y), (0.0, 32.0));
+        assert_eq!((page.c2.x, page.c2.y), (1280.0, 752.0));
     }
 
     #[test]

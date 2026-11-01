@@ -1,6 +1,6 @@
 //! Image references and frozen boxes only. Fetching, caching, decoding and GPU
 //! upload belong to the kernel image service; Hull never receives image bytes.
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::time::{Duration, Instant};
 use trueos::logl;
 use trueos::ui4_scene::{
@@ -10,7 +10,7 @@ use trueos::ui4_scene::{
 use trueos::ui4_winit::{Error, SceneTarget, SpriteCorner, SpriteQuad};
 use url::Url;
 
-use super::{layout::ImageBox, viewport::Viewport};
+use super::{favicon, layout::ImageBox, viewport::Viewport};
 
 const MAX_ASSETS: usize = 8;
 const POLLS_PER_TICK: usize = 2;
@@ -31,6 +31,11 @@ pub(super) struct Images {
     published: bool,
     reset_pending: bool,
     paint_disabled: bool,
+    favicon_enabled: bool,
+    favicon_disabled: bool,
+    favicon_candidates: VecDeque<String>,
+    favicon_asset: Option<usize>,
+    favicon_dirty: bool,
 }
 
 struct Asset {
@@ -40,6 +45,30 @@ struct Asset {
     sprite: Option<u32>,
     started: Option<Instant>,
     finished: bool,
+    retired: bool,
+    decoded_size: (u32, u32),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct FaviconSprite {
+    pub sprite_id: u32,
+    pub width: u32,
+    pub height: u32,
+}
+
+impl Asset {
+    fn new(url: String, size: (u32, u32)) -> Self {
+        Self {
+            url,
+            size,
+            ticket: None,
+            sprite: None,
+            started: None,
+            finished: false,
+            retired: false,
+            decoded_size: (0, 0),
+        }
+    }
 }
 
 impl Images {
@@ -52,16 +81,135 @@ impl Images {
         self.poll();
     }
 
-    /// Collect all paintable boxes, including those with no source or over the
-    /// admission limit. Such boxes retain a placeholder and their flow space.
-    pub fn collect(&mut self, document: &rp5::Document, page_url: &str, boxes: Vec<ImageBox>) {
+    /// Call immediately after reset on successful navigation. One of the eight
+    /// service slots is reserved for favicon work, sharing this generation.
+    pub fn start_favicon(&mut self, page_url: &str) {
+        self.favicon_enabled = true;
+        self.favicon_disabled = false;
+        self.configure_cache(page_url);
+        self.set_favicon_candidates(favicon::fallback(page_url).into_iter().collect());
+    }
+
+    pub fn collect_favicon(&mut self, document: &rp5::Document, page_url: &str) {
+        if self.favicon_disabled {
+            return;
+        }
+        self.favicon_enabled = true;
+        self.configure_cache(page_url);
+        self.set_favicon_candidates(favicon::discover(document, page_url));
+    }
+
+    pub fn favicon(&self) -> Option<FaviconSprite> {
+        if self.favicon_disabled {
+            return None;
+        }
+        let asset = self.assets.get(self.favicon_asset?)?;
+        let (width, height) = asset.decoded_size;
+        if width == 0 || height == 0 {
+            return None;
+        }
+        Some(FaviconSprite {
+            sprite_id: asset.sprite?,
+            width,
+            height,
+        })
+    }
+
+    /// A failed chrome sprite draw disables only favicon painting until reset.
+    /// Page boxes that share the asset retain their existing ticket ownership.
+    pub fn disable_favicon(&mut self) {
+        self.favicon_disabled = true;
+        self.favicon_candidates.clear();
+        self.retire_favicon();
+        self.favicon_dirty = true;
+    }
+
+    fn configure_cache(&mut self, page_url: &str) {
         self.root = super::snapshot::app_root();
         self.host = Url::parse(page_url)
             .ok()
             .and_then(|url| url.host_str().map(str::to_owned))
             .unwrap_or_default();
+    }
+
+    fn set_favicon_candidates(&mut self, urls: Vec<String>) {
+        if let Some(index) = self.favicon_asset {
+            if urls
+                .first()
+                .is_some_and(|url| *url == self.assets[index].url)
+            {
+                self.favicon_candidates = urls.into_iter().skip(1).collect();
+                return;
+            }
+        }
+        self.retire_favicon();
+        self.favicon_candidates = urls.into();
+        self.favicon_dirty = true;
+    }
+
+    fn retire_favicon(&mut self) {
+        let Some(index) = self.favicon_asset.take() else {
+            return;
+        };
+        if self.boxes.iter().any(|(_, asset)| *asset == Some(index)) {
+            return;
+        }
+        let asset = &mut self.assets[index];
+        asset.retired = true;
+        asset.finished = true;
+        asset.sprite = None;
+        if let Some(window) = self.window {
+            release_ticket(window, asset);
+        }
+    }
+
+    fn choose_favicon(&mut self) {
+        if !self.favicon_enabled || self.favicon_disabled {
+            return;
+        }
+        if let Some(index) = self.favicon_asset {
+            let asset = &self.assets[index];
+            if !asset.finished || asset.sprite.is_some() || asset.ticket.is_some() {
+                return;
+            }
+            self.favicon_asset = None;
+        }
+        while let Some(url) = self.favicon_candidates.pop_front() {
+            let index = if let Some(index) = self
+                .assets
+                .iter()
+                .position(|asset| !asset.retired && asset.url == url)
+            {
+                index
+            } else {
+                let index = self.assets.len();
+                self.assets.push(Asset::new(
+                    url,
+                    (favicon::REQUEST_EDGE, favicon::REQUEST_EDGE),
+                ));
+                index
+            };
+            let asset = &self.assets[index];
+            if asset.finished && asset.sprite.is_none() && asset.ticket.is_none() {
+                continue;
+            }
+            self.favicon_asset = Some(index);
+            self.favicon_dirty = true;
+            break;
+        }
+    }
+
+    /// Collect all paintable boxes, including those with no source or over the
+    /// admission limit. Such boxes retain a placeholder and their flow space.
+    pub fn collect(&mut self, document: &rp5::Document, page_url: &str, boxes: Vec<ImageBox>) {
+        self.configure_cache(page_url);
         let base = document_base(document, page_url);
-        let mut admitted = HashMap::new();
+        let mut admitted: HashMap<String, usize> = self
+            .boxes
+            .iter()
+            .filter_map(|(_, index)| index.map(|index| (self.assets[index].url.clone(), index)))
+            .collect();
+        let limit = MAX_ASSETS - usize::from(self.favicon_enabled);
         for image in boxes {
             let url = base.as_ref().and_then(|base| {
                 let (_, rp5::Namespace::Html, attrs) = document.element(image.node)? else {
@@ -85,19 +233,21 @@ impl Images {
                     return Some(index);
                 }
                 let size = size?;
-                if self.assets.len() == MAX_ASSETS {
+                if admitted.len() >= limit {
                     return None;
                 }
-                let index = self.assets.len();
-                admitted.insert(url.clone(), index);
-                self.assets.push(Asset {
-                    url,
-                    size,
-                    ticket: None,
-                    sprite: None,
-                    started: None,
-                    finished: false,
-                });
+                let index = if let Some(index) = self
+                    .assets
+                    .iter()
+                    .position(|asset| !asset.retired && asset.url == url)
+                {
+                    index
+                } else {
+                    let index = self.assets.len();
+                    self.assets.push(Asset::new(url.clone(), size));
+                    index
+                };
+                admitted.insert(url, index);
                 Some(index)
             });
             if let Some((index, size)) = asset.zip(size) {
@@ -129,38 +279,67 @@ impl Images {
                 }
             }
         }
+        self.choose_favicon();
+        let mut changed = std::mem::take(&mut self.favicon_dirty);
+        // Chrome discovery stays inert until this navigation's content has
+        // published; declared links and shared page target sizes settle first.
         if !self.published {
-            return false;
+            return changed;
         }
-        // At most one request and two status reads per event-loop turn.
-        if let Some(asset) = self
+        let favicon_request = self
+            .favicon_asset
+            .filter(|&index| !self.assets[index].finished && self.assets[index].ticket.is_none());
+        let request = favicon_request.or_else(|| {
+            self.published
+                .then(|| {
+                    self.assets.iter().position(|asset| {
+                        !asset.retired && !asset.finished && asset.ticket.is_none()
+                    })
+                })
+                .flatten()
+        });
+        // A retired variant can still be awaiting a Busy release. Do not let
+        // kernel deduplication return that same ticket to a new asset owner.
+        let request = request.filter(|&index| {
+            !self.assets.iter().enumerate().any(|(other, asset)| {
+                other != index && asset.ticket.is_some() && asset.url == self.assets[index].url
+            })
+        });
+        // At most one admission and two status reads across page and icon work.
+        if self
             .assets
-            .iter_mut()
-            .find(|asset| !asset.finished && asset.ticket.is_none())
+            .iter()
+            .filter(|asset| asset.ticket.is_some())
+            .count()
+            < MAX_ASSETS
         {
-            let started = asset.started.get_or_insert_with(Instant::now);
-            if started.elapsed() > IMAGE_DEADLINE {
-                asset.finished = true;
-            } else {
-                match hull_image_request(
-                    window,
-                    &asset.url,
-                    &self.root,
-                    &self.host,
-                    asset.size.0,
-                    asset.size.1,
-                    self.generation,
-                ) {
-                    Ok(ticket) => asset.ticket = Some(ticket),
-                    Err(Error::Busy) => {}
-                    Err(error) => {
-                        asset.finished = true;
-                        report(format_args!("request failed: {error:?}"));
+            if let Some(index) = request {
+                let asset = &mut self.assets[index];
+                let started = asset.started.get_or_insert_with(Instant::now);
+                if started.elapsed() > IMAGE_DEADLINE {
+                    asset.finished = true;
+                } else {
+                    match hull_image_request(
+                        window,
+                        &asset.url,
+                        &self.root,
+                        &self.host,
+                        asset.size.0,
+                        asset.size.1,
+                        self.generation,
+                    ) {
+                        Ok(ticket) => asset.ticket = Some(ticket),
+                        Err(Error::Busy) => {}
+                        Err(error) => {
+                            asset.finished = true;
+                            if Some(index) != self.favicon_asset {
+                                report(format_args!("request failed: {error:?}"));
+                            }
+                        }
                     }
                 }
             }
         }
-        let mut changed = false;
         for _ in 0..POLLS_PER_TICK.min(self.assets.len()) {
             let index = self.cursor % self.assets.len();
             self.cursor = (index + 1) % self.assets.len();
@@ -179,14 +358,23 @@ impl Images {
                 .is_some_and(|started| started.elapsed() > IMAGE_DEADLINE);
             match hull_image_status(window, ticket) {
                 Ok(info) if info.generation != self.generation => asset.finished = true,
-                Ok(info) if info.state == HULL_IMAGE_READY && info.sprite_id != 0 => {
+                Ok(info)
+                    if info.state == HULL_IMAGE_READY
+                        && info.sprite_id != 0
+                        && info.width != 0
+                        && info.height != 0 =>
+                {
                     asset.sprite = Some(info.sprite_id);
+                    asset.decoded_size = (info.width, info.height);
                     asset.finished = true;
                     changed = true;
                 }
+                Ok(info) if info.state == HULL_IMAGE_READY => asset.finished = true,
                 Ok(info) if info.state == HULL_IMAGE_FAILED => {
                     asset.finished = true;
-                    report(format_args!("asset failed: {}", info.error));
+                    if Some(index) != self.favicon_asset {
+                        report(format_args!("asset failed: {}", info.error));
+                    }
                 }
                 Ok(_) | Err(Error::Busy) if !expired => {}
                 Ok(_) | Err(_) => asset.finished = true,
@@ -233,10 +421,14 @@ impl Images {
                 // Even Busy may have canceled the current write lease. Disable
                 // this navigation's image paint and let Hull recover a text frame.
                 self.paint_disabled = true;
-                for asset in &mut self.assets {
-                    asset.finished = true;
-                    asset.sprite = None;
-                    release_ticket(target.render_target(), asset);
+                let page_assets: HashSet<_> =
+                    self.boxes.iter().filter_map(|(_, index)| *index).collect();
+                for (index, asset) in self.assets.iter_mut().enumerate() {
+                    if page_assets.contains(&index) && Some(index) != self.favicon_asset {
+                        asset.finished = true;
+                        asset.sprite = None;
+                        release_ticket(target.render_target(), asset);
+                    }
                 }
                 report(format_args!("sprite draw failed: {error:?}"));
                 true
@@ -353,6 +545,246 @@ fn report(message: std::fmt::Arguments<'_>) {
 mod tests {
     use super::*;
     use crate::image_mock::{self, SERVICE};
+
+    fn collect_icons(html: &str) -> Images {
+        image_mock::reset();
+        let document = rp5::parse(html);
+        let mut css = crate::css::Css::default();
+        let url = "https://example.com/page/index.html";
+        css.parse_document(&document, url);
+        let layout = crate::layout::compute(&document, &css, (1280, 720)).unwrap();
+        let mut images = Images::default();
+        images.reset(1, 9);
+        images.start_favicon(url);
+        images.collect_favicon(&document, url);
+        images.collect(&document, url, layout.image_boxes);
+        images
+    }
+
+    #[test]
+    fn favicon_reserves_one_shared_ticket_and_page_images_still_wait_for_publication() {
+        let mut html = String::from("<link rel='icon' href='/icon.png' sizes='32x32'>");
+        for n in 0..12 {
+            html.push_str(&format!("<img src='{n}.png'>"));
+        }
+        let mut images = collect_icons(&html);
+        assert_eq!(images.boxes.len(), 12);
+        assert_eq!(
+            images
+                .boxes
+                .iter()
+                .filter(|(_, asset)| asset.is_some())
+                .count(),
+            7
+        );
+        for _ in 0..4 {
+            images.poll();
+        }
+        SERVICE.with(|service| assert!(service.borrow().requests.is_empty()));
+        images.published();
+        images.poll();
+        SERVICE.with(|service| {
+            let service = service.borrow();
+            assert_eq!(service.requests.len(), 1);
+            assert_eq!(service.requests[0].0, "https://example.com/icon.png");
+            assert_eq!((service.requests[0].3, service.requests[0].4), (28, 28));
+            assert_eq!(service.requests[0].5, 9);
+            assert!(service.statuses <= 2);
+        });
+        for _ in 0..12 {
+            images.poll();
+        }
+        SERVICE.with(|service| {
+            let service = service.borrow();
+            assert_eq!(service.requests.len(), 8);
+            assert_eq!(service.live.len(), 8);
+        });
+    }
+
+    #[test]
+    fn failed_favicon_candidates_release_before_retry_and_ready_extent_preserves_aspect() {
+        let mut images = collect_icons(
+            "<link rel=icon href='/bad.png' sizes='32x32'><link rel=icon href='/good.png' sizes='16x16'>",
+        );
+        images.published();
+        images.poll();
+        SERVICE.with(|service| {
+            let mut service = service.borrow_mut();
+            let info = service.live.get_mut(&1).unwrap();
+            info.state = HULL_IMAGE_FAILED;
+            info.error = -8;
+            service.release_busy = true;
+        });
+        images.poll();
+        for _ in 0..8 {
+            images.poll();
+        }
+        SERVICE.with(|service| {
+            let mut service = service.borrow_mut();
+            assert_eq!(service.requests.len(), 2);
+            assert_eq!(service.requests[1].0, "https://example.com/good.png");
+            assert_eq!(service.live.len(), 1);
+            assert!(service.released.contains(&1));
+            let info = service.live.get_mut(&2).unwrap();
+            info.state = HULL_IMAGE_READY;
+            info.sprite_id = 99;
+            info.width = 28;
+            info.height = 14;
+        });
+        assert!(images.poll());
+        assert_eq!(
+            images.favicon(),
+            Some(FaviconSprite {
+                sprite_id: 99,
+                width: 28,
+                height: 14
+            })
+        );
+        images.reset(1, 10);
+        assert!(images.favicon().is_none());
+        SERVICE.with(|service| assert!(service.borrow().live.is_empty()));
+    }
+
+    #[test]
+    fn declared_icon_replaces_the_unadmitted_root_fallback_before_publication() {
+        image_mock::reset();
+        let mut images = Images::default();
+        images.reset(1, 9);
+        images.start_favicon("https://example.com/page");
+        images.poll();
+        let document = rp5::parse("<link rel=icon href='/preferred.png'>");
+        images.collect_favicon(&document, "https://example.com/page");
+        images.poll();
+        SERVICE.with(|service| assert!(service.borrow().requests.is_empty()));
+        images.published();
+        images.poll();
+        SERVICE.with(|service| {
+            let service = service.borrow();
+            assert_eq!(service.generation, 9);
+            assert_eq!(service.requests.len(), 1);
+            assert_eq!(service.requests[0].0, "https://example.com/preferred.png");
+            assert!(service.released.is_empty());
+            assert_eq!(service.live.len(), 1);
+        });
+    }
+
+    #[test]
+    fn disabling_favicon_keeps_a_shared_page_image_and_does_not_retry_until_navigation() {
+        let html = "<link rel=icon href='/shared.png'><img src='/shared.png' width=28 height=28><img src='/other.png'>";
+        let mut images = collect_icons(html);
+        images.published();
+        images.poll();
+        images.poll();
+        SERVICE.with(|service| {
+            let mut service = service.borrow_mut();
+            assert_eq!(service.requests.len(), 2);
+            assert_eq!(
+                service
+                    .requests
+                    .iter()
+                    .filter(|request| request.0.ends_with("shared.png"))
+                    .count(),
+                1
+            );
+            let info = service.live.get_mut(&1).unwrap();
+            info.state = HULL_IMAGE_READY;
+            info.sprite_id = 42;
+        });
+        images.poll();
+        assert!(images.favicon().is_some());
+        images.disable_favicon();
+        assert!(images.favicon().is_none());
+        assert_eq!(images.assets[images.boxes[0].1.unwrap()].sprite, Some(42));
+        images.collect_favicon(&rp5::parse(html), "https://example.com/page");
+        for _ in 0..5 {
+            images.poll();
+        }
+        SERVICE.with(|service| {
+            let service = service.borrow();
+            assert_eq!(service.requests.len(), 2);
+            assert!(service.live.contains_key(&1));
+        });
+        images.reset(1, 10);
+        SERVICE.with(|service| assert!(service.borrow().live.is_empty()));
+    }
+
+    #[test]
+    fn exhausted_declared_candidates_try_origin_fallback_once_and_leave_no_live_tickets() {
+        let mut images = collect_icons(
+            "<link rel=icon href='/bad.png'><link rel=apple-touch-icon href='/touch.png'>",
+        );
+        images.published();
+        for (index, expected) in [
+            "https://example.com/bad.png",
+            "https://example.com/touch.png",
+            "https://example.com/favicon.ico",
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            for _ in 0..12 {
+                images.poll();
+                if SERVICE.with(|service| service.borrow().requests.len()) > index {
+                    break;
+                }
+            }
+            SERVICE.with(|service| {
+                let mut service = service.borrow_mut();
+                assert_eq!(service.requests[index].0, expected);
+                let info = service.live.get_mut(&(index as u32 + 1)).unwrap();
+                info.state = HULL_IMAGE_FAILED;
+                info.error = -8;
+            });
+            for _ in 0..4 {
+                images.poll();
+            }
+        }
+        for _ in 0..12 {
+            images.poll();
+        }
+        assert!(images.favicon().is_none());
+        SERVICE.with(|service| {
+            let service = service.borrow();
+            assert_eq!(service.requests.len(), 3);
+            assert!(service.live.is_empty());
+        });
+    }
+
+    #[test]
+    fn disabling_a_private_icon_retries_busy_release_but_never_admits_another_candidate() {
+        let mut images = collect_icons("<link rel=icon href='/private.png'>");
+        images.published();
+        images.poll();
+        SERVICE.with(|service| {
+            let mut service = service.borrow_mut();
+            let info = service.live.get_mut(&1).unwrap();
+            info.state = HULL_IMAGE_READY;
+            info.sprite_id = 77;
+        });
+        images.poll();
+        assert!(images.favicon().is_some());
+        SERVICE.with(|service| service.borrow_mut().release_busy = true);
+        images.disable_favicon();
+        assert!(images.favicon().is_none());
+        for _ in 0..8 {
+            images.poll();
+        }
+        SERVICE.with(|service| {
+            let service = service.borrow();
+            assert_eq!(service.requests.len(), 1);
+            assert!(service.live.is_empty());
+        });
+        images.reset(1, 10);
+        images.start_favicon("https://new.example/path");
+        images.published();
+        images.poll();
+        SERVICE.with(|service| {
+            let service = service.borrow();
+            assert_eq!(service.requests.len(), 2);
+            assert_eq!(service.requests[1].0, "https://new.example/favicon.ico");
+            assert_eq!(service.requests[1].5, 10);
+        });
+    }
 
     #[test]
     fn queued_assets_outlive_the_kernel_stage_deadlines() {

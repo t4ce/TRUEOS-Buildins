@@ -47,6 +47,11 @@ bridge performs no pixel/DotM or CSS conversion. Keyboard text is UTF-8 validate
 malformed bytes remain available in `raw` and are marked invalid. Named-key NUL
 markers are not reported as committed text. Keyboard combo IDs are not invented.
 
+The native frame includes a fixed 32-unit chrome row above the content viewport
+(initially 1280×720 inside a 1280×752 frame). Raw input still describes the whole
+frame; the bridge does not silently subtract that row. Chrome and its favicon
+are outside HTML layout and the saved page SVG, and are not exposed to JavaScript.
+
 Native pointer/keyboard/pan copies are authoritative. Standard translated key,
 pointer and wheel callbacks are not forwarded a second time. Focus, resize, IME
 and modifier changes form supplemental messages; captured raw records are drained

@@ -70,6 +70,21 @@ impl Quads {
         Ok(())
     }
 
+    /// Upload ordered solid rectangles with an independent color per rectangle.
+    /// Coordinates refer to the complete frame, including native window chrome.
+    /// Call `draw_overlay` to preserve pixels already authored by page rendering.
+    pub fn set_colored_rectangles(
+        &mut self,
+        width: u32,
+        height: u32,
+        rectangles: &[(super::Rect, [u8; 4])],
+    ) -> Result<(), i32> {
+        let (vertices, indices, draws) = colored_rectangles_geometry(width, height, rectangles)?;
+        self.upload(&vertices, &indices)?;
+        self.draws = draws;
+        Ok(())
+    }
+
     pub fn set_borders(
         &mut self,
         borders: &[crate::layout::BorderQuad],
@@ -140,6 +155,13 @@ impl Quads {
 
     /// Native line-loop borders over either fill pass, without clearing color.
     pub fn draw_borders(&self, target: &mut SceneTarget) -> Result<(), Error> {
+        self.draw_overlay(target)
+    }
+
+    /// Overlay the uploaded geometry on the current exact frame allocation.
+    /// LOAD_COLOR retains completed GPU or flushed CPU page pixels and supplies
+    /// a new resident render release for later sprite or text overlays.
+    pub fn draw_overlay(&self, target: &mut SceneTarget) -> Result<(), Error> {
         self.submit(target, true)
     }
 
@@ -184,6 +206,42 @@ impl Drop for Quads {
     }
 }
 
+fn colored_rectangles_geometry(
+    width: u32,
+    height: u32,
+    rectangles: &[(Rect, [u8; 4])],
+) -> Result<(Vec<u8>, Vec<u8>, Vec<IndexedBatchDrawV2>), i32> {
+    if width == 0
+        || height == 0
+        || rectangles.len() > u32::MAX as usize / 6
+        || rectangles.iter().any(|&([x, y, w, h], _)| {
+            w < 0.0 || h < 0.0 || ![x, y, w, h, x + w, y + h].iter().all(|v| v.is_finite())
+        })
+    {
+        return Err(ERR_IO);
+    }
+    let mut boxes = Vec::with_capacity(rectangles.len());
+    let mut draws = Vec::with_capacity(rectangles.len());
+    for &(rect, color) in rectangles {
+        if rect[2] == 0.0 || rect[3] == 0.0 {
+            continue;
+        }
+        draws.push(IndexedBatchDrawV2 {
+            first_index: draws.len() as u32 * 6,
+            index_count: 6,
+            // super::geometry already stores absolute indices into the shared
+            // vertex buffer. A per-rectangle base_vertex would shift twice.
+            base_vertex: 0,
+            rgba8_srgb: u32::from_le_bytes(color),
+            topology: PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+            ..Default::default()
+        });
+        boxes.push(rect);
+    }
+    let (vertices, indices) = super::geometry(width, height, &boxes);
+    Ok((vertices, indices, draws))
+}
+
 /// Keep each native submission within the resident state slots. Continuations
 /// retain earlier pixels, including border loops from previous submissions.
 fn draw_batches(
@@ -210,6 +268,60 @@ fn draw_batches(
 #[cfg(test)]
 mod batch_tests {
     use super::*;
+
+    #[test]
+    fn colored_rectangles_keep_geometry_offsets_and_colors_after_skipping_empty_boxes() {
+        let rectangles = [
+            ([0., 0., 100., 32.], [90, 91, 92, 255]),
+            ([10., 4., 0., 20.], [200, 0, 0, 255]),
+            ([20., 4., 24., 24.], [0, 0, 0, 255]),
+            ([21., 5., 22., 22.], [255, 255, 255, 255]),
+        ];
+        let (vertices, indices, draws) = colored_rectangles_geometry(100, 80, &rectangles).unwrap();
+        assert_eq!(vertices.len(), 3 * 4 * 12);
+        assert_eq!(indices.len(), 3 * 6 * 4);
+        assert_eq!(draws.len(), 3);
+        for (n, color) in [[90, 91, 92, 255], [0, 0, 0, 255], [255; 4]]
+            .into_iter()
+            .enumerate()
+        {
+            assert_eq!(draws[n].first_index, n as u32 * 6);
+            assert_eq!(draws[n].base_vertex, 0);
+            assert_eq!(draws[n].index_count, 6);
+            assert_eq!(draws[n].rgba8_srgb, u32::from_le_bytes(color));
+            assert_eq!(draws[n].topology, PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+            let decoded: Vec<_> = indices[n * 24..(n + 1) * 24]
+                .chunks_exact(4)
+                .map(|v| u32::from_le_bytes(v.try_into().unwrap()))
+                .collect();
+            assert_eq!(
+                decoded,
+                [0, 1, 2, 0, 2, 3].map(|index| index + n as u32 * 4)
+            );
+        }
+        let batch = draw_batches(&draws, true).next().unwrap();
+        assert_eq!(batch.draws[0].reserved, INDEXED_BATCH_V2_LOAD_COLOR);
+        let top = f32::from_le_bytes(vertices[4..8].try_into().unwrap());
+        let bottom = f32::from_le_bytes(vertices[28..32].try_into().unwrap());
+        assert_eq!(top, 1.0);
+        assert!((bottom - 0.2).abs() < 1e-6);
+    }
+
+    #[test]
+    fn colored_rectangles_reject_invalid_geometry_and_support_an_empty_overlay() {
+        assert!(colored_rectangles_geometry(0, 80, &[]).is_err());
+        assert!(colored_rectangles_geometry(100, 0, &[]).is_err());
+        for rect in [
+            [0., 0., -1., 5.],
+            [0., 0., 5., -1.],
+            [f32::NAN, 0., 5., 5.],
+            [0., 0., f32::INFINITY, 5.],
+        ] {
+            assert!(colored_rectangles_geometry(100, 80, &[(rect, [255; 4])]).is_err());
+        }
+        let (vertices, indices, draws) = colored_rectangles_geometry(100, 80, &[]).unwrap();
+        assert!(vertices.is_empty() && indices.is_empty() && draws.is_empty());
+    }
 
     #[test]
     fn large_border_worklists_preserve_every_loop_and_prior_pixels() {

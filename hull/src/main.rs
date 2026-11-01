@@ -12,7 +12,9 @@ use winit::window::{Window, WindowAttributes, WindowId};
 
 mod actual_bg_quad;
 mod border_geometry;
+mod chrome;
 mod css;
+mod favicon;
 mod images;
 mod javascript;
 mod javascript_input;
@@ -37,6 +39,7 @@ struct Hull {
     background_quads: Vec<layout::BackgroundQuad>,
     border_quads: Vec<layout::BorderQuad>,
     borders: Option<pink_quad_dbg::BorderPass>,
+    chrome_quads: Option<(pink_quad_dbg::Quads, (u32, u32))>,
     redraw_reason: &'static str,
     frame_counter: shellio::FrameCounter,
     quads: Option<pink_quad_dbg::Quads>,
@@ -68,11 +71,13 @@ impl Hull {
         event_loop: &dyn ActiveEventLoop,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let (width, height) = output_dimensions().map_err(|error| format!("{error:?}"))?;
+        let (content_width, content_height) = chrome::INITIAL_CONTENT;
+        let frame_height = content_height + chrome::HEIGHT;
         let attributes = WindowAttributes::default()
-            .with_surface_size(PhysicalSize::new(1280, 720))
+            .with_surface_size(PhysicalSize::new(content_width, frame_height))
             .with_position(PhysicalPosition::new(
-                ((i64::from(width) - 1280) / 2) as i32,
-                ((i64::from(height) - 720) / 2) as i32,
+                ((i64::from(width) - i64::from(content_width)) / 2) as i32,
+                ((i64::from(height) - i64::from(frame_height)) / 2) as i32,
             ));
         let window = event_loop.create_streaming_window(attributes)?;
         javascript_input::enable(window.as_ref());
@@ -81,7 +86,8 @@ impl Hull {
             SceneTarget::for_window(window.trueos_window_id(), size.width, size.height)
                 .map_err(|error| format!("{error:?}"))?,
         );
-        self.viewport.resize(size.width, size.height);
+        self.viewport
+            .resize_with_origin(size.width, size.height, 0, chrome::HEIGHT);
         self.quads_dirty = true;
         self.redraw_reason = "initial";
         window.request_redraw();
@@ -120,6 +126,7 @@ impl Hull {
                 self.snapshot = snapshot::Snapshot::default();
                 if let Some(target) = &self.target {
                     self.images.reset(target.render_target(), self.generation);
+                    self.images.start_favicon(&url);
                 }
                 // A pending old frame must not publish after its assets retire.
                 self.pending_publish = false;
@@ -217,6 +224,7 @@ impl Hull {
                         ),
                     );
                     self.css.parse_document(&document, &self.page_url);
+                    self.images.collect_favicon(&document, &self.page_url);
                     self.scripts.extract(&document, &self.page_url);
                     if let Some(javascript) = &mut self.javascript {
                         javascript.replace_page(
@@ -334,11 +342,7 @@ impl ApplicationHandler for Hull {
             let result = layout::compute(
                 self.document.as_ref().unwrap(),
                 &self.css,
-                self.window
-                    .as_ref()
-                    .map(|window| window.surface_size())
-                    .map(|size| (size.width, size.height))
-                    .unwrap_or((1280, 720)),
+                self.viewport.extent(),
             )
             .map_err(|error| error.to_string())
             .and_then(|layout| {
@@ -440,7 +444,8 @@ impl ApplicationHandler for Hull {
                 self.pending_publish = false;
                 self.quads_dirty = true;
                 self.redraw_reason = "resize";
-                self.viewport.resize(size.width, size.height);
+                self.viewport
+                    .resize_with_origin(size.width, size.height, 0, chrome::HEIGHT);
                 self.frame_counter.resizing();
                 window.request_redraw();
                 target.set_extent(size.width, size.height)
@@ -513,14 +518,12 @@ impl ApplicationHandler for Hull {
                         .iter()
                         .filter_map(|&rect| self.viewport.clip_rect(rect))
                         .collect();
-                    let mut drew_native = false;
                     if self.image_frame_recovery {
                         images::recover_frame(target)?;
                     } else if self.layout_generation == Some(self.generation)
                         && self.quad_pass == actual_bg_quad::QuadPass::ActualBgQuad
                     {
                         actual_bg_quad::draw(&self.background_quads, &self.viewport, target)?;
-                        drew_native = true;
                     } else if self.layout_generation == Some(self.generation) {
                         if self.quads.is_none() {
                             self.quads = Some(pink_quad_dbg::Quads::new().map_err(|code| {
@@ -542,7 +545,6 @@ impl ApplicationHandler for Hull {
                                 }
                             })?;
                         quads.draw(target)?;
-                        drew_native = true;
                     } else {
                         target.begin(rgba(35, 39, 39, 255))?;
                     }
@@ -572,7 +574,8 @@ impl ApplicationHandler for Hull {
                         self.quads_dirty = true;
                         return Err(Error::Busy);
                     }
-                    if !self.text_runs.is_empty() {
+                    if self.layout_generation == Some(self.generation) && !self.text_runs.is_empty()
+                    {
                         // Document pixels remain document pixels. Cull and trim
                         // offscreen runs before transport or font preparation.
                         let runs: Vec<_> = self
@@ -607,10 +610,11 @@ impl ApplicationHandler for Hull {
                         }
                         let (x, y) = self.viewport.offset();
                         let (doc_width, doc_height) = self.viewport.document_extent();
+                        let (viewport_width, viewport_height) = self.viewport.extent();
                         vshell::linef(format_args!(
                             "hull: viewport={}x{} document={}x{} scroll={},{} rects={}/{} text_runs={}/{} glyphs={} scale=1",
-                            size.width,
-                            size.height,
+                            viewport_width,
+                            viewport_height,
                             doc_width,
                             doc_height,
                             x,
@@ -624,12 +628,64 @@ impl ApplicationHandler for Hull {
                                 .sum::<usize>(),
                         ));
                     }
-                    self.frame_counter.produced(
-                        self.redraw_reason,
-                        size.width,
-                        size.height,
-                        drew_native,
-                    );
+                    // Native LOAD_COLOR triangles accept the CPU-authored page
+                    // text lease. Their release then authorizes a favicon sprite
+                    // overlay; issuing sprites directly after text is invalid.
+                    let ui_error = |code| {
+                        if code == trueos::vgpu::ERR_BUSY {
+                            Error::Busy
+                        } else {
+                            Error::Unknown(code)
+                        }
+                    };
+                    if self.chrome_quads.is_none() {
+                        self.chrome_quads =
+                            Some((pink_quad_dbg::Quads::new().map_err(ui_error)?, (0, 0)));
+                    }
+                    let (chrome_pass, extent) = self.chrome_quads.as_mut().unwrap();
+                    if *extent != (size.width, size.height) {
+                        chrome_pass
+                            .set_colored_rectangles(
+                                size.width,
+                                size.height,
+                                &chrome::rectangles(size.width, size.height),
+                            )
+                            .map_err(ui_error)?;
+                        *extent = (size.width, size.height);
+                    }
+                    if let Err(error) = chrome_pass.draw_overlay(target) {
+                        if error == Error::Busy {
+                            self.image_frame_recovery = true;
+                        }
+                        return Err(error);
+                    }
+                    let icon = self.images.favicon().and_then(|icon| {
+                        chrome::icon_quad(
+                            size.width,
+                            size.height,
+                            icon.sprite_id,
+                            icon.width,
+                            icon.height,
+                        )
+                    });
+                    if let Some(icon) = icon {
+                        if let Err(error) = target.draw_sprite_quads(&[icon]) {
+                            self.images.disable_favicon();
+                            self.image_frame_recovery = true;
+                            logl::log(
+                                logl::level::ERROR,
+                                format_args!("hull: favicon paint failed: {error:?}"),
+                            );
+                            return Err(Error::Busy);
+                        }
+                    } else {
+                        let letter = chrome::domain_letter(&self.page_url);
+                        if let Some(run) = chrome::letter_run(size.width, size.height, &letter) {
+                            target.draw_hull_text_runs(&[run])?;
+                        }
+                    }
+                    self.frame_counter
+                        .produced(self.redraw_reason, size.width, size.height, true);
                     self.quads_dirty = false;
                     self.pending_publish = true;
                 }
@@ -646,6 +702,13 @@ impl ApplicationHandler for Hull {
                 }
                 self.frame_counter.published();
                 self.pending_publish = false;
+                if self.image_frame_recovery {
+                    // Recovery first publishes a safe text frame. Repaint the
+                    // full page next so an icon failure cannot leave CSS and
+                    // page images absent until the next scroll or resize.
+                    self.quads_dirty = true;
+                    self.redraw_reason = "recovery";
+                }
                 self.image_frame_recovery = false;
                 if self.layout_generation == Some(self.generation) {
                     self.published_generation = Some(self.generation);

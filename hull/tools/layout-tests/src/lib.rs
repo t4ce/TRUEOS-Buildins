@@ -70,8 +70,12 @@ pub mod netfs {
 mod actual_bg_quad;
 #[path = "../../../src/border_geometry.rs"]
 mod border_geometry;
+#[path = "../../../src/chrome.rs"]
+mod chrome;
 #[path = "../../../src/css.rs"]
 mod css;
+#[path = "../../../src/favicon.rs"]
+mod favicon;
 #[path = "../../../src/layout.rs"]
 mod layout;
 #[path = "../../../src/viewport.rs"]
@@ -865,6 +869,15 @@ pub mod ui4_scene {
     }
 }
 pub mod ui4_winit {
+    #[derive(Clone, Copy, Debug)]
+    pub struct HullTextRun<'a> {
+        pub text: &'a str,
+        pub x: f32,
+        pub baseline_y: f32,
+        pub size_px: f32,
+        pub advance_px: f32,
+        pub rgba: u32,
+    }
     #[derive(Clone, Copy, Debug, PartialEq)]
     pub enum Error {
         Busy,

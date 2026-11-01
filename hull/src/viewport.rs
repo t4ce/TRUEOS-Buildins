@@ -1,10 +1,13 @@
 //! A viewport over document pixels. Window resizing changes the visible region;
-//! it never scales the document's rectangles, baselines, or font sizes.
+//! it never scales the document's rectangles, baselines, or font sizes. A frame
+//! origin reserves window chrome without changing stored document coordinates.
 
 #[derive(Default, Debug)]
 pub(super) struct Viewport {
     width: u32,
     height: u32,
+    origin_x: u32,
+    origin_y: u32,
     document_width: u32,
     document_height: u32,
     x: f64,
@@ -25,6 +28,22 @@ impl Viewport {
         (self.width, self.height)
     }
 
+    /// The content origin in the complete window frame, independent of scroll.
+    pub fn origin(&self) -> (u32, u32) {
+        (self.origin_x, self.origin_y)
+    }
+
+    pub fn frame_extent(&self) -> (u32, u32) {
+        (self.origin_x + self.width, self.origin_y + self.height)
+    }
+
+    /// The destination content rectangle for final raster/scissor clipping.
+    /// Conservative text and original border boundaries can extend beyond this
+    /// rectangle; callers must clip their raster writes rather than move them.
+    pub fn content_rect(&self) -> [u32; 4] {
+        [self.origin_x, self.origin_y, self.width, self.height]
+    }
+
     pub fn document_extent(&self) -> (u32, u32) {
         (self.document_width, self.document_height)
     }
@@ -42,8 +61,23 @@ impl Viewport {
     }
 
     pub fn resize(&mut self, width: u32, height: u32) {
-        self.width = width;
-        self.height = height;
+        self.resize_with_origin(width, height, 0, 0);
+    }
+
+    /// Reserve the top/left of a complete window frame for native chrome.
+    /// Extent and scrolling use only the remaining content region. An origin
+    /// beyond a shrunken frame clamps to its edge and produces an empty region.
+    pub fn resize_with_origin(
+        &mut self,
+        frame_width: u32,
+        frame_height: u32,
+        origin_x: u32,
+        origin_y: u32,
+    ) {
+        self.origin_x = origin_x.min(frame_width);
+        self.origin_y = origin_y.min(frame_height);
+        self.width = frame_width - self.origin_x;
+        self.height = frame_height - self.origin_y;
         self.clamp();
     }
 
@@ -103,8 +137,8 @@ impl Viewport {
             return None;
         }
         Some([
-            (left - self.x) as f32,
-            (top - self.y) as f32,
+            (left - self.x + self.origin_x as f64) as f32,
+            (top - self.y + self.origin_y as f64) as f32,
             (right - left) as f32,
             (bottom - top) as f32,
         ])
@@ -117,8 +151,12 @@ impl Viewport {
         let clipped = self.clip_rect(rect)?;
         let [x, y, width, height] = rect;
         let [left, top, visible_width, visible_height] = clipped;
-        let u0 = ((f64::from(left) + self.x - f64::from(x)) / f64::from(width)).clamp(0.0, 1.0);
-        let v0 = ((f64::from(top) + self.y - f64::from(y)) / f64::from(height)).clamp(0.0, 1.0);
+        let u0 = ((f64::from(left) - f64::from(self.origin_x) + self.x - f64::from(x))
+            / f64::from(width))
+        .clamp(0.0, 1.0);
+        let v0 = ((f64::from(top) - f64::from(self.origin_y) + self.y - f64::from(y))
+            / f64::from(height))
+        .clamp(0.0, 1.0);
         Some((
             clipped,
             [
@@ -185,8 +223,8 @@ impl Viewport {
         if text.chars().all(char::is_whitespace) {
             return None;
         }
-        let x = (x as f64 + first as f64 * cell - self.x) as f32;
-        let baseline_y = (baseline_y as f64 - self.y) as f32;
+        let x = (x as f64 + first as f64 * cell - self.x + self.origin_x as f64) as f32;
+        let baseline_y = (baseline_y as f64 - self.y + self.origin_y as f64) as f32;
         let advance_px = ((last - first) as f64 * cell) as f32;
         if ![x, baseline_y, advance_px]
             .iter()
@@ -213,6 +251,129 @@ mod tests {
         viewport.resize(1280, 720);
         viewport.set_document(1280, 5254);
         viewport
+    }
+
+    #[test]
+    fn chrome_origin_reserves_frame_space_without_changing_document_geometry() {
+        let mut v = Viewport::default();
+        v.resize_with_origin(1280, 752, 0, 32);
+        v.set_document(1280, 5254);
+        assert_eq!(v.extent(), (1280, 720));
+        assert_eq!(v.frame_extent(), (1280, 752));
+        assert_eq!(v.origin(), (0, 32));
+        assert_eq!(v.content_rect(), [0, 32, 1280, 720]);
+        assert_eq!(v.document_extent(), (1280, 5254));
+        assert_eq!(
+            v.clip_rect([0., 0., 1280., 720.]),
+            Some([0., 32., 1280., 720.])
+        );
+        assert_eq!(v.clip_rect([5., -20., 10., 30.]), Some([5., 32., 10., 10.]));
+        assert!(v.clip_rect([0., -40., 50., 20.]).is_none());
+        assert!(v.clip_rect([0., 720., 50., 20.]).is_none());
+        assert!(v.page(1));
+        assert_eq!(v.offset(), (0., 648.));
+        assert!(v.end());
+        assert_eq!(v.offset(), (0., 4534.));
+    }
+
+    #[test]
+    fn origin_and_scroll_shift_clipped_rectangles_but_not_image_uvs() {
+        let mut content = Viewport::default();
+        let mut frame = Viewport::default();
+        content.resize(100, 60);
+        frame.resize_with_origin(108, 92, 8, 32);
+        for v in [&mut content, &mut frame] {
+            v.set_document(300, 300);
+            v.scroll_by(20.25, 40.5);
+        }
+        for rect in [
+            [10.5, 39.25, 30., 22.],
+            [30., 50., 10., 10.],
+            [95., 80., 80., 100.],
+        ] {
+            let (a, a_uv) = content.clip_image(rect).unwrap();
+            let (b, b_uv) = frame.clip_image(rect).unwrap();
+            assert_eq!(b, [a[0] + 8., a[1] + 32., a[2], a[3]]);
+            for i in 0..4 {
+                assert!((a_uv[i] - b_uv[i]).abs() < 1e-6, "{a_uv:?} != {b_uv:?}");
+            }
+            assert!(b[0] >= 8. && b[1] >= 32.);
+            assert!(b[0] + b[2] <= 108. && b[1] + b[3] <= 92.);
+        }
+        assert_eq!(
+            frame.clip_rect([10.5, 39.25, 30., 22.]),
+            Some([8., 32., 20.25, 20.75])
+        );
+    }
+
+    #[test]
+    fn text_origin_preserves_size_spacing_and_document_baselines_after_scroll() {
+        let mut v = Viewport::default();
+        v.resize_with_origin(1280, 752, 0, 32);
+        v.set_document(1280, 5254);
+        let visible = v.text_slice("text", 20., 100., 16., 64.).unwrap();
+        assert_eq!(
+            (
+                visible.x,
+                visible.baseline_y,
+                visible.size_px,
+                visible.advance_px
+            ),
+            (20., 132., 16., 64.)
+        );
+        v.scroll_by(0., 900.);
+        let visible = v.text_slice("text", 20., 1000., 16., 64.).unwrap();
+        assert_eq!(
+            (
+                visible.x,
+                visible.baseline_y,
+                visible.size_px,
+                visible.advance_px
+            ),
+            (20., 132., 16., 64.)
+        );
+        assert!(v.text_slice("above", 0., 800., 11., 40.).is_none());
+        assert!(v.text_slice("below", 0., 1700., 11., 40.).is_none());
+    }
+
+    #[test]
+    fn text_guards_remain_conservative_for_final_content_scissoring() {
+        let mut v = Viewport::default();
+        v.resize_with_origin(38, 132, 8, 32);
+        v.set_document(200, 300);
+        v.scroll_by(20., 40.);
+        let visible = v.text_slice("αβ🦀日語xyz", 0., 42., 11., 80.).unwrap();
+        assert_eq!(visible.text, "β🦀日語x");
+        assert_eq!(
+            (
+                visible.x,
+                visible.baseline_y,
+                visible.size_px,
+                visible.advance_px
+            ),
+            (-2., 34., 11., 50.)
+        );
+        // The retained edge glyph may overlap chrome/left margin; clipping its
+        // actual raster to content_rect preserves its original shape and baseline.
+        assert_eq!(v.content_rect(), [8, 32, 30, 100]);
+    }
+
+    #[test]
+    fn shrunken_frames_have_no_content_and_plain_resize_clears_origin() {
+        let mut v = Viewport::default();
+        v.resize_with_origin(10, 20, 12, 32);
+        v.set_document(200, 300);
+        assert_eq!(v.origin(), (10, 20));
+        assert_eq!(v.extent(), (0, 0));
+        assert_eq!(v.frame_extent(), (10, 20));
+        assert!(v.clip_rect([0., 0., 100., 100.]).is_none());
+        assert!(v.clip_image([0., 0., 100., 100.]).is_none());
+        assert!(v.text_slice("hidden", 0., 11., 11., 36.).is_none());
+        v.resize(100, 100);
+        assert_eq!(v.origin(), (0, 0));
+        assert_eq!(v.extent(), (100, 100));
+        assert_eq!(v.frame_extent(), (100, 100));
+        assert_eq!(v.clip_rect([0., 0., 10., 10.]), Some([0., 0., 10., 10.]));
     }
 
     #[test]
