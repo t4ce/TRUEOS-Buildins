@@ -37,6 +37,7 @@ struct Hull {
     quads_dirty: bool,
     quad_pass: actual_bg_quad::QuadPass,
     background_quads: Vec<layout::BackgroundQuad>,
+    canvas_color: [u8; 4],
     border_quads: Vec<layout::BorderQuad>,
     borders: Option<pink_quad_dbg::BorderPass>,
     chrome_quads: Option<(pink_quad_dbg::Quads, (u32, u32))>,
@@ -366,6 +367,7 @@ impl ApplicationHandler for Hull {
                 self.text_runs = layout.text_runs;
                 self.rectangles = layout.line_rects;
                 self.background_quads = layout.background_quads;
+                self.canvas_color = layout.canvas_color;
                 self.border_quads = layout.border_quads;
                 // CSS overflow can extend beyond the SVG's declared viewBox.
                 // Keep that overflow reachable without allocating a page-sized frame.
@@ -523,7 +525,12 @@ impl ApplicationHandler for Hull {
                     } else if self.layout_generation == Some(self.generation)
                         && self.quad_pass == actual_bg_quad::QuadPass::ActualBgQuad
                     {
-                        actual_bg_quad::draw(&self.background_quads, &self.viewport, target)?;
+                        actual_bg_quad::draw(
+                            &self.background_quads,
+                            self.canvas_color,
+                            &self.viewport,
+                            target,
+                        )?;
                     } else if self.layout_generation == Some(self.generation) {
                         if self.quads.is_none() {
                             self.quads = Some(pink_quad_dbg::Quads::new().map_err(|code| {

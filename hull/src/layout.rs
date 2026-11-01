@@ -1,5 +1,8 @@
-//! Initial typed Lightning CSS -> Taffy bridge. No CSS string reparsing.
+//! Typed Lightning CSS -> Taffy bridge, with token substitution before property resolution.
 use super::css::Css;
+#[path = "custom_properties.rs"]
+mod custom_properties;
+use custom_properties::Variables;
 use lightningcss::properties::{
     Property,
     display::{Display as CssDisplay, DisplayInside, DisplayKeyword},
@@ -23,6 +26,7 @@ pub(super) struct Export {
     pub svg: String,
     pub line_rects: Vec<[f32; 4]>,
     pub background_quads: Vec<BackgroundQuad>,
+    pub canvas_color: [u8; 4],
     pub border_quads: Vec<BorderQuad>,
     pub line_extent: (u32, u32),
     pub text_runs: Vec<TextRun>,
@@ -95,6 +99,7 @@ pub(super) fn compute(
     let mut hidden = vec![false; document.nodes.len()];
     let mut styles = vec![Style::default(); document.nodes.len()];
     let mut text_metrics = vec![TextMetrics::default(); document.nodes.len()];
+    let mut variables = vec![Variables::default(); document.nodes.len()];
     let mut root_font_size = 11.0;
     let mut pending = vec![document.root];
     while let Some(id) = pending.pop() {
@@ -102,6 +107,10 @@ pub(super) fn compute(
         let inherited = node
             .parent
             .map(|parent| text_metrics[parent])
+            .unwrap_or_default();
+        let mut inherited_variables = node
+            .parent
+            .map(|parent| variables[parent].clone())
             .unwrap_or_default();
         let mut metrics = inherited;
         // Background colors belong to the element; they are never inherited.
@@ -126,6 +135,9 @@ pub(super) fn compute(
                 if name == "a" && attrs.iter().any(|attr| attr.name == "href") {
                     metrics.color = [0, 0, 255, 255];
                 }
+                if name == "video" {
+                    metrics.background = [144, 238, 144, 255]; // lightgreen
+                }
                 let context = ResolveContext {
                     viewport,
                     font_size: inherited.font_size,
@@ -140,6 +152,7 @@ pub(super) fn compute(
                     &mut cascade_scratch,
                     &mut style,
                     &mut metrics,
+                    &mut inherited_variables,
                     context,
                     &mut inline[id],
                     &mut contents[id],
@@ -169,6 +182,7 @@ pub(super) fn compute(
             style.display == Display::None || node.parent.is_some_and(|parent| hidden[parent]);
         styles[id] = style;
         text_metrics[id] = metrics;
+        variables[id] = inherited_variables;
         pending.extend(node.children.iter().rev().copied());
     }
 
@@ -376,10 +390,10 @@ pub(super) fn compute(
                         continue;
                     }
                     let line_height = context.metrics.line_height.used(context.metrics.font_size);
-                    for (line_index, line) in visual_lines(context, box_layout.size.width)
-                        .iter()
-                        .enumerate()
-                    {
+                    // Pixel snapping must not change the line breaks chosen
+                    // during measurement (e.g. 75.6px becoming a 75px box).
+                    let text_width = tree.unrounded_layout(tid).size.width;
+                    for (line_index, line) in visual_lines(context, text_width).iter().enumerate() {
                         // Whitespace retains its measured advance and line
                         // boxes, but has no ink to export or submit to UI4.
                         if line.chars().all(is_css_space) {
@@ -419,6 +433,24 @@ pub(super) fn compute(
     }
     let mut rows = Vec::new();
     let mut rectangles = Vec::new();
+    // HTML's root background paints the canvas. With a transparent root,
+    // propagate the body's background instead, without painting it twice.
+    let canvas_node = ["html", "body"].into_iter().find_map(|name| {
+        (0..document.nodes.len()).find(|&id| {
+            document.name(id) == name
+                && !hidden[id]
+                && !contents[id]
+                && text_metrics[id].paints()
+                && text_metrics[id].background[3] != 0
+        })
+    });
+    let [r, g, b, a] = canvas_node
+        .map(|id| text_metrics[id].background)
+        .unwrap_or([0; 4]);
+    let [r, g, b] = [r, g, b].map(|value| {
+        ((u32::from(value) * u32::from(a) + 255 * (255 - u32::from(a)) + 127) / 255) as u8
+    });
+    let canvas_color = [r, g, b, 255];
     let mut background_quads = Vec::new();
     let mut border_quads = Vec::new();
     let mut pending = vec![document.root];
@@ -456,7 +488,7 @@ pub(super) fn compute(
                         });
                     }
                 }
-                if !contents[id] && text_metrics[id].background[3] != 0 {
+                if Some(id) != canvas_node && !contents[id] && text_metrics[id].background[3] != 0 {
                     for rect in &fragments[id] {
                         background_quads.push(BackgroundQuad {
                             rect: [rect.left, rect.top, rect.width, rect.height],
@@ -499,11 +531,11 @@ pub(super) fn compute(
         }
     }
     let json = serde_json::to_string_pretty(
-        &serde_json::json!({"engine":"taffy","engine_version":"0.15.0","viewport":{"width":viewport.0,"height":viewport.1},"units":"layout units; CSS lengths currently map 1:1 for compatibility; SVG uses the same numeric coordinates","coordinates":"absolute layout units; right/bottom are rectangle edges, not CSS insets","text_metrics":"synthetic monospace cell metrics: 6 layout units advance by 11 layout units line height at 11-unit default font-size, scaled by inherited CSS font-size and line-height; no font shaping","limitations":["opacity:0 suppresses subtree paint and visibility is inherited; partial-opacity groups and compositing are not implemented","text widths and wrapping use synthetic monospace metrics; no font shaping","dynamic pseudo-classes, pseudo-elements, :has and namespace selectors are not implemented","media conditions cover viewport sizes and orientation; device preference queries, variables, calc, grid tracks, cascade layers and supports conditions are not implemented","inline flow uses approximate flex line boxes; nested inline boxes may wrap as a single item; no complete browser default stylesheet"],"unsupported_rule_count":unsupported_rules,"properties_not_used_for_layout":unused,"nodes":rows}),
+        &serde_json::json!({"engine":"taffy","engine_version":"0.15.0","viewport":{"width":viewport.0,"height":viewport.1},"units":"layout units; CSS lengths currently map 1:1 for compatibility; SVG uses the same numeric coordinates","coordinates":"absolute layout units; right/bottom are rectangle edges, not CSS insets","text_metrics":"synthetic monospace cell metrics: 6 layout units advance by 11 layout units line height at 11-unit default font-size, scaled by inherited CSS font-size and line-height; no font shaping","limitations":["opacity:0 suppresses subtree paint and visibility is inherited; partial-opacity groups and compositing are not implemented","text widths and wrapping use synthetic monospace metrics; no font shaping","dynamic pseudo-classes, pseudo-elements, :has and namespace selectors are not implemented","media conditions cover viewport sizes and orientation; device preference queries, calc, grid tracks, cascade layers and supports conditions are not implemented","inline flow uses approximate flex line boxes; nested inline boxes may wrap as a single item; no complete browser default stylesheet"],"unsupported_rule_count":unsupported_rules,"properties_not_used_for_layout":unused,"nodes":rows}),
     )?;
     let extent = project_extent(tree.layout(root)?.size.height).max(viewport.1 as f32);
     let mut svg = format!(
-        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{}\" height=\"{}\" viewBox=\"0 0 {} {}\"><rect width=\"100%\" height=\"100%\" fill=\"white\"/>",
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{}\" height=\"{}\" viewBox=\"0 0 {} {}\"><rect width=\"100%\" height=\"100%\" fill=\"#{r:02x}{g:02x}{b:02x}\"/>",
         viewport.0, extent, viewport.0, extent
     );
     let line_rects = rectangles
@@ -523,6 +555,7 @@ pub(super) fn compute(
         svg,
         line_rects,
         background_quads,
+        canvas_color,
         border_quads,
         line_extent: (viewport.0, extent.ceil() as u32),
         text_runs,
@@ -818,7 +851,11 @@ impl TextMetrics {
 }
 
 pub(super) fn estimate_text_width(text: &str, font_size: f32) -> f32 {
-    text.chars().count() as f32 * font_size * (6.0 / 11.0)
+    (text.chars().count() as f64 * text_advance(font_size)) as f32
+}
+
+fn text_advance(font_size: f32) -> f64 {
+    f64::from(font_size) * 6.0 / 11.0
 }
 
 fn apply_css<'a>(
@@ -830,6 +867,7 @@ fn apply_css<'a>(
     scratch: &mut CascadeScratch<'a>,
     style: &mut Style,
     text_metrics: &mut TextMetrics,
+    variables: &mut Variables,
     context: ResolveContext,
     inline: &mut bool,
     contents: &mut bool,
@@ -885,6 +923,18 @@ fn apply_css<'a>(
     declarations.sort_by_key(|&(important, inline, specificity, order, _)| {
         (important, inline, specificity, order)
     });
+    variables.cascade(declarations.iter().map(|declaration| declaration.4));
+    let computed: Vec<std::borrow::Cow<'_, Property<'static>>> = declarations
+        .iter()
+        .filter_map(|declaration| match declaration.4 {
+            Property::Custom(_) => None,
+            Property::Unparsed(property) => {
+                variables.property(property).map(std::borrow::Cow::Owned)
+            }
+            property => Some(std::borrow::Cow::Borrowed(property)),
+        })
+        .collect();
+    let properties: Vec<_> = computed.iter().map(|property| property.as_ref()).collect();
     let mut positioned = false;
     let mut border_visible = [true; 4];
     let mut font_size_winner: Option<&CssFontSize> = None;
@@ -893,7 +943,7 @@ fn apply_css<'a>(
     let mut background_winner = None;
     let mut border_color_winner = None;
     let mut opacity_winner = None;
-    for (_, _, _, _, property) in declarations.iter() {
+    for property in &properties {
         if let Property::Position(value) = property {
             positioned = !matches!(value, lightningcss::properties::position::Position::Static);
         }
@@ -993,7 +1043,7 @@ fn apply_css<'a>(
         font_size: text_metrics.font_size,
         ..context
     };
-    for (_, _, _, _, property) in declarations {
+    for property in properties {
         use lightningcss::properties::border::LineStyle;
         let visible = |value: &LineStyle| !matches!(value, LineStyle::None | LineStyle::Hidden);
         match property {
@@ -1964,9 +2014,13 @@ fn for_each_visual_line(
     {
         return;
     }
-    let advance = font_size * (6.0 / 11.0);
+    let advance = text_advance(font_size);
+    let width = f64::from(width);
+    // Taffy stores measured widths as f32. Allow only that conversion's
+    // rounding error; an exact character fit must not lose a whole column.
+    let rounding_slack = width.abs() * f64::from(f32::EPSILON);
     let columns = if advance > 0.0 {
-        (width / advance).floor().max(1.0) as usize
+        ((width + rounding_slack) / advance).floor().max(1.0) as usize
     } else {
         usize::MAX
     };
@@ -1991,6 +2045,9 @@ fn for_each_visual_line(
 }
 
 fn used_for_layout(name: &str) -> bool {
+    if name.starts_with("--") {
+        return true;
+    }
     matches!(
         name,
         "width"

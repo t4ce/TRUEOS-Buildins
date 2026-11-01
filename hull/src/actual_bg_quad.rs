@@ -27,14 +27,15 @@ impl QuadPass {
 
 pub(super) fn draw(
     backgrounds: &[BackgroundQuad],
+    canvas_color: [u8; 4],
     viewport: &Viewport,
     target: &mut SceneTarget,
 ) -> Result<(), Error> {
-    // Sprite draws require a GPU frame. Paint white first so the transparent
-    // native-frame clear never changes the page's default background.
+    // Sprite draws require a GPU frame. Paint the resolved page canvas first
+    // so short documents and scrolling retain the same background.
     let mut quads = vec![quad(
         viewport.content_rect().map(|value| value as f32),
-        [255; 4],
+        canvas_color,
     )];
     quads.extend(backgrounds.iter().filter_map(|background| {
         Some(quad(viewport.clip_rect(background.rect)?, background.color))
@@ -80,11 +81,26 @@ mod tests {
     use super::*;
 
     #[test]
+    fn page_canvas_color_covers_content_without_requiring_a_body_rectangle() {
+        let mut viewport = Viewport::default();
+        viewport.resize_with_origin(100, 70, 0, 20);
+        let mut target = SceneTarget::default();
+        draw(&[], [22, 22, 22, 255], &viewport, &mut target).unwrap();
+        assert_eq!(target.draws.len(), 1);
+        assert_eq!(
+            target.draws[0].color_rgba,
+            u32::from_le_bytes([22, 22, 22, 255])
+        );
+        assert_eq!(target.draws[0].c0.y, 20.0);
+        assert_eq!(target.draws[0].c2.y, 70.0);
+    }
+
+    #[test]
     fn empty_backgrounds_still_produce_a_white_gpu_frame() {
         let mut viewport = Viewport::default();
         viewport.resize(100, 50);
         let mut target = SceneTarget::default();
-        draw(&[], &viewport, &mut target).unwrap();
+        draw(&[], [255; 4], &viewport, &mut target).unwrap();
         assert!(target.gpu_frame);
         assert_eq!(target.draws.len(), 1);
         assert_eq!(target.draws[0].color_rgba, u32::MAX);
@@ -95,7 +111,7 @@ mod tests {
         let mut viewport = Viewport::default();
         viewport.resize_with_origin(1280, 752, 0, 32);
         let mut target = SceneTarget::default();
-        draw(&[], &viewport, &mut target).unwrap();
+        draw(&[], [255; 4], &viewport, &mut target).unwrap();
         let page = target.draws[0];
         assert_eq!((page.c0.x, page.c0.y), (0.0, 32.0));
         assert_eq!((page.c2.x, page.c2.y), (1280.0, 752.0));
@@ -120,7 +136,7 @@ mod tests {
             },
         ];
         let mut target = SceneTarget::default();
-        draw(&backgrounds, &viewport, &mut target).unwrap();
+        draw(&backgrounds, [255; 4], &viewport, &mut target).unwrap();
         assert!(target.gpu_frame);
         assert_eq!(target.draws.len(), 3);
         assert_eq!(target.draws[0].color_rgba, u32::MAX);

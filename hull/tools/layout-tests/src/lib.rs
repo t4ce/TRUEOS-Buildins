@@ -201,6 +201,141 @@ mod tests {
         assert!(output.border_quads.is_empty());
     }
 
+    #[test]
+    fn fractional_heading_offsets_do_not_split_an_exact_word_fit() {
+        for offset in [0.0, 0.1, 0.4, 0.6, 0.9] {
+            let (_, output) = export(
+                "<h1><span>Technik</span></h1>",
+                &format!("h1 {{ font-size:19.8px;line-height:1.375;margin-left:{offset}px }}"),
+            );
+            assert_eq!(output.text_runs.len(), 1, "offset={offset}");
+            assert_eq!(output.text_runs[0].text, "Technik");
+            assert!(output.svg.contains(">Technik</text>"));
+            let json: serde_json::Value = serde_json::from_str(&output.json).unwrap();
+            let heading = json["nodes"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|node| node["tag"] == "h1")
+                .unwrap();
+            assert!(heading["rect"]["height"].as_f64().unwrap() < 30.0);
+        }
+    }
+
+    #[test]
+    fn double_precision_wrapping_keeps_real_subpixel_width_constraints() {
+        let (_, output) = export(
+            "<div>Technik</div>",
+            "div { font-size:19.8px;white-space:pre-wrap;width:75px }",
+        );
+        let lines: Vec<_> = output
+            .text_runs
+            .iter()
+            .map(|run| run.text.as_str())
+            .collect();
+        assert_eq!(lines, ["Techni", "k"]);
+    }
+
+    #[test]
+    fn inherited_custom_property_colors_the_entire_empty_page_canvas() {
+        let (_, output) = export(
+            "<body></body>",
+            "html { --main-background:#161616 } body { background:var(--main-background) }",
+        );
+        assert_eq!(output.canvas_color, [22, 22, 22, 255]);
+        assert!(output.background_quads.is_empty());
+        assert!(output.svg.contains("fill=\"#161616\""));
+    }
+
+    #[test]
+    fn custom_properties_follow_cascade_scope_and_computed_inheritance() {
+        let (_, output) = export(
+            r#"<section id="scope" style="--base:blue"><div id="child"></div></section><div id="sibling"></div>"#,
+            "html {--base:red;--alias:var(--base)} #scope {--base:green!important}
+             div {width:40px;height:20px;background:var(--base)}
+             #child {background:var(--alias)}",
+        );
+        assert_eq!(output.background_quads.len(), 2);
+        assert_eq!(output.background_quads[0].color, [255, 0, 0, 255]);
+        assert_eq!(output.background_quads[1].color, [255, 0, 0, 255]);
+        let (_, output) = export(
+            r#"<div style="--base:red"></div>"#,
+            "div {--base:green!important;background:var(--base);width:40px;height:20px}",
+        );
+        assert_eq!(output.background_quads[0].color, [0, 128, 0, 255]);
+    }
+
+    #[test]
+    fn variable_fallbacks_nested_functions_and_dimensions_use_typed_properties() {
+        let (_, output) = export(
+            "<div>text</div>",
+            "html{--channel:128;--width:40px;--ink:blue}
+             div{width:var(--width);height:20px;color:var(--ink);
+                 background:var(--missing,rgba(var(--channel),0,0,.5))}",
+        );
+        assert_eq!(output.background_quads[0].color, [128, 0, 0, 128]);
+        assert_eq!(output.background_quads[0].rect[2], 40.0);
+        assert_eq!(output.text_runs[0].color, [0, 0, 255, 255]);
+    }
+
+    #[test]
+    fn cyclic_variables_in_functions_and_unused_fallbacks_are_invalid() {
+        for vars in [
+            "--a:rgb(var(--a))",
+            "--a:var(--b);--b:var(--a)",
+            "--existing:red;--a:var(--existing,var(--a))",
+        ] {
+            let (_, output) = export(
+                "<body></body>",
+                &format!("html {{{vars}}} body {{background:var(--a,#161616)}}"),
+            );
+            assert_eq!(output.canvas_color, [22, 22, 22, 255]);
+        }
+    }
+
+    #[test]
+    fn invalid_winning_variable_background_does_not_reveal_lower_declaration() {
+        let (_, output) = export(
+            "<body></body>",
+            "body {background:red;background:var(--missing)}",
+        );
+        assert_eq!(output.canvas_color, [255; 4]);
+        let (_, output) = export(
+            "<body style='--bg:initial'></body>",
+            "html {--bg:red} body {background:var(--bg,blue)}",
+        );
+        assert_eq!(output.canvas_color, [0, 0, 255, 255]);
+    }
+
+    #[test]
+    fn canvas_alpha_is_composited_once_and_root_background_precedes_body() {
+        let (_, output) = export("<body>short</body>", "body {background:rgba(0,0,0,.5)}");
+        assert_eq!(output.canvas_color, [127, 127, 127, 255]);
+        assert!(output.background_quads.is_empty());
+        let (_, output) = export(
+            "<body>short</body>",
+            "html {background:red} body {background:blue}",
+        );
+        assert_eq!(output.canvas_color, [255, 0, 0, 255]);
+        assert_eq!(output.background_quads.len(), 1);
+        assert_eq!(output.background_quads[0].color, [0, 0, 255, 255]);
+    }
+
+    #[test]
+    fn expanding_custom_properties_are_bounded_and_allow_consumer_fallback() {
+        let mut css = String::from("html {--a0:red;");
+        for index in 1..=16 {
+            css.push_str(&format!(
+                "--a{index}:var(--a{}) var(--a{});",
+                index - 1,
+                index - 1
+            ));
+        }
+        css.push_str("} body {background:var(--a16,#161616)}");
+        let (_, output) = export("<body></body>", &css);
+        assert_eq!(output.canvas_color, [22, 22, 22, 255]);
+    }
+
     fn node<'a>(
         doc: &rp5::Document,
         result: &'a serde_json::Value,

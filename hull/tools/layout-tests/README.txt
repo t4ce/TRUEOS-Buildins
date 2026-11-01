@@ -58,3 +58,13 @@ Native border pass:
 - The kernel and built-in vGPU facade must both include the V2 LOAD_COLOR flag.
 
 Hyperlinks with href default to blue; authored CSS color overrides that default.
+
+Custom properties and canvas:
+- Custom --properties participate in the existing cascade and inherit by scope.
+  Lightning CSS substitutes var() tokens and reparses supported typed values;
+  nested fallbacks are supported, and cyclic definitions become invalid.
+  Resolution is bounded to 32 dependency/nesting levels and 8192 tokens per value.
+- The html background paints the page canvas. A transparent html background
+  propagates the body background instead. Its alpha composites over white once;
+  the propagated element does not paint a duplicate background over itself.
+- Live actualBgQuad painting and the SVG canvas use the same resolved color.
