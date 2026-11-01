@@ -52,5 +52,6 @@ Native border pass:
   authored widths are intentionally not reproduced by this baseline pass.
 - Original offscreen boundaries are retained for GPU clipping, so scrolling
   does not invent border edges at the viewport. Large loop worklists submit
-  in bounded batches with LOAD_COLOR, preserving the existing fill and order.
+  in batches of at most 340 native draws with LOAD_COLOR, preserving the
+  existing fill and order. The 600-entry ABI array is only wire capacity.
 - The kernel and built-in vGPU facade must both include the V2 LOAD_COLOR flag.

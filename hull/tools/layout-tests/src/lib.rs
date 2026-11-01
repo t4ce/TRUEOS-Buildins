@@ -899,6 +899,7 @@ pub mod ui4_winit {
         pub unretired: bool,
         pub cancel_on_sprite_error: bool,
         pub sprite_calls: usize,
+        pub gpu_frame: bool,
     }
     impl SceneTarget {
         pub fn render_target(&self) -> u32 {
@@ -912,6 +913,11 @@ pub mod ui4_winit {
                 return Err(Error::InvalidState);
             }
             self.lease = true;
+            Ok(())
+        }
+        pub fn begin_gpu_frame(&mut self) -> Result<(), Error> {
+            self.begin(0)?;
+            self.gpu_frame = true;
             Ok(())
         }
         pub fn text_probe(&self) -> Result<(), Error> {

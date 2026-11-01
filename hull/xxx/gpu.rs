@@ -147,20 +147,11 @@ impl Quads {
         let Some((vertices, indices)) = self.mesh else {
             return Ok(());
         };
-        for (part, draws) in self.draws.chunks(MAX_INDEXED_BATCH_V2_DRAWS).enumerate() {
+        for batch in draw_batches(&self.draws, overlay) {
             let surface = self
                 .device
                 .acquire_ui4_surface(target.render_target())
                 .map_err(ui_error)?;
-            let mut batch = IndexedDrawBatchV2 {
-                clear_rgba8_srgb: u32::MAX,
-                draw_count: draws.len() as u32,
-                ..Default::default()
-            };
-            batch.draws[..draws.len()].copy_from_slice(draws);
-            if overlay || part != 0 {
-                batch.draws[0].reserved |= INDEXED_BATCH_V2_LOAD_COLOR;
-            }
             let point = self
                 .device
                 .submit_ui4_indexed_batch_v2(
@@ -190,5 +181,79 @@ impl Drop for Quads {
         let _ = self.device.destroy_render_pipeline(self.pipeline);
         let _ = self.device.destroy_shader_module(self.shader);
         let _ = self.device.close();
+    }
+}
+
+/// Keep each native submission within the resident state slots. Continuations
+/// retain earlier pixels, including border loops from previous submissions.
+fn draw_batches(
+    draws: &[IndexedBatchDrawV2],
+    overlay: bool,
+) -> impl Iterator<Item = IndexedDrawBatchV2> + '_ {
+    draws
+        .chunks(MAX_INDEXED_BATCH_V2_SUBMIT_DRAWS)
+        .enumerate()
+        .map(move |(part, draws)| {
+            let mut batch = IndexedDrawBatchV2 {
+                clear_rgba8_srgb: u32::MAX,
+                draw_count: draws.len() as u32,
+                ..Default::default()
+            };
+            batch.draws[..draws.len()].copy_from_slice(draws);
+            if overlay || part != 0 {
+                batch.draws[0].reserved |= INDEXED_BATCH_V2_LOAD_COLOR;
+            }
+            batch
+        })
+}
+
+#[cfg(test)]
+mod batch_tests {
+    use super::*;
+
+    #[test]
+    fn large_border_worklists_preserve_every_loop_and_prior_pixels() {
+        for count in [0, 1, 340, 341, 600, 601, 10_000] {
+            let draws: Vec<_> = (0..count)
+                .map(|index| IndexedBatchDrawV2 {
+                    first_index: index * 4,
+                    base_vertex: (index * 4) as i32,
+                    index_count: 4,
+                    topology: PRIMITIVE_TOPOLOGY_LINE_LOOP,
+                    rgba8_srgb: index,
+                    ..Default::default()
+                })
+                .collect();
+            let mut next = 0;
+            for batch in draw_batches(&draws, true) {
+                let len = batch.draw_count as usize;
+                assert!((1..=340).contains(&len));
+                assert_eq!(batch.draws[0].reserved, INDEXED_BATCH_V2_LOAD_COLOR);
+                for (index, draw) in batch.draws[..len].iter().enumerate() {
+                    let mut decoded = *draw;
+                    decoded.reserved &= !INDEXED_BATCH_V2_LOAD_COLOR;
+                    assert_eq!(decoded, draws[next + index]);
+                }
+                assert!(
+                    batch.draws[len..]
+                        .iter()
+                        .all(|draw| *draw == Default::default())
+                );
+                next += len;
+            }
+            assert_eq!(next, count as usize);
+        }
+    }
+
+    #[test]
+    fn fill_clears_once_and_continuations_load_existing_pixels() {
+        let draws = vec![IndexedBatchDrawV2::default(); 681];
+        let flags: Vec<_> = draw_batches(&draws, false)
+            .map(|batch| batch.draws[0].reserved)
+            .collect();
+        assert_eq!(
+            flags,
+            [0, INDEXED_BATCH_V2_LOAD_COLOR, INDEXED_BATCH_V2_LOAD_COLOR]
+        );
     }
 }
