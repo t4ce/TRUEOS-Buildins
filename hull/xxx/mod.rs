@@ -1,6 +1,7 @@
 //! Translucent layout quads. The caller supplies clipped viewport coordinates.
 mod gpu;
 pub use gpu::Quads;
+pub use gpu::Quads as BorderPass;
 
 /// Layout-space rectangle: left, top, width, height.
 pub type Rect = [f32; 4];

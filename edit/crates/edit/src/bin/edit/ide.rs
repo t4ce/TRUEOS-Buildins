@@ -273,8 +273,13 @@ impl IdeSession {
                     open_files: documents.open_project_paths(),
                     selected_text: documents.selected_project_text(),
                     build: self.tracker.state.clone(),
+                    api_reference: Some(trueos_ide::api_reference::context()),
                 } }
             }
+            IdeRequest::ApiReference { topic } => match trueos_ide::api_reference::read(&topic) {
+                Some(reference) => IdeResponse::ApiReference { reference },
+                None => IdeResponse::error("unknown_api_topic", "Select a platform API topic from workspace context"),
+            },
             IdeRequest::ReadFile { path } => match documents.project_text(&path) {
                 Ok(Some(text)) => IdeResponse::File { file: FileContents { path, text, revision_id } },
                 Ok(None) => IdeResponse::error("not_found", "Project source does not exist"),
@@ -743,6 +748,37 @@ mod tests {
     }
     impl Drop for TestDatabase {
         fn drop(&mut self) { let _ = std::fs::remove_file(&self.0); }
+    }
+
+    #[test]
+    fn platform_reference_is_available_for_each_compiler_without_source_changes() {
+        for (backend, entry) in [(CompilerBackend::OdinSon, "main.odin"),
+                                 (CompilerBackend::RustcMin, "main.rs")] {
+            let database = TestDatabase::new();
+            let mut session = IdeSession::open_config(&database.0, "api", backend, entry).unwrap();
+            let mut documents = DocumentManager::default();
+            documents.load_project(session.project.clone()).unwrap();
+            let revision = session.project.borrow().source.revision.id;
+            let paths = documents.open_project_paths();
+            let IdeResponse::Context { context } = session.handle_request(&mut documents, IdeRequest::Context {}) else {
+                panic!("expected workspace context");
+            };
+            let api = context.api_reference.expect("IDE platform reference");
+            assert!(api.render_summary().contains("API version:"));
+            assert!(api.topics.iter().any(|topic| topic.name == "terminal"));
+            let IdeResponse::ApiReference { reference } = session.handle_request(&mut documents,
+                IdeRequest::ApiReference { topic: "terminal".into() }) else {
+                panic!("expected platform topic");
+            };
+            assert_eq!(reference.api_id, api.api_id);
+            assert!(reference.text.contains("terminal_lease_release_v1"));
+            assert!(matches!(session.handle_request(&mut documents,
+                IdeRequest::ApiReference { topic: "../main.rs".into() }),
+                IdeResponse::Error { code, .. } if code == "unknown_api_topic"));
+            assert_eq!(session.project.borrow().source.revision.id, revision);
+            assert_eq!(documents.open_project_paths(), paths);
+            assert!(!documents.has_dirty_project_documents());
+        }
     }
 
     #[test]

@@ -26,3 +26,31 @@ Image policy:
 - The SVG snapshot is prepared without filesystem activity, then polled once per
   event-loop turn after publication. Failure or the five-second timeout affects
   neither live layout nor navigation. Snapshots larger than 8 MiB are omitted.
+
+Quad painting:
+- actualBgQuad is the default: solid CSS background/background-color fills,
+  including currentColor and color alpha, in DOM order. Backgrounds are not
+  inherited. Hidden, zero-opacity and display:contents boxes do not paint.
+- F2 switches to pinkQuadDbg and back without downloading or relayout. The
+  diagnostic pass keeps every element bounding box and the original magenta
+  [255, 0, 255, 33] source-over stacking opacity, regardless of CSS backgrounds.
+- Both passes share viewport scrolling/clipping and draw before images/text.
+  CSS background images, gradients, rounded clipping, z-index stacking contexts
+  and partial-opacity groups are not implemented by this solid background pass.
+- The SVG snapshot remains a diagnostic layout export saved after publication.
+
+Native border pass:
+- Runs over either fill pass, before images/text, using PotatoStamps' V2
+  LINE_LOOP geometry type. Each pink diagnostic box contributes exactly one
+  loop: four unrepeated vertices for square corners, plus one vertex/segment
+  per nonzero corner radius (eight segments for four rounded corners).
+- Rounded corners are straight chords between shortened sides. Pixel and
+  percentage radii are resolved per box and reduced together if they overlap.
+- Width stays at the native 3px default. The uniform loop color defaults to
+  black; authored border/border-color/border-top-color uses the cascaded top
+  border color, including currentColor and alpha. Per-side colors/styles and
+  authored widths are intentionally not reproduced by this baseline pass.
+- Original offscreen boundaries are retained for GPU clipping, so scrolling
+  does not invent border edges at the viewport. Large loop worklists submit
+  in bounded batches with LOAD_COLOR, preserving the existing fill and order.
+- The kernel and built-in vGPU facade must both include the V2 LOAD_COLOR flag.

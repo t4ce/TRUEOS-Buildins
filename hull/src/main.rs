@@ -10,15 +10,17 @@ use winit::keyboard::{Key, NamedKey};
 use winit::platform::trueos::{ActiveEventLoopExtTrueOS, WindowExtTrueOS};
 use winit::window::{Window, WindowAttributes, WindowId};
 
+mod actual_bg_quad;
+mod border_geometry;
 mod css;
 mod images;
 mod layout;
+#[path = "../xxx/mod.rs"]
+mod pink_quad_dbg;
 mod scripts;
 mod shellio;
 mod snapshot;
 mod viewport;
-#[path = "../xxx/mod.rs"]
-mod xxx;
 
 const PAGE_URL: &str = "https://example.com/";
 
@@ -29,11 +31,15 @@ struct Hull {
     pending_publish: bool,
     image_frame_recovery: bool,
     quads_dirty: bool,
+    quad_pass: actual_bg_quad::QuadPass,
+    background_quads: Vec<layout::BackgroundQuad>,
+    border_quads: Vec<layout::BorderQuad>,
+    borders: Option<pink_quad_dbg::BorderPass>,
     redraw_reason: &'static str,
     frame_counter: shellio::FrameCounter,
-    quads: Option<xxx::Quads>,
+    quads: Option<pink_quad_dbg::Quads>,
     text_runs: Vec<layout::TextRun>,
-    rectangles: Vec<xxx::Rect>,
+    rectangles: Vec<pink_quad_dbg::Rect>,
     layout_extent: (u32, u32),
     viewport: viewport::Viewport,
     shift_scroll: bool,
@@ -78,7 +84,7 @@ impl Hull {
         self.window = Some(window);
         vshell::line("hull: enter an HTTPS URL to download, parse and display it");
         vshell::line(
-            "hull: scroll with wheel, arrows or Page Up/Down; Home/End; Shift+wheel pans sideways",
+            "hull: scroll with wheel, arrows or Page Up/Down; Home/End; Shift+wheel pans sideways; F2 toggles actualBgQuad / pinkQuadDbg",
         );
         self.start_page_with_policy(PAGE_URL.into(), false);
         Ok(())
@@ -242,10 +248,6 @@ impl ApplicationHandler for Hull {
             )
             .map_err(|error| error.to_string())
             .and_then(|layout| {
-                if self.quads.is_none() {
-                    self.quads =
-                        Some(xxx::Quads::new().map_err(|code| format!("quad setup: {code}"))?);
-                }
                 logl::log(
                     logl::level::INFO,
                     format_args!(
@@ -265,6 +267,8 @@ impl ApplicationHandler for Hull {
                 self.layout_extent = layout.line_extent;
                 self.text_runs = layout.text_runs;
                 self.rectangles = layout.line_rects;
+                self.background_quads = layout.background_quads;
+                self.border_quads = layout.border_quads;
                 // CSS overflow can extend beyond the SVG's declared viewBox.
                 // Keep that overflow reachable without allocating a page-sized frame.
                 let mut right = self.layout_extent.0 as f32;
@@ -363,7 +367,15 @@ impl ApplicationHandler for Hull {
                 Ok(())
             }
             WindowEvent::KeyboardInput { event, .. } if event.state == ElementState::Pressed => {
-                let changed = match event.logical_key {
+                let changed = match &event.logical_key {
+                    Key::Named(NamedKey::F2) => {
+                        if event.repeat {
+                            return;
+                        }
+                        self.quad_pass.toggle();
+                        vshell::linef(format_args!("hull: quad pass {}", self.quad_pass.name()));
+                        true
+                    }
                     Key::Named(NamedKey::ArrowUp) => self.viewport.scroll_by(0.0, -48.0),
                     Key::Named(NamedKey::ArrowDown) => self.viewport.scroll_by(0.0, 48.0),
                     Key::Named(NamedKey::ArrowLeft) => self.viewport.scroll_by(-48.0, 0.0),
@@ -376,7 +388,11 @@ impl ApplicationHandler for Hull {
                 };
                 if changed {
                     self.quads_dirty = true;
-                    self.redraw_reason = "scroll";
+                    self.redraw_reason = if matches!(event.logical_key, Key::Named(NamedKey::F2)) {
+                        "quad-pass"
+                    } else {
+                        "scroll"
+                    };
                     window.request_redraw();
                 }
                 Ok(())
@@ -398,7 +414,22 @@ impl ApplicationHandler for Hull {
                     let mut drew_native = false;
                     if self.image_frame_recovery {
                         images::recover_frame(target)?;
-                    } else if let Some(quads) = &mut self.quads {
+                    } else if self.layout_generation == Some(self.generation)
+                        && self.quad_pass == actual_bg_quad::QuadPass::ActualBgQuad
+                    {
+                        actual_bg_quad::draw(&self.background_quads, &self.viewport, target)?;
+                        drew_native = true;
+                    } else if self.layout_generation == Some(self.generation) {
+                        if self.quads.is_none() {
+                            self.quads = Some(pink_quad_dbg::Quads::new().map_err(|code| {
+                                if code == trueos::vgpu::ERR_BUSY {
+                                    Error::Busy
+                                } else {
+                                    Error::Unknown(code)
+                                }
+                            })?);
+                        }
+                        let quads = self.quads.as_mut().unwrap();
                         quads
                             .set_layout(size.width, size.height, &visible_rectangles)
                             .map_err(|code| {
@@ -412,6 +443,25 @@ impl ApplicationHandler for Hull {
                         drew_native = true;
                     } else {
                         target.begin(rgba(35, 39, 39, 255))?;
+                    }
+                    if !self.image_frame_recovery && self.layout_generation == Some(self.generation)
+                    {
+                        let ui_error = |code| {
+                            if code == trueos::vgpu::ERR_BUSY {
+                                Error::Busy
+                            } else {
+                                Error::Unknown(code)
+                            }
+                        };
+                        if self.borders.is_none() {
+                            self.borders =
+                                Some(pink_quad_dbg::BorderPass::new().map_err(ui_error)?);
+                        }
+                        let borders = self.borders.as_mut().unwrap();
+                        borders
+                            .set_borders(&self.border_quads, &self.viewport)
+                            .map_err(ui_error)?;
+                        borders.draw_borders(target)?;
                     }
                     if !self.image_frame_recovery && self.images.draw(&self.viewport, target) {
                         // The failed scene may have canceled its lease. Do not

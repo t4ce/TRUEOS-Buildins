@@ -22,10 +22,34 @@ pub(super) struct Export {
     pub json: String,
     pub svg: String,
     pub line_rects: Vec<[f32; 4]>,
+    pub background_quads: Vec<BackgroundQuad>,
+    pub border_quads: Vec<BorderQuad>,
     pub line_extent: (u32, u32),
     pub text_runs: Vec<TextRun>,
     /// Frozen content boxes. Image completion changes paint only.
     pub image_boxes: Vec<ImageBox>,
+}
+
+/// One uniform native line loop per diagnostic element bounding box.
+#[derive(Clone, Copy, Debug)]
+pub(super) struct BorderQuad {
+    pub rect: [f32; 4],
+    pub color: [u8; 4],
+    /// Top-left, top-right, bottom-right, bottom-left; x/y in pixels.
+    pub radii: [[f32; 2]; 4],
+}
+
+#[derive(Clone, Copy, Default)]
+struct Radius {
+    pixels: f32,
+    fraction: f32,
+}
+
+/// Solid CSS background, in document coordinates and DOM paint order.
+#[derive(Clone, Copy, Debug)]
+pub(super) struct BackgroundQuad {
+    pub rect: [f32; 4],
+    pub color: [u8; 4],
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -80,6 +104,10 @@ pub(super) fn compute(
             .map(|parent| text_metrics[parent])
             .unwrap_or_default();
         let mut metrics = inherited;
+        // Background colors belong to the element; they are never inherited.
+        metrics.background = [0; 4];
+        metrics.border_color = [0, 0, 0, 255];
+        metrics.border_radii = [[Radius::default(); 2]; 4];
         inline[id] = matches!(&node.kind, NodeKind::Text(_))
             || document
                 .element(id)
@@ -387,6 +415,8 @@ pub(super) fn compute(
     }
     let mut rows = Vec::new();
     let mut rectangles = Vec::new();
+    let mut background_quads = Vec::new();
+    let mut border_quads = Vec::new();
     let mut pending = vec![document.root];
     while let Some(id) = pending.pop() {
         if matches!(
@@ -405,6 +435,24 @@ pub(super) fn compute(
             {
                 if let Some(rect) = rect {
                     rectangles.push((id, rect.left, rect.top, rect.width, rect.height));
+                    border_quads.push(BorderQuad {
+                        rect: [rect.left, rect.top, rect.width, rect.height],
+                        color: text_metrics[id].border_color,
+                        radii: text_metrics[id].border_radii.map(|[x, y]| {
+                            [
+                                x.pixels + x.fraction * rect.width,
+                                y.pixels + y.fraction * rect.height,
+                            ]
+                        }),
+                    });
+                }
+                if !contents[id] && text_metrics[id].background[3] != 0 {
+                    for rect in &fragments[id] {
+                        background_quads.push(BackgroundQuad {
+                            rect: [rect.left, rect.top, rect.width, rect.height],
+                            color: text_metrics[id].background,
+                        });
+                    }
                 }
             }
         }
@@ -464,6 +512,8 @@ pub(super) fn compute(
         json,
         svg,
         line_rects,
+        background_quads,
+        border_quads,
         line_extent: (viewport.0, extent.ceil() as u32),
         text_runs,
         image_boxes,
@@ -703,6 +753,9 @@ struct TextMetrics {
     align: TextAlignMetric,
     whitespace: WhiteSpaceMetric,
     color: [u8; 4],
+    background: [u8; 4],
+    border_color: [u8; 4],
+    border_radii: [[Radius; 2]; 4],
     // Zero opacity suppresses the whole subtree. Visibility is inherited but
     // a child may explicitly become visible; the two policies are distinct.
     opacity_zero: bool,
@@ -739,6 +792,9 @@ impl Default for TextMetrics {
             align: TextAlignMetric::Start,
             whitespace: WhiteSpaceMetric::Normal,
             color: [0, 0, 0, 255],
+            background: [0; 4],
+            border_color: [0, 0, 0, 255],
+            border_radii: [[Radius::default(); 2]; 4],
             opacity_zero: false,
             visibility_hidden: false,
         }
@@ -824,6 +880,8 @@ fn apply_css<'a>(
     let mut font_size_winner: Option<&CssFontSize> = None;
     let mut line_height_winner: Option<&CssLineHeight> = None;
     let mut color_winner = None;
+    let mut background_winner = None;
+    let mut border_color_winner = None;
     let mut opacity_winner = None;
     for (_, _, _, _, property) in declarations.iter() {
         if let Property::Position(value) = property {
@@ -831,6 +889,15 @@ fn apply_css<'a>(
         }
         match property {
             Property::Color(value) => color_winner = Some(value),
+            // One closed loop uses one color: the cascaded top-border color.
+            Property::Border(value) => border_color_winner = Some(&value.color),
+            Property::BorderColor(value) => border_color_winner = Some(&value.top),
+            Property::BorderTop(value) => border_color_winner = Some(&value.color),
+            Property::BorderTopColor(value) => border_color_winner = Some(value),
+            Property::BackgroundColor(value) => background_winner = Some(value),
+            Property::Background(layers) => {
+                background_winner = layers.last().map(|layer| &layer.color);
+            }
             Property::FontSize(value) => font_size_winner = Some(value),
             Property::LineHeight(value) => line_height_winner = Some(value),
             Property::Opacity(value) => opacity_winner = Some(value.0),
@@ -884,6 +951,22 @@ fn apply_css<'a>(
             text_metrics.color = [value.red, value.green, value.blue, value.alpha];
         }
     }
+    if let Some(value) = background_winner {
+        use lightningcss::values::color::CssColor;
+        if matches!(value, CssColor::CurrentColor) {
+            text_metrics.background = text_metrics.color;
+        } else if let Ok(CssColor::RGBA(value)) = value.to_rgb() {
+            text_metrics.background = [value.red, value.green, value.blue, value.alpha];
+        }
+    }
+    if let Some(value) = border_color_winner {
+        use lightningcss::values::color::CssColor;
+        if matches!(value, CssColor::CurrentColor) {
+            text_metrics.border_color = text_metrics.color;
+        } else if let Ok(CssColor::RGBA(value)) = value.to_rgb() {
+            text_metrics.border_color = [value.red, value.green, value.blue, value.alpha];
+        }
+    }
     // Resolve every relative value against the inherited size, independent of
     // declaration iteration order. Font shorthand competes at its cascade position.
     if let Some(size) =
@@ -904,6 +987,27 @@ fn apply_css<'a>(
         use lightningcss::properties::border::LineStyle;
         let visible = |value: &LineStyle| !matches!(value, LineStyle::None | LineStyle::Hidden);
         match property {
+            Property::BorderRadius(value, _) => {
+                text_metrics.border_radii = [
+                    &value.top_left,
+                    &value.top_right,
+                    &value.bottom_right,
+                    &value.bottom_left,
+                ]
+                .map(|value| radius_pair(value, context));
+            }
+            Property::BorderTopLeftRadius(value, _) => {
+                text_metrics.border_radii[0] = radius_pair(value, context)
+            }
+            Property::BorderTopRightRadius(value, _) => {
+                text_metrics.border_radii[1] = radius_pair(value, context)
+            }
+            Property::BorderBottomRightRadius(value, _) => {
+                text_metrics.border_radii[2] = radius_pair(value, context)
+            }
+            Property::BorderBottomLeftRadius(value, _) => {
+                text_metrics.border_radii[3] = radius_pair(value, context)
+            }
             Property::Border(value) => border_visible = [visible(&value.style); 4],
             Property::BorderTop(value) => border_visible[0] = visible(&value.style),
             Property::BorderRight(value) => border_visible[1] = visible(&value.style),
@@ -946,6 +1050,23 @@ fn apply_css<'a>(
             right: LengthPercentageAuto::AUTO,
         };
     }
+}
+
+fn radius_pair(
+    value: &lightningcss::values::size::Size2D<CssLengthPercentage>,
+    context: ResolveContext,
+) -> [Radius; 2] {
+    [&value.0, &value.1].map(|value| match value {
+        CssLengthPercentage::Dimension(value) => Radius {
+            pixels: scalar(value, context).unwrap_or(0.0).max(0.0),
+            fraction: 0.0,
+        },
+        CssLengthPercentage::Percentage(value) => Radius {
+            pixels: 0.0,
+            fraction: value.0.max(0.0),
+        },
+        _ => Radius::default(),
+    })
 }
 
 fn font_size(value: &CssFontSize, parent: f32, context: ResolveContext) -> Option<f32> {
@@ -1904,6 +2025,15 @@ fn used_for_layout(name: &str) -> bool {
             | "font"
             | "font-size"
             | "color"
+            | "background-color"
+            | "background"
+            | "border-color"
+            | "border-top-color"
+            | "border-radius"
+            | "border-top-left-radius"
+            | "border-top-right-radius"
+            | "border-bottom-right-radius"
+            | "border-bottom-left-radius"
             | "opacity"
             | "visibility"
             | "line-height"

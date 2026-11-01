@@ -66,6 +66,10 @@ pub mod netfs {
         });
     }
 }
+#[path = "../../../src/actual_bg_quad.rs"]
+mod actual_bg_quad;
+#[path = "../../../src/border_geometry.rs"]
+mod border_geometry;
 #[path = "../../../src/css.rs"]
 mod css;
 #[path = "../../../src/layout.rs"]
@@ -107,6 +111,60 @@ mod tests {
         assert!(output.svg.starts_with("<svg"));
         (doc, output)
     }
+    #[test]
+    fn backgrounds_resolve_cascade_shorthand_currentcolor_and_do_not_inherit() {
+        let (_, output) = export(
+            r#"<div id="parent"><div id="child"></div></div>
+            <div id="current"></div><div id="reset"></div>"#,
+            "div { width:40px; height:20px } #parent { background:red }
+             #current { background-color:currentColor; color:rgba(0,0,255,0.5) }
+             #reset { background-color:green; background:none }",
+        );
+        assert_eq!(output.background_quads.len(), 2);
+        assert_eq!(output.background_quads[0].color, [255, 0, 0, 255]);
+        assert_eq!(output.background_quads[1].color, [0, 0, 255, 128]);
+        assert!(output.line_rects.len() > output.background_quads.len());
+    }
+
+    #[test]
+    fn backgrounds_obey_important_inline_visibility_and_opacity() {
+        let (_, output) = export(
+            r#"<div id="parent" style="background:blue"><div id="child"></div></div>
+            <div style="opacity:0;background:red"><div style="opacity:1;background:blue"></div></div>
+            <div style="display:contents;background:red"><div></div></div>"#,
+            "div { width:40px; height:20px } #parent { background:red !important; visibility:hidden }
+             #child { visibility:visible; background:rgba(0,255,0,0.25) }",
+        );
+        assert_eq!(output.background_quads.len(), 1);
+        assert_eq!(output.background_quads[0].color, [0, 255, 0, 64]);
+        let (_, output) = export(
+            r#"<div style="background:blue"></div>"#,
+            "div { width:40px; height:20px; background:red !important }",
+        );
+        assert_eq!(output.background_quads[0].color, [255, 0, 0, 255]);
+    }
+
+    #[test]
+    fn border_defaults_and_authored_radius_and_color_use_the_same_pink_boxes() {
+        let (_, output) = export(
+            r#"<div id="plain"><div id="child"></div></div><div id="round" style="border-radius:10px 20%;border-top-left-radius:5px 8px;color:blue;border-color:currentColor"></div>"#,
+            "div { width:100px; height:50px } #plain { border-radius:12px; border-color:red }",
+        );
+        assert_eq!(output.border_quads.len(), output.line_rects.len());
+        for (border, rect) in output.border_quads.iter().zip(&output.line_rects) {
+            assert_eq!(&border.rect, rect);
+        }
+        let round = output.border_quads.last().unwrap();
+        assert_eq!(round.color, [0, 0, 255, 255]);
+        assert_eq!(
+            round.radii,
+            [[5.0, 8.0], [20.0, 10.0], [10.0, 10.0], [20.0, 10.0]]
+        );
+        let plain_child = &output.border_quads[output.border_quads.len() - 2];
+        assert_eq!(plain_child.color, [0, 0, 0, 255]);
+        assert_eq!(plain_child.radii, [[0.0; 2]; 4]);
+    }
+
     fn node<'a>(
         doc: &rp5::Document,
         result: &'a serde_json::Value,

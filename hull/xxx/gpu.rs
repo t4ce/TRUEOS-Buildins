@@ -8,7 +8,8 @@ pub struct Quads {
     queue: Queue,
     shader: ShaderModule,
     pipeline: RenderPipeline,
-    mesh: Option<(Buffer, Buffer, u32)>,
+    mesh: Option<(Buffer, Buffer)>,
+    draws: Vec<IndexedBatchDrawV2>,
 }
 
 fn ui_error(code: i32) -> Error {
@@ -33,6 +34,7 @@ impl Quads {
                 shader,
                 pipeline,
                 mesh: None,
+                draws: Vec::new(),
             })
         })();
         if result.is_err() {
@@ -54,6 +56,43 @@ impl Quads {
             return Err(ERR_IO);
         }
         let (vertices, indices) = super::geometry(width, height, rectangles);
+        self.upload(&vertices, &indices)?;
+        self.draws = if indices.is_empty() {
+            Vec::new()
+        } else {
+            vec![IndexedBatchDrawV2 {
+                index_count: (indices.len() / 4) as u32,
+                rgba8_srgb: u32::from_le_bytes(super::DEFAULT_COLOR),
+                topology: PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+                ..Default::default()
+            }]
+        };
+        Ok(())
+    }
+
+    pub fn set_borders(
+        &mut self,
+        borders: &[crate::layout::BorderQuad],
+        viewport: &crate::viewport::Viewport,
+    ) -> Result<(), i32> {
+        let mesh = crate::border_geometry::geometry(borders, viewport);
+        self.upload(&mesh.vertices, &mesh.indices)?;
+        self.draws = mesh
+            .draws
+            .into_iter()
+            .map(|draw| IndexedBatchDrawV2 {
+                index_count: draw.count,
+                first_index: draw.first_index,
+                base_vertex: draw.base_vertex,
+                rgba8_srgb: u32::from_le_bytes(draw.color),
+                topology: PRIMITIVE_TOPOLOGY_LINE_LOOP,
+                ..Default::default()
+            })
+            .collect();
+        Ok(())
+    }
+
+    fn upload(&mut self, vertices: &[u8], indices: &[u8]) -> Result<(), i32> {
         let replacement = if indices.is_empty() {
             None
         } else {
@@ -70,7 +109,7 @@ impl Quads {
                     {
                         return Err(ERR_IO);
                     }
-                    Ok((vb, ib, (indices.len() / 4) as u32))
+                    Ok((vb, ib))
                 })();
                 if result.is_err() {
                     let _ = self.device.destroy_buffer(ib);
@@ -82,7 +121,7 @@ impl Quads {
             }
             Some(uploaded?)
         };
-        if let Some((vertices, indices, _)) = self.mesh.take() {
+        if let Some((vertices, indices)) = self.mesh.take() {
             let _ = self.device.destroy_buffer(indices);
             let _ = self.device.destroy_buffer(vertices);
         }
@@ -90,47 +129,61 @@ impl Quads {
         Ok(())
     }
 
-    /// Draw into the existing UI4 frame. No geometry creation or uploads occur here.
-    /// The acquired surface carries the current viewport dimensions to the GPU.
+    /// Clear and draw the pink fill pass.
     pub fn draw(&self, target: &mut SceneTarget) -> Result<(), Error> {
-        let Some((vertices, indices, count)) = self.mesh else {
-            return target.begin(u32::from_le_bytes([255; 4]));
-        };
+        if self.mesh.is_none() {
+            return target.begin(u32::MAX);
+        }
         target.begin_gpu_frame()?;
-        let surface = self
-            .device
-            .acquire_ui4_surface(target.render_target())
-            .map_err(ui_error)?;
-        let mut batch = IndexedDrawBatchV2 {
-            clear_rgba8_srgb: u32::from_le_bytes([255; 4]),
-            draw_count: 1,
-            ..Default::default()
+        self.submit(target, false)
+    }
+
+    /// Native line-loop borders over either fill pass, without clearing color.
+    pub fn draw_borders(&self, target: &mut SceneTarget) -> Result<(), Error> {
+        self.submit(target, true)
+    }
+
+    fn submit(&self, target: &mut SceneTarget, overlay: bool) -> Result<(), Error> {
+        let Some((vertices, indices)) = self.mesh else {
+            return Ok(());
         };
-        batch.draws[0] = IndexedBatchDrawV2 {
-            index_count: count,
-            rgba8_srgb: u32::from_le_bytes(super::DEFAULT_COLOR),
-            topology: PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-            ..Default::default()
-        };
-        let point = self
-            .device
-            .submit_ui4_indexed_batch_v2(
-                self.queue,
-                surface,
-                self.pipeline,
-                vertices,
-                indices,
-                batch,
-            )
-            .map_err(ui_error)?;
-        self.device.wait(self.queue, point.value).map_err(ui_error)
+        for (part, draws) in self.draws.chunks(MAX_INDEXED_BATCH_V2_DRAWS).enumerate() {
+            let surface = self
+                .device
+                .acquire_ui4_surface(target.render_target())
+                .map_err(ui_error)?;
+            let mut batch = IndexedDrawBatchV2 {
+                clear_rgba8_srgb: u32::MAX,
+                draw_count: draws.len() as u32,
+                ..Default::default()
+            };
+            batch.draws[..draws.len()].copy_from_slice(draws);
+            if overlay || part != 0 {
+                batch.draws[0].reserved |= INDEXED_BATCH_V2_LOAD_COLOR;
+            }
+            let point = self
+                .device
+                .submit_ui4_indexed_batch_v2(
+                    self.queue,
+                    surface,
+                    self.pipeline,
+                    vertices,
+                    indices,
+                    batch,
+                )
+                .map_err(ui_error)?;
+            self.device
+                .wait(self.queue, point.value)
+                .map_err(ui_error)?;
+        }
+        Ok(())
     }
 }
 
 impl Drop for Quads {
     fn drop(&mut self) {
         // Draws retire before returning; resources are safe to release at teardown.
-        if let Some((vertices, indices, _)) = self.mesh.take() {
+        if let Some((vertices, indices)) = self.mesh.take() {
             let _ = self.device.destroy_buffer(indices);
             let _ = self.device.destroy_buffer(vertices);
         }

@@ -27,7 +27,7 @@ ide = ["dep:trueos-ide", "dep:serde_json"]
 [dependencies]
 lsh.workspace = true
 stdext.workspace = true
-trueos-ide = { path = "../../../../TRUEOS-Blueprints/crates/trueos-ide", optional = true }
+trueos-ide = { path = "../../../../TRUEOS-Blueprints/crates/trueos-ide", optional = true, features = ["api-reference"] }
 serde_json = { version = "1.0.142", optional = true }
 
 [target.'cfg(target_os = "trueos")'.dependencies]
