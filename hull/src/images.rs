@@ -215,17 +215,7 @@ impl Images {
                 let (_, rp5::Namespace::Html, attrs) = document.element(image.node)? else {
                     return None;
                 };
-                let src = attribute(attrs, "src")?.trim();
-                if src.is_empty() || src.len() > 4096 {
-                    return None;
-                }
-                let mut url = base.join(src).ok()?;
-                if url.scheme() != "https" || !url.username().is_empty() || url.password().is_some()
-                {
-                    return None;
-                }
-                url.set_fragment(None);
-                Some(url.to_string())
+                image_source(attrs, base)
             });
             let size = request_size(image.rect);
             let asset = url.and_then(|url| {
@@ -333,7 +323,10 @@ impl Images {
                         Err(error) => {
                             asset.finished = true;
                             if Some(index) != self.favicon_asset {
-                                report(format_args!("request failed: {error:?}"));
+                                report(format_args!(
+                                    "request failed: {error:?} source={}",
+                                    diagnostic_source(&asset.url)
+                                ));
                             }
                         }
                     }
@@ -373,11 +366,24 @@ impl Images {
                 Ok(info) if info.state == HULL_IMAGE_FAILED => {
                     asset.finished = true;
                     if Some(index) != self.favicon_asset {
-                        report(format_args!("asset failed: {}", info.error));
+                        report(format_args!(
+                            "asset failed: {} source={}",
+                            info.error,
+                            diagnostic_source(&asset.url)
+                        ));
                     }
                 }
                 Ok(_) | Err(Error::Busy) if !expired => {}
-                Ok(_) | Err(_) => asset.finished = true,
+                Ok(_) => asset.finished = true,
+                Err(error) => {
+                    asset.finished = true;
+                    if Some(index) != self.favicon_asset {
+                        report(format_args!(
+                            "status failed: {error:?} source={}",
+                            diagnostic_source(&asset.url)
+                        ));
+                    }
+                }
             }
             if asset.finished && asset.sprite.is_none() {
                 release_ticket(window, asset);
@@ -496,6 +502,54 @@ fn document_base(document: &rp5::Document, page_url: &str) -> Option<Url> {
         pending.extend(document.nodes[id].children.iter().rev().copied());
     }
     Some(base)
+}
+
+/// Static lazy-image attributes carry the intended source while `src` may be
+/// empty or a transparent loading placeholder. Prefer modern data-src, then
+/// legacy data-original, then ordinary src. Validate each independently so an
+/// unsafe/invalid lazy value cannot hide a usable ordinary HTTPS source. This
+/// selects a reference only: no script runs and the frozen box is untouched.
+fn image_source(attrs: &[rp5::Attribute], base: &Url) -> Option<String> {
+    for name in ["data-src", "data-original", "src"] {
+        let Some(raw) = attribute(attrs, name) else {
+            continue;
+        };
+        let raw = raw.trim();
+        if raw.is_empty() || raw.len() > 4096 {
+            continue;
+        }
+        let Ok(mut url) = base.join(raw) else {
+            continue;
+        };
+        if url.scheme() != "https" || !url.username().is_empty() || url.password().is_some() {
+            continue;
+        }
+        url.set_fragment(None);
+        return Some(url.to_string());
+    }
+    None
+}
+
+/// Identify the failed resource without logging URL credentials or signed
+/// query/fragment data. Bound the public host/path so one failed asset cannot
+/// produce a multi-kilobyte log line.
+fn diagnostic_source(raw: &str) -> String {
+    let Ok(url) = Url::parse(raw) else {
+        return "<invalid-image-url>".into();
+    };
+    let Some(host) = url.host_str() else {
+        return "<invalid-image-url>".into();
+    };
+    let authority = match url.port() {
+        Some(port) => format!("{host}:{port}"),
+        None => host.to_owned(),
+    };
+    let full = format!("{authority}{}", url.path());
+    let mut short: String = full.chars().take(256).collect();
+    if short.len() < full.len() {
+        short.push('…');
+    }
+    short
 }
 
 fn attribute<'a>(attrs: &'a [rp5::Attribute], name: &str) -> Option<&'a str> {
@@ -784,6 +838,123 @@ mod tests {
             assert_eq!(service.requests[1].0, "https://new.example/favicon.ico");
             assert_eq!(service.requests[1].5, 10);
         });
+    }
+
+    #[test]
+    fn static_lazy_sources_replace_empty_or_gif_placeholders_without_mutating_layout_or_svg() {
+        image_mock::reset();
+        let placeholder =
+            "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+        let html = format!(
+            "<base href='https://CDN.example:443/assets/'><base href='https://ignored.example/'><img data-src='./emoji.png?q=1#fragment' width=24 height=24><img src='{placeholder}' class='lazy-load' data-original='../thumb.jpg?q=2#ignored' width=336 height=189>"
+        );
+        let document = rp5::parse(&html);
+        let mut css = crate::css::Css::default();
+        let page = "https://example.com/page/index.html";
+        css.parse_document(&document, page);
+        let layout = crate::layout::compute(&document, &css, (1280, 720)).unwrap();
+        let before_svg = layout.svg.clone();
+        let before_rects: Vec<_> = layout.image_boxes.iter().map(|image| image.rect).collect();
+        let mut images = Images::default();
+        images.reset(1, 9);
+        images.collect(&document, page, layout.image_boxes);
+        assert_eq!(images.assets.len(), 2);
+        assert_eq!(
+            images.assets[0].url,
+            "https://cdn.example/assets/emoji.png?q=1"
+        );
+        assert_eq!(images.assets[1].url, "https://cdn.example/thumb.jpg?q=2");
+        let (_, _, attrs) = document.element(images.boxes[1].0.node).unwrap();
+        assert_eq!(attribute(attrs, "src"), Some(placeholder));
+        images.published();
+        images.poll();
+        images.poll();
+        SERVICE.with(|service| {
+            let mut service = service.borrow_mut();
+            assert_eq!(service.requests.len(), 2);
+            for (id, info) in &mut service.live {
+                info.state = HULL_IMAGE_READY;
+                info.sprite_id = 100 + *id;
+                info.width = 1;
+                info.height = 1;
+            }
+        });
+        images.poll();
+        assert_eq!(
+            images
+                .boxes
+                .iter()
+                .map(|(image, _)| image.rect)
+                .collect::<Vec<_>>(),
+            before_rects
+        );
+        assert_eq!(
+            crate::layout::compute(&document, &css, (1280, 720))
+                .unwrap()
+                .svg,
+            before_svg
+        );
+    }
+
+    #[test]
+    fn lazy_source_precedence_validates_each_candidate_and_falls_back_to_secure_src() {
+        let images = collect(
+            "<base href='https://cdn.example/assets/'><img src='normal.jpg' data-src='modern.jpg' data-original='legacy.jpg'><img src='fallback.jpg?q=1#fragment' data-src='http://insecure.example/a.jpg' data-original='https://user:password@example.com/a.jpg'><img src='ordinary.jpg' data-src=' ' data-original='//other.example/legacy.jpg#ignored'><img src='data:image/gif;base64,placeholder' data-src='javascript:alert(1)' data-original='http://insecure.example/legacy.jpg'>",
+        );
+        assert_eq!(images.boxes.len(), 4);
+        assert_eq!(images.assets.len(), 3);
+        assert_eq!(
+            images.assets[0].url,
+            "https://cdn.example/assets/modern.jpg"
+        );
+        assert_eq!(
+            images.assets[1].url,
+            "https://cdn.example/assets/fallback.jpg?q=1"
+        );
+        assert_eq!(images.assets[2].url, "https://other.example/legacy.jpg");
+        assert!(images.boxes[3].1.is_none());
+        SERVICE.with(|service| assert!(service.borrow().requests.is_empty()));
+    }
+
+    #[test]
+    fn lazy_images_keep_canonical_deduplication_and_the_favicon_reservation() {
+        let mut html = String::from(
+            "<img data-src='same.jpg?x=1#one'><img src='data:image/gif;base64,placeholder' data-original='same.jpg?x=1#two'>",
+        );
+        for index in 0..10 {
+            html.push_str(&format!("<img data-src='{index}.png'>"));
+        }
+        let images = collect_icons(&html);
+        assert_eq!(images.boxes.len(), 12);
+        assert_eq!(images.boxes[0].1, images.boxes[1].1);
+        assert_eq!(
+            images
+                .boxes
+                .iter()
+                .filter_map(|(_, asset)| *asset)
+                .collect::<HashSet<_>>()
+                .len(),
+            7
+        );
+        assert!(images.boxes.last().unwrap().1.is_none());
+        SERVICE.with(|service| assert!(service.borrow().requests.is_empty()));
+    }
+
+    #[test]
+    fn failure_source_diagnostics_strip_url_secrets_and_bound_public_path_length() {
+        assert_eq!(
+            diagnostic_source(
+                "https://user:password@EXAMPLE.com:8443/public/photo.jpg?token=secret#fragment"
+            ),
+            "example.com:8443/public/photo.jpg"
+        );
+        assert_eq!(diagnostic_source("not a URL"), "<invalid-image-url>");
+        let long = diagnostic_source(&format!(
+            "https://example.com/{}?token=secret",
+            "a".repeat(4000)
+        ));
+        assert!(long.chars().count() <= 257);
+        assert!(!long.contains("secret"));
     }
 
     #[test]
