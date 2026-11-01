@@ -16,6 +16,8 @@ Hull drops the task.
 Hull uses a small Crossterm terminal companion with the existing TRUEOS terminal
 lease handoff. It displays a bounded output tail and one prompt. Paste an HTTPS
 URL and press Enter to navigate. There are no panels or Ratatui dependency.
+An unattended launch without terminal support forwards its startup URL to a
+terminal-capable NewShell3 Hull instance before creating a browser window.
 
 - `:scripts` lists collected inline/external sources, node IDs, types, byte counts
   and resolved origins. External sources are labeled unfetched.

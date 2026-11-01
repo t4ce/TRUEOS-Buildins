@@ -205,3 +205,20 @@ fn monotonic_clock_is_explicit_and_independent_of_javascript_wall_time() {
     "#,
     );
 }
+
+#[test]
+fn lone_surrogates_stay_within_the_utf8_text_budget() {
+    let mut engine = Engine::new().unwrap();
+    engine.install_console().unwrap();
+    engine
+        .eval(
+            br"console.log('\ud800'.repeat(2000))",
+            "surrogates.js",
+            false,
+        )
+        .unwrap();
+    let batch = engine.take_console();
+    assert_eq!(batch.messages.len(), 1);
+    assert!(batch.messages[0].text.len() <= 4096);
+    assert!(!batch.messages[0].text.is_empty());
+}

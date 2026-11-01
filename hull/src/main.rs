@@ -352,7 +352,9 @@ impl ApplicationHandler for Hull {
                             shellio::linef(format_args!("[error] node={node} {origin}: {error}"));
                             logl::log(
                                 logl::level::ERROR,
-                                format_args!("hull: QuickJS page={generation} node={node} {origin}: {error}"),
+                                format_args!(
+                                    "hull: QuickJS page={generation} node={node} {origin}: {error}"
+                                ),
                             );
                         }
                     },
@@ -362,11 +364,17 @@ impl ApplicationHandler for Hull {
                         reason,
                     } => {
                         shellio::linef(format_args!("hull: skipped {origin}: {reason}"));
-                        logl::log(logl::level::INFO, format_args!("hull: QuickJS page={generation} {origin}: {reason}"));
+                        logl::log(
+                            logl::level::INFO,
+                            format_args!("hull: QuickJS page={generation} {origin}: {reason}"),
+                        );
                     }
                     javascript::Report::JobError { generation, error } => {
                         shellio::linef(format_args!("[error] JavaScript job: {error}"));
-                        logl::log(logl::level::ERROR, format_args!("hull: QuickJS page={generation} job: {error}"));
+                        logl::log(
+                            logl::level::ERROR,
+                            format_args!("hull: QuickJS page={generation} job: {error}"),
+                        );
                     }
                     javascript::Report::Input {
                         generation,
@@ -907,16 +915,6 @@ fn main() {
     };
     let mut app = Hull::default();
     app.javascript = Some(javascript);
-    app.console = match console::Console::start() {
-        Ok(console) => Some(console),
-        Err(error) => {
-            logl::log(
-                logl::level::ERROR,
-                format_args!("hull: console initialization: {error}"),
-            );
-            return;
-        }
-    };
     if let Ok(bytes) = trueos::async_fs::block_on(trueos::async_fs::read_file(b"vFile:launch")) {
         let startup = std::str::from_utf8(&bytes)
             .map_err(|_| "startup script must be UTF-8")
@@ -929,6 +927,37 @@ fn main() {
             }
         }
     }
+    app.console = match console::Console::start() {
+        Ok(Some(console)) => Some(console),
+        Ok(None) => {
+            // Unattended/Text launches have no terminal lease. Use the same
+            // terminal-capable destination as native hyperlink navigation;
+            // the replacement instance owns both console and browser window.
+            let script = app
+                .queued_urls
+                .front()
+                .map(|url| format!("open {url}\n"))
+                .unwrap_or_default();
+            if let Err(code) = vshell::launch_with_destination(
+                "hull",
+                &script,
+                vshell::LaunchDestination::NewShell3,
+            ) {
+                logl::log(
+                    logl::level::ERROR,
+                    format_args!("hull: terminal launch failed: {code}"),
+                );
+            }
+            return;
+        }
+        Err(error) => {
+            logl::log(
+                logl::level::ERROR,
+                format_args!("hull: console initialization: {error}"),
+            );
+            return;
+        }
+    };
     let result = EventLoop::new().and_then(|event_loop| event_loop.run_app(app));
     if let Err(error) = result {
         logl::log(logl::level::ERROR, format_args!("hull: {error}"));

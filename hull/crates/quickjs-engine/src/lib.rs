@@ -202,6 +202,16 @@ impl Engine {
             if length < 0 {
                 break;
             }
+            let mut text = String::from_utf8_lossy(&bytes[..length as usize]).into_owned();
+            // QuickJS can emit lone UTF-16 surrogates as invalid UTF-8. Lossy
+            // replacement may expand bytes, so enforce the text limit again.
+            if text.len() > bytes.len() {
+                let mut end = bytes.len();
+                while !text.is_char_boundary(end) {
+                    end -= 1;
+                }
+                text.truncate(end);
+            }
             batch.messages.push(ConsoleMessage {
                 level: match level {
                     1 => ConsoleLevel::Debug,
@@ -210,7 +220,7 @@ impl Engine {
                     4 => ConsoleLevel::Error,
                     _ => ConsoleLevel::Log,
                 },
-                text: String::from_utf8_lossy(&bytes[..length as usize]).into_owned(),
+                text,
             });
         }
         // SAFETY: reads and resets an owned native counter without executing JS.

@@ -42,9 +42,14 @@ pub(super) struct Console {
 }
 
 impl Console {
-    pub fn start() -> io::Result<Self> {
+    pub fn start() -> io::Result<Option<Self>> {
+        let lease = match vshell::terminal_initial_lease() {
+            Ok(lease) => lease,
+            Err(vshell::TerminalLeaseError::Unsupported) => return Ok(None),
+            Err(error) => return Err(lease_error(error)),
+        };
         let mut console = Self {
-            lease: Some(vshell::terminal_initial_lease().map_err(lease_error)?),
+            lease: Some(lease),
             parked: None,
             raw: false,
             history: VecDeque::new(),
@@ -54,7 +59,7 @@ impl Console {
             dirty: true,
         };
         console.activate()?;
-        Ok(console)
+        Ok(Some(console))
     }
 
     fn activate(&mut self) -> io::Result<()> {
@@ -138,13 +143,16 @@ impl Console {
                     if let Some(script) = &mut self.script {
                         script.append(&std::mem::take(&mut self.input));
                         script.append(&text);
-                    } else if text.contains('\n') || text.contains('\r') {
-                        shellio::line("hull: use :paste before pasting a multiline script");
-                    } else if self.input.len().saturating_add(text.len()) <= 4096 {
-                        self.input
-                            .extend(text.chars().filter(|character| !character.is_control()));
                     } else {
-                        self.input_overflow = true;
+                        let text = text.trim_matches(['\r', '\n']);
+                        if text.contains('\n') || text.contains('\r') {
+                            shellio::line("hull: use :paste before pasting a multiline script");
+                        } else if self.input.len().saturating_add(text.len()) <= 4096 {
+                            self.input
+                                .extend(text.chars().filter(|character| !character.is_control()));
+                        } else {
+                            self.input_overflow = true;
+                        }
                     }
                     self.dirty = true;
                 }
