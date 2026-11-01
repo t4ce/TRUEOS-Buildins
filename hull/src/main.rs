@@ -15,6 +15,7 @@ mod border_geometry;
 mod css;
 mod images;
 mod javascript;
+mod javascript_input;
 mod layout;
 #[path = "../xxx/mod.rs"]
 mod pink_quad_dbg;
@@ -74,6 +75,7 @@ impl Hull {
                 ((i64::from(height) - 720) / 2) as i32,
             ));
         let window = event_loop.create_streaming_window(attributes)?;
+        javascript_input::enable(window.as_ref());
         let size = window.surface_size();
         self.target = Some(
             SceneTarget::for_window(window.trueos_window_id(), size.width, size.height)
@@ -104,6 +106,9 @@ impl Hull {
         };
         match download {
             Ok(operation) => {
+                if let Some(window) = &self.window {
+                    javascript_input::discard(window.as_ref());
+                }
                 self.html = None;
                 self.document = None;
                 self.css = css::Css::default();
@@ -131,6 +136,20 @@ impl Hull {
             }
             Err(code) => {
                 vshell::linef(format_args!("hull: download start failed: {code}"));
+            }
+        }
+    }
+
+    fn poll_javascript_input(&mut self) {
+        let Some(window) = &self.window else {
+            return;
+        };
+        // Drain remaining copies: raw routed records are authoritative. Standard
+        // keyboard/pointer callbacks continue to drive Hull's existing UI only.
+        let events = javascript_input::drain(window.as_ref());
+        if let Some(javascript) = &mut self.javascript {
+            for event in events {
+                javascript_input::forward(javascript, self.generation, event);
             }
         }
     }
@@ -230,6 +249,7 @@ impl Drop for Hull {
 
 impl ApplicationHandler for Hull {
     fn about_to_wait(&mut self, event_loop: &dyn ActiveEventLoop) {
+        self.poll_javascript_input();
         if let Some(javascript) = &mut self.javascript {
             for report in javascript.poll() {
                 match report {
@@ -275,6 +295,20 @@ impl ApplicationHandler for Hull {
                         logl::level::ERROR,
                         format_args!("hull: QuickJS page={generation} job: {error}"),
                     ),
+                    javascript::Report::Input {
+                        generation,
+                        kind,
+                        result,
+                    } => {
+                        if let Err(error) = result {
+                            logl::log(
+                                logl::level::ERROR,
+                                format_args!(
+                                    "hull: QuickJS page={generation} input={kind}: {error}"
+                                ),
+                            );
+                        }
+                    }
                 }
             }
         }
@@ -383,6 +417,14 @@ impl ApplicationHandler for Hull {
         let Some(window) = self.window.as_ref().filter(|window| window.id() == id) else {
             return;
         };
+        // A supplemental state callback must not overtake the raw input that
+        // Winit already captured before issuing this callback.
+        let inputs = javascript_input::before_supplemental(window.as_ref(), &event);
+        if let Some(javascript) = &mut self.javascript {
+            for input in inputs {
+                javascript_input::forward(javascript, self.generation, input);
+            }
+        }
         let Some(target) = self.target.as_mut() else {
             return;
         };

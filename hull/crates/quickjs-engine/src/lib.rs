@@ -57,6 +57,9 @@ unsafe extern "C" {
         origin: *const c_char,
         module: c_int,
     ) -> c_int;
+    fn hull_quickjs_bind_message_handler(engine: *mut c_void, global_name: *const c_char) -> c_int;
+    fn hull_quickjs_dispatch_json(engine: *mut c_void, json: *const c_char, length: usize)
+    -> c_int;
     fn hull_quickjs_pending_job(engine: *mut c_void) -> c_int;
     fn hull_quickjs_has_pending_jobs(engine: *const c_void) -> c_int;
     fn hull_quickjs_exception(engine: *mut c_void) -> *const c_char;
@@ -140,6 +143,44 @@ impl Engine {
             Ok(())
         }
     }
+    /// Pin an explicitly installed global function as the native message receiver.
+    /// The configurable global property is removed after validation, so later
+    /// page assignments cannot replace the pinned transport. This method does
+    /// not install a receiver or evaluate any bootstrap code on its own.
+    pub fn bind_message_handler(&mut self, global_name: &str) -> Result<(), String> {
+        let name =
+            CString::new(global_name).map_err(|_| "QuickJS handler name contains a NUL byte")?;
+        self.begin_call();
+        // SAFETY: the adapter owns all native values, including the retained
+        // function, and the property name stays live for the synchronous call.
+        let status =
+            unsafe { hull_quickjs_bind_message_handler(self.native.as_ptr(), name.as_ptr()) };
+        if status < 0 {
+            Err(self.exception())
+        } else {
+            Ok(())
+        }
+    }
+    /// Parse a JSON message as data and call the pinned native receiver once.
+    /// Payload bytes are never interpolated into executable JavaScript source.
+    /// Callback completion values are discarded without coercion; pending jobs
+    /// remain explicit through `execute_pending_job`.
+    pub fn dispatch_json(&mut self, json: &[u8]) -> Result<(), String> {
+        let mut terminated = Vec::with_capacity(json.len() + 1);
+        terminated.extend_from_slice(json);
+        terminated.push(0);
+        self.begin_call();
+        // SAFETY: the native JSON parser receives the exact byte length and a
+        // live NUL-terminated buffer; all parsed values stay inside the adapter.
+        let status = unsafe {
+            hull_quickjs_dispatch_json(self.native.as_ptr(), terminated.as_ptr().cast(), json.len())
+        };
+        if status < 0 {
+            Err(self.exception())
+        } else {
+            Ok(())
+        }
+    }
     /// Execute at most one pending promise job. A caller can yield its local
     /// Tokio task between jobs instead of draining a page's queue synchronously.
     pub fn execute_pending_job(&mut self) -> Result<bool, String> {
@@ -168,6 +209,101 @@ impl Drop for Engine {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn dispatched_json_is_data_and_completion_is_not_coerced() {
+        let mut engine = Engine::new().unwrap();
+        engine.eval(br#"globalThis.receive = data => { globalThis.message = data; return { toString() { throw Error('completion coerced'); } }; }"#, "bridge.js", false).unwrap();
+        engine.bind_message_handler("receive").unwrap();
+        engine.dispatch_json(br#"{"text":"\"; globalThis.injected=true; // \\ \u2028","nested":{"__proto__":{"injected":true}},"list":[1,true,null]}"#).unwrap();
+        engine.eval(br#"if (typeof injected !== 'undefined' || Object.prototype.injected !== undefined || message.list[0] !== 1 || message.list[2] !== null || !message.text.includes('globalThis.injected=true')) throw Error('JSON was not data')"#, "verify.js", false).unwrap();
+    }
+    #[test]
+    fn pinned_receiver_survives_removed_or_overwritten_global() {
+        let mut engine = Engine::new().unwrap();
+        engine
+            .eval(
+                b"globalThis.calls=0; globalThis.receive=data=>calls+=data",
+                "bridge.js",
+                false,
+            )
+            .unwrap();
+        engine.bind_message_handler("receive").unwrap();
+        engine.eval(b"if (Object.hasOwn(globalThis,'receive')) throw Error('global remained'); globalThis.receive=()=>{throw Error('hijacked')}", "overwrite.js", false).unwrap();
+        engine.dispatch_json(b"2").unwrap();
+        engine
+            .eval(
+                b"delete globalThis.receive; if(calls!==2)throw Error('wrong receiver')",
+                "remove.js",
+                false,
+            )
+            .unwrap();
+        engine.dispatch_json(b"3").unwrap();
+        engine
+            .eval(
+                b"if(calls!==5)throw Error('receiver not retained')",
+                "verify.js",
+                false,
+            )
+            .unwrap();
+    }
+    #[test]
+    fn receiver_errors_are_visible_and_later_dispatch_recovers() {
+        let mut engine = Engine::new().unwrap();
+        engine.eval(b"globalThis.receive=data=>{if(data.fail)throw Error('receiver failure');globalThis.received=data.value;}", "bridge-error.js", false).unwrap();
+        engine.bind_message_handler("receive").unwrap();
+        let error = engine.dispatch_json(br#"{"fail":true}"#).unwrap_err();
+        assert!(error.contains("receiver failure"), "{error}");
+        assert!(error.contains("bridge-error.js"), "{error}");
+        engine.dispatch_json(br#"{"value":42}"#).unwrap();
+        engine
+            .eval(
+                b"if(received!==42)throw Error('not recovered')",
+                "verify.js",
+                false,
+            )
+            .unwrap();
+    }
+    #[test]
+    fn missing_receiver_bad_json_and_failed_rebinding_are_explicit() {
+        let mut engine = Engine::new().unwrap();
+        assert!(
+            engine
+                .dispatch_json(b"{}")
+                .unwrap_err()
+                .contains("not bound")
+        );
+        assert!(
+            engine
+                .bind_message_handler("missing")
+                .unwrap_err()
+                .contains("must be a function")
+        );
+        engine
+            .eval(
+                b"globalThis.receive=data=>globalThis.received=data",
+                "bridge.js",
+                false,
+            )
+            .unwrap();
+        engine.bind_message_handler("receive").unwrap();
+        assert!(
+            engine
+                .dispatch_json(b"{malformed")
+                .unwrap_err()
+                .contains("SyntaxError")
+        );
+        engine.eval(b"Object.defineProperty(globalThis,'locked',{value:()=>{throw Error('wrong receiver')},configurable:false})", "locked.js", false).unwrap();
+        assert!(engine.bind_message_handler("locked").is_err());
+        engine.dispatch_json(b"42").unwrap();
+        engine
+            .eval(
+                b"if(received!==42)throw Error('failed rebind lost previous receiver')",
+                "verify.js",
+                false,
+            )
+            .unwrap();
+    }
 
     #[test]
     fn exception_conversion_is_interrupted_and_context_recovers() {

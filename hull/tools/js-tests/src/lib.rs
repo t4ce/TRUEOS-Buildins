@@ -2,6 +2,17 @@
 #![allow(dead_code)]
 
 extern crate self as trueos;
+extern crate self as winit;
+
+pub mod platform {
+    pub use winit_trueos as trueos;
+}
+pub mod event {
+    pub use winit_core::event::*;
+}
+pub mod window {
+    pub use winit_core::window::Window;
+}
 
 pub use tokio;
 pub mod runtime {
@@ -30,8 +41,14 @@ pub mod logl {
     pub fn log(_: u32, _: std::fmt::Arguments<'_>) {}
 }
 
+#[cfg(test)]
+mod input_actor_tests;
+#[cfg(test)]
+mod input_adapter_tests;
 #[path = "../../../src/javascript.rs"]
 mod javascript;
+#[path = "../../../src/javascript_input.rs"]
+mod javascript_input;
 #[path = "../../../src/scripts.rs"]
 mod scripts;
 

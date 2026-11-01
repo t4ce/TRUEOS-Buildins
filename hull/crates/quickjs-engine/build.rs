@@ -10,6 +10,7 @@ const ADAPTER: &str = r#"
 typedef struct HullQuickJs {
     JSRuntime *runtime;
     JSContext *context;
+    JSValue receiver;
     char error[8192];
 } HullQuickJs;
 
@@ -17,6 +18,7 @@ void *hull_quickjs_new(size_t heap_limit, size_t stack_limit,
                       JSInterruptHandler *interrupt, void *opaque) {
     HullQuickJs *engine = calloc(1, sizeof(*engine));
     if (!engine) return NULL;
+    engine->receiver = JS_UNDEFINED;
     engine->runtime = JS_NewRuntime();
     if (!engine->runtime) { free(engine); return NULL; }
     JS_SetMemoryLimit(engine->runtime, heap_limit);
@@ -30,6 +32,7 @@ void *hull_quickjs_new(size_t heap_limit, size_t stack_limit,
 
 void hull_quickjs_free(void *pointer) {
     HullQuickJs *engine = pointer;
+    JS_FreeValue(engine->context, engine->receiver);
     JS_FreeContext(engine->context);
     JS_FreeRuntime(engine->runtime);
     free(engine);
@@ -44,6 +47,58 @@ int hull_quickjs_eval(void *pointer, const char *source, size_t length,
     if (JS_IsException(value)) return -1;
     // Discard the completion value without invoking user-defined coercion.
     JS_FreeValue(engine->context, value);
+    return 0;
+}
+
+int hull_quickjs_bind_message_handler(void *pointer, const char *global_name) {
+    HullQuickJs *engine = pointer;
+    JSContext *context = engine->context;
+    JS_UpdateStackTop(engine->runtime);
+    JSValue global = JS_GetGlobalObject(context);
+    JSValue receiver = JS_GetPropertyStr(context, global, global_name);
+    if (JS_IsException(receiver)) { JS_FreeValue(context, global); return -1; }
+    if (!JS_IsFunction(context, receiver)) {
+        JS_FreeValue(context, receiver);
+        JS_FreeValue(context, global);
+        JS_ThrowTypeError(context, "message handler must be a function");
+        return -1;
+    }
+    JSAtom atom = JS_NewAtom(context, global_name);
+    if (atom == JS_ATOM_NULL) {
+        JS_FreeValue(context, receiver);
+        JS_FreeValue(context, global);
+        return -1;
+    }
+    int deleted = JS_DeleteProperty(context, global, atom, JS_PROP_THROW);
+    JS_FreeAtom(context, atom);
+    JS_FreeValue(context, global);
+    if (deleted <= 0) {
+        JS_FreeValue(context, receiver);
+        if (!deleted) JS_ThrowTypeError(context, "message handler global could not be removed");
+        return -1;
+    }
+    // Commit only after validation and global removal; a failed rebind leaves
+    // the previous pinned transport intact.
+    JS_FreeValue(context, engine->receiver);
+    engine->receiver = receiver;
+    return 0;
+}
+
+int hull_quickjs_dispatch_json(void *pointer, const char *json, size_t length) {
+    HullQuickJs *engine = pointer;
+    JSContext *context = engine->context;
+    JS_UpdateStackTop(engine->runtime);
+    if (JS_IsUndefined(engine->receiver)) {
+        JS_ThrowTypeError(context, "message handler is not bound");
+        return -1;
+    }
+    // Parse data directly through the native JSON parser, never as source code.
+    JSValue message = JS_ParseJSON(context, json, length, "<host-message>");
+    if (JS_IsException(message)) return -1;
+    JSValue result = JS_Call(context, engine->receiver, JS_UNDEFINED, 1, &message);
+    JS_FreeValue(context, message);
+    if (JS_IsException(result)) return -1;
+    JS_FreeValue(context, result);
     return 0;
 }
 
