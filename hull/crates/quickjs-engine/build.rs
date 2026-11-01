@@ -7,10 +7,23 @@ const ADAPTER: &str = r#"
 #include <stdlib.h>
 #include <string.h>
 
+#define CONSOLE_CAPACITY 64
+#define CONSOLE_BYTES 4096
+typedef struct ConsoleRecord {
+    int level;
+    size_t length;
+    char text[CONSOLE_BYTES];
+} ConsoleRecord;
+
 typedef struct HullQuickJs {
     JSRuntime *runtime;
     JSContext *context;
     JSValue receiver;
+    ConsoleRecord console[CONSOLE_CAPACITY];
+    size_t console_head, console_count;
+    uint64_t console_dropped;
+    double (*now)(void *);
+    void *clock_opaque;
     char error[8192];
 } HullQuickJs;
 
@@ -27,6 +40,7 @@ void *hull_quickjs_new(size_t heap_limit, size_t stack_limit,
     JS_SetInterruptHandler(engine->runtime, interrupt, opaque);
     engine->context = JS_NewContext(engine->runtime);
     if (!engine->context) { JS_FreeRuntime(engine->runtime); free(engine); return NULL; }
+    JS_SetContextOpaque(engine->context, engine);
     return engine;
 }
 
@@ -36,6 +50,83 @@ void hull_quickjs_free(void *pointer) {
     JS_FreeContext(engine->context);
     JS_FreeRuntime(engine->runtime);
     free(engine);
+}
+
+static JSValue console_write(JSContext *context, JSValueConst self,
+                             int argc, JSValueConst *argv) {
+    HullQuickJs *engine = JS_GetContextOpaque(context);
+    if (engine->console_count == CONSOLE_CAPACITY) {
+        if (engine->console_dropped != UINT64_MAX) engine->console_dropped++;
+        return JS_UNDEFINED;
+    }
+    int level;
+    if (argc < 2) return JS_ThrowTypeError(context, "console record requires level and text");
+    if (JS_ToInt32(context, &level, argv[0])) return JS_EXCEPTION;
+    size_t length;
+    const char *text = JS_ToCStringLen(context, &length, argv[1]);
+    if (!text) return JS_EXCEPTION;
+    size_t used = length < CONSOLE_BYTES ? length : CONSOLE_BYTES;
+    // Never split a UTF-8 sequence at the bounded native record boundary.
+    if (used < length) while (used && ((unsigned char)text[used] & 0xc0) == 0x80) used--;
+    ConsoleRecord *record = &engine->console[(engine->console_head + engine->console_count) % CONSOLE_CAPACITY];
+    record->level = level;
+    record->length = used;
+    memcpy(record->text, text, used);
+    engine->console_count++;
+    JS_FreeCString(context, text);
+    return JS_UNDEFINED;
+}
+
+int hull_quickjs_install_console(void *pointer) {
+    HullQuickJs *engine = pointer;
+    JSContext *context = engine->context;
+    JSValue global = JS_GetGlobalObject(context);
+    int status = JS_SetPropertyStr(context, global, "__hullConsoleWrite",
+                                  JS_NewCFunction(context, console_write, "write", 2));
+    JS_FreeValue(context, global);
+    return status;
+}
+
+int hull_quickjs_console_pop(void *pointer, char *text, size_t capacity, int *level) {
+    HullQuickJs *engine = pointer;
+    if (!engine->console_count) return -1;
+    ConsoleRecord *record = &engine->console[engine->console_head];
+    if (capacity < record->length) return -2;
+    memcpy(text, record->text, record->length);
+    *level = record->level;
+    int length = (int)record->length;
+    engine->console_head = (engine->console_head + 1) % CONSOLE_CAPACITY;
+    engine->console_count--;
+    return length;
+}
+
+uint64_t hull_quickjs_console_dropped(void *pointer) {
+    HullQuickJs *engine = pointer;
+    uint64_t dropped = engine->console_dropped;
+    engine->console_dropped = 0;
+    return dropped;
+}
+
+static JSValue performance_now(JSContext *context, JSValueConst self,
+                               int argc, JSValueConst *argv) {
+    HullQuickJs *engine = JS_GetContextOpaque(context);
+    return JS_NewFloat64(context, engine->now(engine->clock_opaque));
+}
+
+int hull_quickjs_install_clock(void *pointer, double (*now)(void *), void *opaque) {
+    HullQuickJs *engine = pointer;
+    engine->now = now;
+    engine->clock_opaque = opaque;
+    JSContext *context = engine->context;
+    JSValue global = JS_GetGlobalObject(context);
+    JSValue performance = JS_NewObject(context);
+    if (JS_IsException(performance)) { JS_FreeValue(context, global); return -1; }
+    int status = JS_SetPropertyStr(context, performance, "now",
+                                  JS_NewCFunction(context, performance_now, "now", 0));
+    if (status >= 0) status = JS_SetPropertyStr(context, global, "performance", performance);
+    else JS_FreeValue(context, performance);
+    JS_FreeValue(context, global);
+    return status;
 }
 
 int hull_quickjs_eval(void *pointer, const char *source, size_t length,

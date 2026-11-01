@@ -1,4 +1,76 @@
-//! Input and frame diagnostics for the attached VM minishell.
+//! Bounded console output, URL input and frame diagnostics.
+use std::{cell::RefCell, collections::VecDeque};
+
+const OUTPUT_LINES: usize = 256;
+const LINE_CHARS: usize = 2048;
+thread_local! {
+    static OUTPUT: RefCell<VecDeque<String>> = const { RefCell::new(VecDeque::new()) };
+}
+
+/// All terminal text is plain data, including script-authored escape sequences.
+pub(super) fn line(text: &str) {
+    OUTPUT.with(|output| {
+        let mut output = output.borrow_mut();
+        for line in text.split('\n').take(OUTPUT_LINES) {
+            let plain: String = line
+                .chars()
+                .take(LINE_CHARS)
+                .map(|character| {
+                    if character == '\t' {
+                        ' '
+                    } else if character.is_control() {
+                        '�'
+                    } else {
+                        character
+                    }
+                })
+                .collect();
+            if output.len() == OUTPUT_LINES {
+                output.pop_front();
+            }
+            output.push_back(plain);
+        }
+    });
+}
+
+pub(super) fn linef(arguments: std::fmt::Arguments<'_>) {
+    line(&arguments.to_string());
+}
+
+pub(super) fn take_output() -> Vec<String> {
+    OUTPUT.with(|output| output.borrow_mut().drain(..).collect())
+}
+
+pub(super) const MAX_SCRIPT_BYTES: usize = 64 * 1024;
+
+/// Paste is inert until a separate typed submission command consumes it.
+#[derive(Default)]
+pub(super) struct ScriptInput {
+    source: String,
+    overflow: bool,
+}
+
+impl ScriptInput {
+    pub fn append(&mut self, source: &str) {
+        if self.overflow || self.source.len().saturating_add(source.len()) > MAX_SCRIPT_BYTES {
+            self.overflow = true;
+            return;
+        }
+        self.source.push_str(source);
+    }
+
+    pub fn len(&self) -> usize {
+        self.source.len()
+    }
+
+    pub fn finish(self) -> Result<String, &'static str> {
+        if self.overflow {
+            Err("script exceeds 64 KiB; paste was discarded")
+        } else {
+            Ok(self.source)
+        }
+    }
+}
 
 /// Distinguishes draw attempts, completed frames, publication, and backpressure.
 #[derive(Default)]
@@ -17,7 +89,7 @@ impl FrameCounter {
     }
     pub fn produced(&mut self, reason: &str, width: u32, height: u32, gpu: bool) {
         self.f += 1;
-        trueos::vshell::linef(format_args!(
+        linef(format_args!(
             "hull: f={} attempts={} published={} busy={} reason={} viewport={}x{} gpu={}",
             self.f, self.attempts, self.published, self.busy, reason, width, height, gpu,
         ));
@@ -27,7 +99,7 @@ impl FrameCounter {
     }
     pub fn published(&mut self) {
         self.published += 1;
-        trueos::vshell::linef(format_args!(
+        linef(format_args!(
             "hull: published={} f={}",
             self.published, self.f
         ));
@@ -36,7 +108,7 @@ impl FrameCounter {
         self.busy += 1;
         // Keep backpressure diagnostics from flooding the shell/compositor.
         if self.busy.is_power_of_two() {
-            trueos::vshell::linef(format_args!(
+            linef(format_args!(
                 "hull: busy={} stage={} f={} attempts={} published={}",
                 self.busy, self.stage, self.f, self.attempts, self.published,
             ));
@@ -108,6 +180,36 @@ pub(super) fn page_url(line: &str) -> Result<String, &'static str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn pasted_script_preserves_literal_commands_and_refuses_partial_overflow() {
+        let mut script = ScriptInput::default();
+        script.append("console.log('🦀');\n:end\n:run\n");
+        assert_eq!(script.finish().unwrap(), "console.log('🦀');\n:end\n:run\n");
+        let mut script = ScriptInput::default();
+        script.append(&"x".repeat(MAX_SCRIPT_BYTES));
+        assert_eq!(script.len(), MAX_SCRIPT_BYTES);
+        script.append("🦀");
+        assert!(
+            script.finish().is_err(),
+            "overflow must never run a truncated script"
+        );
+    }
+    #[test]
+    fn console_output_keeps_terminal_controls_as_plain_text_and_bounds_the_tail() {
+        take_output();
+        line("log: \u{1b}[2J\r\tdata\nnext");
+        assert_eq!(take_output(), ["log: �[2J� data", "next"]);
+        for index in 0..300 {
+            linef(format_args!("{index}"));
+        }
+        let lines = take_output();
+        assert_eq!(lines.len(), OUTPUT_LINES);
+        assert_eq!(lines.first().map(String::as_str), Some("44"));
+        assert_eq!(lines.last().map(String::as_str), Some("299"));
+        line(&"🦀".repeat(LINE_CHARS + 1));
+        assert_eq!(take_output()[0].chars().count(), LINE_CHARS);
+    }
+
     #[test]
     fn input_keeps_partial_lines_and_handles_crlf() {
         let mut input = ShellInput::default();

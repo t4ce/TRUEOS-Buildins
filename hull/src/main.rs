@@ -13,6 +13,7 @@ use winit::window::{Window, WindowAttributes, WindowId};
 mod actual_bg_quad;
 mod border_geometry;
 mod chrome;
+mod console;
 mod css;
 mod favicon;
 mod images;
@@ -62,7 +63,7 @@ struct Hull {
     images: images::Images,
     snapshot: snapshot::Snapshot,
     page_url: String,
-    shell_input: shellio::ShellInput,
+    console: Option<console::Console>,
     queued_urls: VecDeque<String>,
 }
 
@@ -93,8 +94,8 @@ impl Hull {
         self.redraw_reason = "initial";
         window.request_redraw();
         self.window = Some(window);
-        vshell::line("hull: enter an HTTPS URL to download, parse and display it");
-        vshell::line(
+        shellio::line("hull: enter an HTTPS URL to download, parse and display it");
+        shellio::line(
             "hull: scroll with wheel, arrows or Page Up/Down; Home/End; Shift+wheel pans sideways; F2 toggles actualBgQuad / pinkQuadDbg",
         );
         Ok(())
@@ -132,10 +133,10 @@ impl Hull {
                     javascript.replace_page(self.generation, self.page_url.clone(), Vec::new());
                 }
                 self.download = Some(operation);
-                vshell::linef(format_args!("hull: downloading {}", self.page_url));
+                shellio::linef(format_args!("hull: downloading {}", self.page_url));
             }
             Err(code) => {
-                vshell::linef(format_args!("hull: download start failed: {code}"));
+                shellio::linef(format_args!("hull: download start failed: {code}"));
             }
         }
     }
@@ -154,27 +155,97 @@ impl Hull {
         }
     }
 
-    fn poll_shell_input(&mut self) {
-        // The VM minishell owns echo, line editing and its prompt.
-        for _ in 0..512 {
-            let Some(byte) = vshell::attached_read_byte() else {
-                break;
-            };
-            let Some(line) = self.shell_input.push(byte) else {
-                continue;
-            };
-            match line.and_then(|line| shellio::page_url(&line)) {
-                Ok(url) if self.queued_urls.len() < 16 => self.queued_urls.push_back(url),
-                Ok(_) => {
-                    vshell::line(
-                        "hull: URL queue is full; try again after the current pages finish",
+    fn poll_console(&mut self, event_loop: &dyn ActiveEventLoop) {
+        let Some(console) = &mut self.console else {
+            return;
+        };
+        let commands = match console.poll() {
+            Ok(commands) => commands,
+            Err(error) => {
+                logl::log(logl::level::ERROR, format_args!("hull: console: {error}"));
+                event_loop.exit();
+                return;
+            }
+        };
+        for command in commands {
+            match command {
+                console::Command::Url(url) if self.queued_urls.len() < 16 => {
+                    self.queued_urls.push_back(url)
+                }
+                console::Command::Url(_) => shellio::line("hull: URL queue is full"),
+                console::Command::Scripts => self.list_scripts(),
+                console::Command::Run | console::Command::Script(_)
+                    if self.document.is_none()
+                        || self.download.is_some()
+                        || !self.queued_urls.is_empty() =>
+                {
+                    shellio::line(
+                        "hull: wait for the page to finish loading before running scripts",
                     );
                 }
-                Err(error) => {
-                    vshell::linef(format_args!("hull: {error}"));
+                console::Command::Run => {
+                    let result = self
+                        .javascript
+                        .as_mut()
+                        .ok_or("JavaScript is unavailable")
+                        .and_then(|js| js.run());
+                    match result {
+                        Ok(()) => shellio::line("hull: page scripts requested"),
+                        Err(error) => shellio::linef(format_args!("hull: {error}")),
+                    }
+                }
+                console::Command::Script(source) => {
+                    let result = self
+                        .javascript
+                        .as_mut()
+                        .ok_or("JavaScript is unavailable")
+                        .and_then(|js| js.execute_pasted(source));
+                    if let Err(error) = result {
+                        shellio::linef(format_args!("hull: {error}"));
+                    }
+                }
+                console::Command::Exit => {
+                    event_loop.exit();
+                    break;
                 }
             }
         }
+    }
+
+    fn list_scripts(&self) {
+        if self.document.is_none() {
+            shellio::line("hull: no page is loaded");
+            return;
+        }
+        shellio::linef(format_args!(
+            "hull: {} collected script sources — {}",
+            self.scripts.sources.len(),
+            self.page_url
+        ));
+        for (index, source) in self.scripts.sources.iter().enumerate() {
+            let kind = &source.kind;
+            if let Some(bytes) = &source.bytes {
+                shellio::linef(format_args!(
+                    "  {}: inline nodes={:?} type={} bytes={} {}",
+                    index + 1,
+                    source.nodes,
+                    kind,
+                    bytes.len(),
+                    source.origin
+                ));
+            } else {
+                shellio::linef(format_args!(
+                    "  {}: external nodes={:?} type={} not fetched {}",
+                    index + 1,
+                    source.nodes,
+                    kind,
+                    source.origin
+                ));
+            }
+        }
+        shellio::line(
+            "hull: :run requests collected inline JavaScript; :paste runs your own source with :end",
+        );
     }
 
     fn page_pending(&self) -> bool {
@@ -277,31 +348,33 @@ impl ApplicationHandler for Hull {
                                 "hull: QuickJS page={generation} node={node} evaluated={origin}"
                             ),
                         ),
-                        Err(error) => logl::log(
-                            logl::level::ERROR,
-                            format_args!(
-                                "hull: QuickJS page={generation} node={node} {origin}: {error}"
-                            ),
-                        ),
+                        Err(error) => {
+                            shellio::linef(format_args!("[error] node={node} {origin}: {error}"));
+                            logl::log(
+                                logl::level::ERROR,
+                                format_args!("hull: QuickJS page={generation} node={node} {origin}: {error}"),
+                            );
+                        }
                     },
                     javascript::Report::Skipped {
                         generation,
                         origin,
                         reason,
-                    } => logl::log(
-                        logl::level::INFO,
-                        format_args!("hull: QuickJS page={generation} {origin}: {reason}"),
-                    ),
-                    javascript::Report::JobError { generation, error } => logl::log(
-                        logl::level::ERROR,
-                        format_args!("hull: QuickJS page={generation} job: {error}"),
-                    ),
+                    } => {
+                        shellio::linef(format_args!("hull: skipped {origin}: {reason}"));
+                        logl::log(logl::level::INFO, format_args!("hull: QuickJS page={generation} {origin}: {reason}"));
+                    }
+                    javascript::Report::JobError { generation, error } => {
+                        shellio::linef(format_args!("[error] JavaScript job: {error}"));
+                        logl::log(logl::level::ERROR, format_args!("hull: QuickJS page={generation} job: {error}"));
+                    }
                     javascript::Report::Input {
                         generation,
                         kind,
                         result,
                     } => {
                         if let Err(error) = result {
+                            shellio::linef(format_args!("[error] input={kind}: {error}"));
                             logl::log(
                                 logl::level::ERROR,
                                 format_args!(
@@ -310,10 +383,37 @@ impl ApplicationHandler for Hull {
                             );
                         }
                     }
+                    javascript::Report::Console { generation, batch } => {
+                        if generation == self.generation {
+                            for message in batch.messages {
+                                shellio::linef(format_args!(
+                                    "[{}] {}",
+                                    message.level.as_str(),
+                                    message.text
+                                ));
+                            }
+                            if batch.dropped != 0 {
+                                shellio::linef(format_args!(
+                                    "[warn] console dropped {} messages",
+                                    batch.dropped
+                                ));
+                            }
+                        }
+                    }
+                    javascript::Report::Pasted { generation, result } => {
+                        if generation == self.generation {
+                            match result {
+                                Ok(()) => shellio::line("hull: pasted script completed"),
+                                Err(error) => {
+                                    shellio::linef(format_args!("[error] pasted script: {error}"))
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
-        self.poll_shell_input();
+        self.poll_console(event_loop);
         self.poll_download();
         self.css.poll_downloads();
         // Images and persistence can only begin after this navigation's initial
@@ -488,10 +588,10 @@ impl ApplicationHandler for Hull {
                                 .map_err(|code| format!("could not launch a new Hull: {code}"))
                             }) {
                             Ok(()) => {
-                                vshell::linef(format_args!("hull: opening {url} in a new Hull"));
+                                shellio::linef(format_args!("hull: opening {url} in a new Hull"));
                             }
                             Err(error) => {
-                                vshell::linef(format_args!("hull: {error}"));
+                                shellio::linef(format_args!("hull: {error}"));
                             }
                         }
                     }
@@ -533,7 +633,7 @@ impl ApplicationHandler for Hull {
                             return;
                         }
                         self.quad_pass.toggle();
-                        vshell::linef(format_args!("hull: quad pass {}", self.quad_pass.name()));
+                        shellio::linef(format_args!("hull: quad pass {}", self.quad_pass.name()));
                         true
                     }
                     Key::Named(NamedKey::ArrowUp) => self.viewport.scroll_by(0.0, -48.0),
@@ -670,7 +770,7 @@ impl ApplicationHandler for Hull {
                         let (x, y) = self.viewport.offset();
                         let (doc_width, doc_height) = self.viewport.document_extent();
                         let (viewport_width, viewport_height) = self.viewport.extent();
-                        vshell::linef(format_args!(
+                        shellio::linef(format_args!(
                             "hull: viewport={}x{} document={}x{} scroll={},{} rects={}/{} text_runs={}/{} glyphs={} scale=1",
                             viewport_width,
                             viewport_height,
@@ -807,6 +907,16 @@ fn main() {
     };
     let mut app = Hull::default();
     app.javascript = Some(javascript);
+    app.console = match console::Console::start() {
+        Ok(console) => Some(console),
+        Err(error) => {
+            logl::log(
+                logl::level::ERROR,
+                format_args!("hull: console initialization: {error}"),
+            );
+            return;
+        }
+    };
     if let Ok(bytes) = trueos::async_fs::block_on(trueos::async_fs::read_file(b"vFile:launch")) {
         let startup = std::str::from_utf8(&bytes)
             .map_err(|_| "startup script must be UTF-8")
@@ -815,7 +925,7 @@ fn main() {
             Ok(Some(url)) => app.queued_urls.push_back(url),
             Ok(None) => {}
             Err(error) => {
-                vshell::linef(format_args!("hull: {error}"));
+                shellio::linef(format_args!("hull: {error}"));
             }
         }
     }

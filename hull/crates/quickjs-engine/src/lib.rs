@@ -1,4 +1,4 @@
-//! A small, owned QuickJS engine. This crate installs no host or browser APIs.
+//! A small, owned QuickJS engine. Host APIs require explicit installation.
 //!
 //! Native values stay behind an opaque C adapter compiled against the same
 //! upstream header. Engine ownership stays on one local executor task; dropping
@@ -34,6 +34,45 @@ impl Default for Limits {
 
 struct InterruptState {
     deadline: Cell<Instant>,
+    started: Instant,
+}
+unsafe extern "C" fn elapsed_ms(opaque: *mut c_void) -> f64 {
+    // SAFETY: the stable interrupt state outlives its native context.
+    unsafe { &*opaque.cast::<InterruptState>() }
+        .started
+        .elapsed()
+        .as_secs_f64()
+        * 1000.0
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConsoleLevel {
+    Log,
+    Debug,
+    Info,
+    Warn,
+    Error,
+}
+impl ConsoleLevel {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Log => "log",
+            Self::Debug => "debug",
+            Self::Info => "info",
+            Self::Warn => "warn",
+            Self::Error => "error",
+        }
+    }
+}
+#[derive(Debug)]
+pub struct ConsoleMessage {
+    pub level: ConsoleLevel,
+    pub text: String,
+}
+#[derive(Debug, Default)]
+pub struct ConsoleBatch {
+    pub messages: Vec<ConsoleMessage>,
+    pub dropped: u64,
 }
 unsafe extern "C" fn interrupt(_runtime: *mut c_void, opaque: *mut c_void) -> c_int {
     // SAFETY: native engine lifetime is strictly contained in the lifetime of
@@ -50,6 +89,19 @@ unsafe extern "C" {
         opaque: *mut c_void,
     ) -> *mut c_void;
     fn hull_quickjs_free(engine: *mut c_void);
+    fn hull_quickjs_install_console(engine: *mut c_void) -> c_int;
+    fn hull_quickjs_console_pop(
+        engine: *mut c_void,
+        text: *mut c_char,
+        capacity: usize,
+        level: *mut c_int,
+    ) -> c_int;
+    fn hull_quickjs_console_dropped(engine: *mut c_void) -> u64;
+    fn hull_quickjs_install_clock(
+        engine: *mut c_void,
+        now: unsafe extern "C" fn(*mut c_void) -> f64,
+        opaque: *mut c_void,
+    ) -> c_int;
     fn hull_quickjs_eval(
         engine: *mut c_void,
         source: *const c_char,
@@ -84,6 +136,7 @@ impl Engine {
             .ok_or("QuickJS time slice is too large")?;
         let mut state = Box::new(InterruptState {
             deadline: Cell::new(deadline),
+            started: Instant::now(),
         });
         // SAFETY: the Box allocation stays stable for the entire native lifetime.
         let native = unsafe {
@@ -100,6 +153,69 @@ impl Engine {
             limits,
             _local_owner: PhantomData,
         })
+    }
+    /// Install a text-only console backed by 64 native records, at most 4096
+    /// UTF-8 bytes each. The caller explicitly drains output outside guest calls.
+    pub fn install_console(&mut self) -> Result<(), String> {
+        self.begin_call();
+        // SAFETY: installation operates on the owned context only.
+        if unsafe { hull_quickjs_install_console(self.native.as_ptr()) } < 0 {
+            return Err(self.exception());
+        }
+        self.eval(include_bytes!("console.js"), "hull:console", false)
+    }
+
+    /// Install monotonic milliseconds since this engine was created. No timers.
+    pub fn install_clock(&mut self) -> Result<(), String> {
+        self.begin_call();
+        // SAFETY: the stable state and callback outlive the owned native context.
+        let status = unsafe {
+            hull_quickjs_install_clock(
+                self.native.as_ptr(),
+                elapsed_ms,
+                (&*self.interrupt as *const InterruptState)
+                    .cast_mut()
+                    .cast(),
+            )
+        };
+        if status < 0 {
+            Err(self.exception())
+        } else {
+            Ok(())
+        }
+    }
+
+    pub fn take_console(&mut self) -> ConsoleBatch {
+        let mut batch = ConsoleBatch::default();
+        let mut bytes = [0u8; 4096];
+        let mut level = 0;
+        loop {
+            // SAFETY: pop copies at most the supplied capacity; no JS runs here.
+            let length = unsafe {
+                hull_quickjs_console_pop(
+                    self.native.as_ptr(),
+                    bytes.as_mut_ptr().cast(),
+                    bytes.len(),
+                    &mut level,
+                )
+            };
+            if length < 0 {
+                break;
+            }
+            batch.messages.push(ConsoleMessage {
+                level: match level {
+                    1 => ConsoleLevel::Debug,
+                    2 => ConsoleLevel::Info,
+                    3 => ConsoleLevel::Warn,
+                    4 => ConsoleLevel::Error,
+                    _ => ConsoleLevel::Log,
+                },
+                text: String::from_utf8_lossy(&bytes[..length as usize]).into_owned(),
+            });
+        }
+        // SAFETY: reads and resets an owned native counter without executing JS.
+        batch.dropped = unsafe { hull_quickjs_console_dropped(self.native.as_ptr()) };
+        batch
     }
     fn begin_call(&self) {
         self.interrupt

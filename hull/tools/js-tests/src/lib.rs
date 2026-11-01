@@ -42,6 +42,10 @@ pub mod logl {
 }
 
 #[cfg(test)]
+mod console_tests;
+#[cfg(test)]
+mod helpers_tests;
+#[cfg(test)]
 mod input_actor_tests;
 #[cfg(test)]
 mod input_adapter_tests;

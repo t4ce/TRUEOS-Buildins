@@ -4,11 +4,55 @@ Hull starts one idle Tokio local task with its event loop. It shares Hull's
 thread; there is no additional OS worker. The standalone QuickJS crate has an
 opaque native value boundary and no dependency on the old workbench/experiments.
 
-Page extraction only stores script bytes and references. `Runtime::run()` remains
-an explicit execution capability with no call from Hull's navigation, UI events,
-page loading or shell. Input never creates a VM or activates dormant scripts.
-Navigation drops the context, globals, promise jobs, listeners and queued input.
-The new page requires a new explicit run request. Closing Hull drops the task.
+Page extraction only stores script bytes and references. Navigation and page
+loading never execute them. The terminal's explicit `:run` calls `Runtime::run()`
+once for the collected sources. Input never creates a VM or activates dormant
+scripts. Navigation drops the context, globals, promise jobs, listeners, queued
+input and queued pastes. The new page requires explicit execution again. Closing
+Hull drops the task.
+
+## Terminal console
+
+Hull uses a small Crossterm terminal companion with the existing TRUEOS terminal
+lease handoff. It displays a bounded output tail and one prompt. Paste an HTTPS
+URL and press Enter to navigate. There are no panels or Ratatui dependency.
+
+- `:scripts` lists collected inline/external sources, node IDs, types, byte counts
+  and resolved origins. External sources are labeled unfetched.
+- `:run` requests the collected inline JavaScript once for this page.
+- `:paste` starts an inert multiline JavaScript buffer; type `:end` on its own
+  line to execute it, or `:cancel`/Ctrl-C to discard it. Bracketed paste preserves
+  script text literally: command-looking lines inside the pasted payload do not
+  submit commands. The whole script is rejected if it exceeds 64 KiB. At most
+  eight pastes can await execution.
+- Esc restores the terminal and parks it back at the shell. `tui` re-enters the
+  same console while Hull continues processing its browser window. Ctrl-Q exits.
+
+Pasted sources require a loaded page and share its VM and globals. They enable
+the input endpoint but do not request the page's collected scripts. Requested
+page sources and their Promise jobs finish before queued pastes; each paste runs
+as one classic script per turn, with Promise checkpoints between sources.
+
+The text console supports `log`, `debug`, `info`, `warn`, `error`, and `assert`.
+Arguments are joined with spaces; `%s`, `%d`, `%i`, `%f`, `%o`, `%O`, and `%%`
+provide basic formatting. Objects use JSON text where possible, with string
+fallback for cycles/unsupported values. A false assertion prints an error;
+conversion errors remain ordinary JavaScript errors. There are no tables,
+groups, inspector, debugger or arbitrary shell commands.
+
+Console calls queue owned text in the native engine rather than writing the
+terminal inside guest execution. Each drain admits 64 records of at most 4096
+UTF-8 bytes, preserving character boundaries and reporting excess records.
+Hull drains after sources, Promise batches and input batches, tagging output
+with the page generation. The terminal retains 256 lines and strips terminal
+control characters; long visible lines are clipped to the terminal width.
+Native diagnostics and script errors use the same output path.
+
+Small synchronous helpers are `performance.now()` (monotonic milliseconds since
+VM creation), `atob()` and `btoa()` (Base64 and binary byte strings, with invalid
+input errors named `InvalidCharacterError`). They add no DOM objects. QuickJS
+already provides `Date`/`Date.now()`, JSON, URI helpers and standard language
+builtins. There is no timer scheduler.
 
 ## Native input bridge
 
@@ -17,12 +61,12 @@ messages → native JSON parsing/function call → callbacks in the Tokio task.
 JSON payloads are never interpolated as JavaScript source. The receiver is pinned
 as a native JS value and its temporary global name is removed.
 
-The only actor-installed endpoint is `hullInput`. **There is no DOM connection:**
+The native input endpoint is `hullInput`. **There is no DOM connection:**
 no `document`, `window`, nodes, selectors, hit testing, scene commands, layout,
 painting, or SVG access. Callbacks may change their own JavaScript business state;
 they have no path to change Hull's parsed document, rendered frame or SVG snapshot.
 
-After a future explicit run, page code can subscribe with:
+After explicit execution, script code can subscribe with:
 
 ```js
 hullInput.addEventListener('pointer', event => {
@@ -73,7 +117,7 @@ rejected explicitly; Hull logs the rejection without logging typed text.
 
 Explicit execution evaluates one source per turn; data MIME types are skipped,
 external references remain unfetched, and modules have no import loader. Jobs
-run before the following source, at most sixteen per batch. There are no console,
+run before the following source, at most sixteen per batch. There are no
 filesystem, network or timer bindings. Unhandled Promise rejection tracking is
 not installed yet.
 

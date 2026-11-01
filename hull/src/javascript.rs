@@ -1,10 +1,13 @@
 //! One idle Tokio local task. Page arrival never authorizes execution.
 use std::{
+    cell::RefCell,
+    collections::VecDeque,
+    rc::Rc,
     sync::Arc,
     time::{Duration, Instant},
 };
 
-use hull_quickjs::Engine;
+use hull_quickjs::{ConsoleBatch, Engine};
 use serde_json::{Value, json};
 use trueos::tokio::{
     runtime,
@@ -41,6 +44,14 @@ pub(super) enum Report {
         kind: String,
         result: Result<(), String>,
     },
+    Console {
+        generation: u64,
+        batch: ConsoleBatch,
+    },
+    Pasted {
+        generation: u64,
+        result: Result<(), String>,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -68,6 +79,11 @@ struct InputPacket {
     kind: String,
     bytes: Vec<u8>,
 }
+struct PastedScript {
+    revision: u64,
+    generation: u64,
+    source: String,
+}
 
 #[derive(Clone)]
 struct Page {
@@ -76,6 +92,7 @@ struct Page {
     url: String,
     sources: Arc<[ScriptSource]>,
     requested: bool,
+    active: bool,
 }
 
 pub(super) struct Runtime {
@@ -86,6 +103,7 @@ pub(super) struct Runtime {
     ticks: watch::Sender<u64>,
     reports: mpsc::Receiver<Report>,
     input: mpsc::Sender<InputPacket>,
+    pasted: Rc<RefCell<VecDeque<PastedScript>>>,
     losses: watch::Sender<InputLoss>,
     sequence: u64,
     revision: u64,
@@ -102,8 +120,16 @@ impl Runtime {
         let (ticks, tick_rx) = watch::channel(0);
         let (reports_tx, reports) = mpsc::channel(128);
         let (input, input_rx) = mpsc::channel(INPUT_CAPACITY);
+        let pasted = Rc::new(RefCell::new(VecDeque::new()));
         let (losses, loss_rx) = watch::channel(InputLoss::default());
-        let task = local.spawn_local(worker(page_rx, tick_rx, reports_tx, input_rx, loss_rx));
+        let task = local.spawn_local(worker(
+            page_rx,
+            tick_rx,
+            reports_tx,
+            input_rx,
+            loss_rx,
+            pasted.clone(),
+        ));
         let mut service = Self {
             local,
             runtime,
@@ -112,6 +138,7 @@ impl Runtime {
             ticks,
             reports,
             input,
+            pasted,
             losses,
             sequence: 0,
             revision: 0,
@@ -129,12 +156,14 @@ impl Runtime {
         sources: Vec<ScriptSource>,
     ) {
         self.revision = self.revision.wrapping_add(1).max(1);
+        self.pasted.borrow_mut().clear();
         self.pages.send_replace(Some(Page {
             revision: self.revision,
             generation,
             url: url.into(),
             sources: sources.into(),
             requested: false,
+            active: false,
         }));
         // The local task shares this thread. It processes the reset before any
         // other evaluation and cannot race the caller's navigation state.
@@ -150,13 +179,37 @@ impl Runtime {
             return Err("scripts already requested for this page");
         }
         page.requested = true;
+        page.active = true;
+        self.pages.send_replace(Some(page));
+        Ok(())
+    }
+
+    /// Explicit console execution shares this page's VM without requesting its
+    /// collected scripts. Navigation discards queued pastes along with the VM.
+    pub fn execute_pasted(&mut self, source: String) -> Result<(), &'static str> {
+        if source.len() > 64 * 1024 {
+            return Err("script exceeds 64 KiB");
+        }
+        let Some(mut page) = self.pages.borrow().clone() else {
+            return Err("load a page before running a script");
+        };
+        let mut pasted = self.pasted.borrow_mut();
+        if pasted.len() >= 8 {
+            return Err("script queue is full");
+        }
+        pasted.push_back(PastedScript {
+            revision: page.revision,
+            generation: page.generation,
+            source,
+        });
+        page.active = true;
         self.pages.send_replace(Some(page));
         Ok(())
     }
 
     /// Input is data only; it never creates a VM or authorizes page scripts.
     pub fn enqueue_input(&mut self, generation: u64, mut event: Value) -> EnqueueResult {
-        let (revision, requested) = {
+        let (revision, active) = {
             let page = self.pages.borrow();
             let Some(page) = page.as_ref() else {
                 return EnqueueResult::Dormant;
@@ -164,9 +217,9 @@ impl Runtime {
             if page.generation != generation {
                 return EnqueueResult::Stale;
             }
-            (page.revision, page.requested)
+            (page.revision, page.active)
         };
-        if !requested {
+        if !active {
             return EnqueueResult::Dormant;
         }
         let Some(object) = event.as_object_mut() else {
@@ -255,6 +308,7 @@ async fn worker(
     reports: mpsc::Sender<Report>,
     mut inputs: mpsc::Receiver<InputPacket>,
     mut losses: watch::Receiver<InputLoss>,
+    pasted: Rc<RefCell<VecDeque<PastedScript>>>,
 ) {
     let _ = reports.try_send(Report::Online);
     let mut page: Option<Page> = None;
@@ -299,7 +353,7 @@ async fn worker(
             pending.dropped = pending.dropped.saturating_add(discarded);
             pending.sequence = loss.sequence;
         }
-        if !page.requested {
+        if !page.active {
             continue;
         }
         if !started {
@@ -307,11 +361,22 @@ async fn worker(
             match Engine::new() {
                 Ok(mut value) => {
                     let initialized = value
-                        .eval(
-                            include_bytes!("javascript_events.js"),
-                            "hull:input-bridge",
-                            false,
-                        )
+                        .install_console()
+                        .and_then(|_| value.install_clock())
+                        .and_then(|_| {
+                            value.eval(
+                                include_bytes!("javascript_helpers.js"),
+                                "hull:helpers",
+                                false,
+                            )
+                        })
+                        .and_then(|_| {
+                            value.eval(
+                                include_bytes!("javascript_events.js"),
+                                "hull:input-bridge",
+                                false,
+                            )
+                        })
                         .and_then(|_| value.bind_message_handler("__hullInputReceive"));
                     match initialized {
                         Ok(()) => engine = Some(value),
@@ -354,9 +419,36 @@ async fn worker(
                     }
                 }
             }
+            flush_console(engine, page.generation, &reports);
             continue;
         }
-        let Some(source) = page.sources.get(next) else {
+        let source = if page.requested {
+            page.sources.get(next)
+        } else {
+            None
+        };
+        let Some(source) = source else {
+            // Pasted work is explicit and runs one source per turn after any
+            // requested page scripts and their Promise checkpoints.
+            let mut selected = None;
+            for _ in 0..8 {
+                let Some(script) = pasted.borrow_mut().pop_front() else {
+                    break;
+                };
+                if script.revision == page.revision && script.generation == page.generation {
+                    selected = Some(script);
+                    break;
+                }
+            }
+            if let Some(script) = selected {
+                let result = engine.eval(script.source.as_bytes(), "hull:console-paste", false);
+                flush_console(engine, page.generation, &reports);
+                let _ = reports.try_send(Report::Pasted {
+                    generation: page.generation,
+                    result,
+                });
+                continue;
+            }
             // A bounded batch can keep up with native motion streams. Promise
             // jobs run between messages before another callback receives data.
             let until = Instant::now() + Duration::from_millis(25);
@@ -413,6 +505,7 @@ async fn worker(
                     break;
                 }
             }
+            flush_console(engine, page.generation, &reports);
             continue;
         };
         next += 1;
@@ -451,11 +544,19 @@ async fn worker(
             format!("{}#script-{node}", page.url)
         };
         let result = engine.eval(bytes, &origin, module);
+        flush_console(engine, page.generation, &reports);
         let _ = reports.try_send(Report::Evaluated {
             generation: page.generation,
             origin,
             node,
             result,
         });
+    }
+}
+
+fn flush_console(engine: &mut Engine, generation: u64, reports: &mpsc::Sender<Report>) {
+    let batch = engine.take_console();
+    if !batch.messages.is_empty() || batch.dropped != 0 {
+        let _ = reports.try_send(Report::Console { generation, batch });
     }
 }

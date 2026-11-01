@@ -26,6 +26,13 @@ ordering and Promise jobs, listener errors/once/removal, inactive input discard,
 navigation epoch isolation, oversized-input rejection, and queue overflow reset.
 No input fixture exposes or connects a DOM, layout, SVG, or renderer.
 
+Console fixtures cover explicit pasted execution without requesting collected
+scripts, shared page globals, Promise ordering, callback logs, navigation reset,
+paste queue/byte limits, console overflow and error recovery. Base64 fixtures
+check byte-string round trips, whitespace/padding, coercion and invalid input.
+Native engine integration tests additionally cover bounded UTF-8 console text,
+basic formatting/assertions, interrupted conversions and monotonic time reads.
+
 Input throughput regressions admit at most 32 messages per UI turn and verify a
 97-message FIFO burst spans at least four turns, with Promise jobs between
 callbacks. Separate fixtures cover two initialization-time queue overflows
