@@ -1,4 +1,4 @@
-//! Extract script sources for inspection. Never parse, evaluate or execute them.
+//! Extract inert script sources. Extraction never parses or executes JavaScript.
 use std::collections::HashMap;
 
 use rp5::{Document, Namespace, NodeId};
@@ -10,6 +10,7 @@ pub(super) struct Scripts {
     pub sources: Vec<ScriptSource>,
 }
 
+#[derive(Clone)]
 pub(super) struct ScriptSource {
     pub nodes: Vec<NodeId>,
     pub origin: String,
@@ -90,7 +91,7 @@ impl Scripts {
         logl::log(
             logl::level::INFO,
             format_args!(
-                "hull: scripts collected={} (inspection only; external sources are not fetched)",
+                "hull: scripts collected={} (dormant; explicit run required; external sources are not fetched)",
                 self.sources.len(),
             ),
         );

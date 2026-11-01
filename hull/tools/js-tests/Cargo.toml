@@ -1,0 +1,13 @@
+[package]
+name = "hull-js-tests"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+rp5 = { path = "../../rp5" }
+hull-quickjs = { path = "../../crates/quickjs-engine" }
+url = "2.5"
+tokio = { path = "../../../vendor/tokio-1.54.1", default-features = false, features = ["rt", "sync", "time"] }
+
+[workspace]

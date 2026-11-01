@@ -14,6 +14,7 @@ mod actual_bg_quad;
 mod border_geometry;
 mod css;
 mod images;
+mod javascript;
 mod layout;
 #[path = "../xxx/mod.rs"]
 mod pink_quad_dbg;
@@ -48,6 +49,7 @@ struct Hull {
     document: Option<rp5::Document>,
     css: css::Css,
     scripts: scripts::Scripts,
+    javascript: Option<javascript::Runtime>,
     layout_attempted: bool,
     generation: u64,
     layout_generation: Option<u64>,
@@ -121,6 +123,9 @@ impl Hull {
                     window.request_redraw();
                 }
                 self.page_url = url;
+                if let Some(javascript) = &mut self.javascript {
+                    javascript.replace_page(self.generation, self.page_url.clone(), Vec::new());
+                }
                 self.download = Some(operation);
                 vshell::linef(format_args!("hull: downloading {}", self.page_url));
             }
@@ -194,6 +199,13 @@ impl Hull {
                     );
                     self.css.parse_document(&document, &self.page_url);
                     self.scripts.extract(&document, &self.page_url);
+                    if let Some(javascript) = &mut self.javascript {
+                        javascript.replace_page(
+                            self.generation,
+                            self.page_url.clone(),
+                            self.scripts.sources.clone(),
+                        );
+                    }
                     self.document = Some(document);
                     self.html = Some(bytes);
                 }
@@ -218,6 +230,54 @@ impl Drop for Hull {
 
 impl ApplicationHandler for Hull {
     fn about_to_wait(&mut self, event_loop: &dyn ActiveEventLoop) {
+        if let Some(javascript) = &mut self.javascript {
+            for report in javascript.poll() {
+                match report {
+                    javascript::Report::Online => logl::log(
+                        logl::level::INFO,
+                        format_args!("hull: QuickJS task online; page execution is explicit"),
+                    ),
+                    javascript::Report::Page {
+                        generation,
+                        sources,
+                    } => logl::log(
+                        logl::level::INFO,
+                        format_args!("hull: QuickJS page={generation} stored={sources} dormant"),
+                    ),
+                    javascript::Report::Evaluated {
+                        generation,
+                        origin,
+                        node,
+                        result,
+                    } => match result {
+                        Ok(()) => logl::log(
+                            logl::level::INFO,
+                            format_args!(
+                                "hull: QuickJS page={generation} node={node} evaluated={origin}"
+                            ),
+                        ),
+                        Err(error) => logl::log(
+                            logl::level::ERROR,
+                            format_args!(
+                                "hull: QuickJS page={generation} node={node} {origin}: {error}"
+                            ),
+                        ),
+                    },
+                    javascript::Report::Skipped {
+                        generation,
+                        origin,
+                        reason,
+                    } => logl::log(
+                        logl::level::INFO,
+                        format_args!("hull: QuickJS page={generation} {origin}: {reason}"),
+                    ),
+                    javascript::Report::JobError { generation, error } => logl::log(
+                        logl::level::ERROR,
+                        format_args!("hull: QuickJS page={generation} job: {error}"),
+                    ),
+                }
+            }
+        }
         self.poll_shell_input();
         self.poll_download();
         self.css.poll_downloads();
@@ -571,7 +631,19 @@ impl ApplicationHandler for Hull {
 }
 
 fn main() {
-    let result = EventLoop::new().and_then(|event_loop| event_loop.run_app(Hull::default()));
+    let javascript = match javascript::Runtime::start() {
+        Ok(runtime) => runtime,
+        Err(error) => {
+            logl::log(
+                logl::level::ERROR,
+                format_args!("hull: QuickJS task initialization: {error}"),
+            );
+            return;
+        }
+    };
+    let mut app = Hull::default();
+    app.javascript = Some(javascript);
+    let result = EventLoop::new().and_then(|event_loop| event_loop.run_app(app));
     if let Err(error) = result {
         logl::log(logl::level::ERROR, format_args!("hull: {error}"));
     }

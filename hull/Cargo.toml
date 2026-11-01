@@ -10,7 +10,8 @@ test = false
 bench = false
 
 [dependencies]
-trueos = { path = "../../api", features = ["ui4-scene"] }
+hull-quickjs = { path = "crates/quickjs-engine" }
+trueos = { path = "../../api", features = ["ui4-scene", "tokio-runtime"] }
 rp5 = { path = "rp5" }
 lightningcss = { version = "=1.0.0-alpha.72", default-features = false, features = ["into_owned"] }
 static-self = "0.1.2"
@@ -32,3 +33,4 @@ strip = "symbols"           # See split-debuginfo - allows us to drop the size b
 incremental = true          # Improves re-compile times
 
 [workspace]
+exclude = ["crates/quickjs-engine", "tools/js-tests", "tools/layout-tests"]
