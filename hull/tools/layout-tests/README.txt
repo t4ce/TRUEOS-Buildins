@@ -68,3 +68,14 @@ Custom properties and canvas:
   propagates the body background instead. Its alpha composites over white once;
   the propagated element does not paint a duplicate background over itself.
 - Live actualBgQuad painting and the SVG canvas use the same resolved color.
+
+Default link navigation:
+- A normal Hull launch is idle at its URL prompt. There is no initial fetch.
+- vFile:launch may contain one `open <HTTPS URL>` directive. The existing URL
+  queue starts it after window creation; manual URL entry still navigates here.
+- Left-button press/release on the same painted anchor opens a fresh Hull using
+  launch_with_destination("hull", script, NewShell3), including same-domain links.
+  Relative hrefs use the first base[href] and document URL. Image and nested-text
+  anchors have document-space hit boxes, clipped and scrolled like their paint.
+- Chrome, hidden content, unsupported schemes, drags and canceled pointers do
+  not launch. Fragments retain the current URL input policy (no anchor scrolling).

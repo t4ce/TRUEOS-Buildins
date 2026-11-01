@@ -32,6 +32,7 @@ pub(super) struct Export {
     pub text_runs: Vec<TextRun>,
     /// Frozen content boxes. Image completion changes paint only.
     pub image_boxes: Vec<ImageBox>,
+    pub link_boxes: Vec<LinkBox>,
 }
 
 /// One uniform native line loop per diagnostic element bounding box.
@@ -54,6 +55,13 @@ struct Radius {
 pub(super) struct BackgroundQuad {
     pub rect: [f32; 4],
     pub color: [u8; 4],
+}
+
+/// A clickable fragment, in the same document coordinates as its paint.
+#[derive(Clone, Copy, Debug)]
+pub(super) struct LinkBox {
+    pub node: HtmlId,
+    pub rect: [f32; 4],
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -97,6 +105,7 @@ pub(super) fn compute(
     let mut inline = vec![false; document.nodes.len()];
     let mut contents = vec![false; document.nodes.len()];
     let mut hidden = vec![false; document.nodes.len()];
+    let mut link_owners = vec![None; document.nodes.len()];
     let mut styles = vec![Style::default(); document.nodes.len()];
     let mut text_metrics = vec![TextMetrics::default(); document.nodes.len()];
     let mut variables = vec![Variables::default(); document.nodes.len()];
@@ -104,6 +113,12 @@ pub(super) fn compute(
     let mut pending = vec![document.root];
     while let Some(id) = pending.pop() {
         let node = &document.nodes[id];
+        link_owners[id] = if document.name(id) == "a" && super::links::href(document, id).is_some()
+        {
+            Some(id)
+        } else {
+            node.parent.and_then(|parent| link_owners[parent])
+        };
         let inherited = node
             .parent
             .map(|parent| text_metrics[parent])
@@ -348,6 +363,7 @@ pub(super) fn compute(
     let mut text_svg = String::new();
     let mut text_runs = Vec::new();
     let mut image_boxes = Vec::new();
+    let mut link_boxes = Vec::new();
     let mut pending = vec![(root, 0.0f32, 0.0f32)];
     while let Some((tid, parent_x, parent_y)) = pending.pop() {
         let box_layout = tree.layout(tid)?;
@@ -361,6 +377,16 @@ pub(super) fn compute(
                     width: project_extent(box_layout.size.width),
                     height: project_extent(box_layout.size.height),
                 });
+                if text_metrics[id].paints()
+                    && (link_owners[id] == Some(id) || document.name(id) == "img")
+                {
+                    if let Some(node) = link_owners[id] {
+                        link_boxes.push(LinkBox {
+                            node,
+                            rect: [left, top, box_layout.size.width, box_layout.size.height],
+                        });
+                    }
+                }
                 if document.name(id) == "img" && text_metrics[id].paints() {
                     let horizontal = box_layout.border.left + box_layout.padding.left;
                     let vertical = box_layout.border.top + box_layout.padding.top;
@@ -404,6 +430,17 @@ pub(super) fn compute(
                             + (line_height - context.metrics.font_size) / 2.0
                             + context.metrics.font_size * 0.8;
                         let length = estimate_text_width(line, context.metrics.font_size);
+                        if let Some(node) = link_owners[id] {
+                            link_boxes.push(LinkBox {
+                                node,
+                                rect: [
+                                    left,
+                                    top + line_index as f32 * line_height,
+                                    length,
+                                    line_height,
+                                ],
+                            });
+                        }
                         let [r, g, b, a] = context.metrics.color;
                         let _ = write!(
                             text_svg,
@@ -560,6 +597,7 @@ pub(super) fn compute(
         line_extent: (viewport.0, extent.ceil() as u32),
         text_runs,
         image_boxes,
+        link_boxes,
     })
 }
 

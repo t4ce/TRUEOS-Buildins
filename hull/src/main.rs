@@ -4,7 +4,7 @@ use trueos::ui4_winit::{Damage, Error, HullTextRun, SceneTarget};
 use trueos::{logl, netfs, vshell};
 use winit::application::ApplicationHandler;
 use winit::dpi::{PhysicalPosition, PhysicalSize};
-use winit::event::{ElementState, MouseScrollDelta, WindowEvent};
+use winit::event::{ButtonSource, ElementState, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{Key, NamedKey};
 use winit::platform::trueos::{ActiveEventLoopExtTrueOS, WindowExtTrueOS};
@@ -19,14 +19,13 @@ mod images;
 mod javascript;
 mod javascript_input;
 mod layout;
+mod links;
 #[path = "../xxx/mod.rs"]
 mod pink_quad_dbg;
 mod scripts;
 mod shellio;
 mod snapshot;
 mod viewport;
-
-const PAGE_URL: &str = "https://example.com/";
 
 #[derive(Default)]
 struct Hull {
@@ -45,6 +44,7 @@ struct Hull {
     frame_counter: shellio::FrameCounter,
     quads: Option<pink_quad_dbg::Quads>,
     text_runs: Vec<layout::TextRun>,
+    links: links::Links,
     rectangles: Vec<pink_quad_dbg::Rect>,
     layout_extent: (u32, u32),
     viewport: viewport::Viewport,
@@ -97,25 +97,17 @@ impl Hull {
         vshell::line(
             "hull: scroll with wheel, arrows or Page Up/Down; Home/End; Shift+wheel pans sideways; F2 toggles actualBgQuad / pinkQuadDbg",
         );
-        self.start_page_with_policy(PAGE_URL.into(), false);
         Ok(())
     }
 
     fn start_page(&mut self, url: String) {
-        self.start_page_with_policy(url, true);
-    }
-
-    fn start_page_with_policy(&mut self, url: String, happy_eyeballs: bool) {
-        let download = if happy_eyeballs {
-            netfs::fetch_bytes_happy_eyeballs(url.as_bytes())
-        } else {
-            netfs::fetch_bytes(url.as_bytes())
-        };
+        let download = netfs::fetch_bytes_happy_eyeballs(url.as_bytes());
         match download {
             Ok(operation) => {
                 if let Some(window) = &self.window {
                     javascript_input::discard(window.as_ref());
                 }
+                self.links = links::Links::default();
                 self.html = None;
                 self.document = None;
                 self.css = css::Css::default();
@@ -364,6 +356,11 @@ impl ApplicationHandler for Hull {
                 self.snapshot.prepare(&self.page_url, layout.svg);
                 self.layout_generation = Some(self.generation);
                 self.layout_extent = layout.line_extent;
+                self.links = links::Links::new(
+                    self.document.as_ref().unwrap(),
+                    layout.link_boxes,
+                    &self.page_url,
+                );
                 self.text_runs = layout.text_runs;
                 self.rectangles = layout.line_rects;
                 self.background_quads = layout.background_quads;
@@ -399,7 +396,7 @@ impl ApplicationHandler for Hull {
                 );
             }
         }
-        if !self.page_pending() {
+        if self.window.is_some() && !self.page_pending() {
             if let Some(url) = self.queued_urls.pop_front() {
                 self.start_page(url);
             }
@@ -444,6 +441,7 @@ impl ApplicationHandler for Hull {
                     return Ok(());
                 }
                 self.pending_publish = false;
+                self.links.cancel();
                 self.quads_dirty = true;
                 self.redraw_reason = "resize";
                 self.viewport
@@ -452,6 +450,58 @@ impl ApplicationHandler for Hull {
                 window.request_redraw();
                 target.set_extent(size.width, size.height)
             })(),
+            WindowEvent::PointerMoved {
+                device_id,
+                position,
+                ..
+            } => {
+                self.links.moved(
+                    device_id.map(|device| device.into_raw() as u64),
+                    position.x,
+                    position.y,
+                );
+                Ok(())
+            }
+            WindowEvent::PointerButton {
+                device_id,
+                state,
+                position,
+                button: ButtonSource::Mouse(MouseButton::Left),
+                ..
+            } => {
+                if self.published_generation == Some(self.generation) {
+                    if let Some(url) = self.links.button(
+                        device_id.map(|device| device.into_raw() as u64),
+                        state == ElementState::Pressed,
+                        position.x,
+                        position.y,
+                        &self.viewport,
+                    ) {
+                        match links::launch_script(&url)
+                            .map_err(str::to_owned)
+                            .and_then(|script| {
+                                vshell::launch_with_destination(
+                                    "hull",
+                                    &script,
+                                    vshell::LaunchDestination::NewShell3,
+                                )
+                                .map_err(|code| format!("could not launch a new Hull: {code}"))
+                            }) {
+                            Ok(()) => {
+                                vshell::linef(format_args!("hull: opening {url} in a new Hull"));
+                            }
+                            Err(error) => {
+                                vshell::linef(format_args!("hull: {error}"));
+                            }
+                        }
+                    }
+                }
+                Ok(())
+            }
+            WindowEvent::Focused(false) | WindowEvent::PointerLeft { .. } => {
+                self.links.cancel();
+                Ok(())
+            }
             WindowEvent::ModifiersChanged(modifiers) => {
                 self.shift_scroll = modifiers.state().shift_key();
                 Ok(())
@@ -469,6 +519,7 @@ impl ApplicationHandler for Hull {
                     dy = 0.0;
                 }
                 if self.viewport.scroll_by(dx, dy) {
+                    self.links.cancel();
                     self.quads_dirty = true;
                     self.redraw_reason = "scroll";
                     window.request_redraw();
@@ -496,6 +547,7 @@ impl ApplicationHandler for Hull {
                     _ => false,
                 };
                 if changed {
+                    self.links.cancel();
                     self.quads_dirty = true;
                     self.redraw_reason = if matches!(event.logical_key, Key::Named(NamedKey::F2)) {
                         "quad-pass"
@@ -755,6 +807,18 @@ fn main() {
     };
     let mut app = Hull::default();
     app.javascript = Some(javascript);
+    if let Ok(bytes) = trueos::async_fs::block_on(trueos::async_fs::read_file(b"vFile:launch")) {
+        let startup = std::str::from_utf8(&bytes)
+            .map_err(|_| "startup script must be UTF-8")
+            .and_then(links::startup_url);
+        match startup {
+            Ok(Some(url)) => app.queued_urls.push_back(url),
+            Ok(None) => {}
+            Err(error) => {
+                vshell::linef(format_args!("hull: {error}"));
+            }
+        }
+    }
     let result = EventLoop::new().and_then(|event_loop| event_loop.run_app(app));
     if let Err(error) = result {
         logl::log(logl::level::ERROR, format_args!("hull: {error}"));

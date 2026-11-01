@@ -90,6 +90,9 @@ impl ShellInput {
 
 pub(super) fn page_url(line: &str) -> Result<String, &'static str> {
     let line = line.trim();
+    if line.len() > 4096 {
+        return Err("URL is too long");
+    }
     if line.chars().any(char::is_whitespace) {
         return Err("enter one HTTPS URL per line");
     }

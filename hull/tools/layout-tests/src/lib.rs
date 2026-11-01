@@ -76,8 +76,15 @@ mod chrome;
 mod css;
 #[path = "../../../src/favicon.rs"]
 mod favicon;
+pub mod vshell {
+    pub fn linef(_: std::fmt::Arguments<'_>) {}
+}
 #[path = "../../../src/layout.rs"]
 mod layout;
+#[path = "../../../src/links.rs"]
+mod links;
+#[path = "../../../src/shellio.rs"]
+mod shellio;
 #[path = "../../../src/viewport.rs"]
 mod viewport;
 #[cfg(test)]
@@ -334,6 +341,34 @@ mod tests {
         css.push_str("} body {background:var(--a16,#161616)}");
         let (_, output) = export("<body></body>", &css);
         assert_eq!(output.canvas_color, [22, 22, 22, 255]);
+    }
+
+    #[test]
+    fn link_fragments_cover_nested_text_and_images_but_not_hidden_content() {
+        let (document, output) = export(
+            "<a href='/next'><span>nested link</span><img width='30' height='20'></a><a href='/hidden' style='display:none'>hidden</a><a>unlinked</a>",
+            "",
+        );
+        let anchor = (0..document.nodes.len())
+            .find(|&id| document.name(id) == "a")
+            .unwrap();
+        assert!(!output.link_boxes.is_empty());
+        assert!(output.link_boxes.iter().all(|hit| hit.node == anchor));
+        for run in &output.text_runs {
+            if run.text == "nested" || run.text == "link" {
+                assert!(
+                    output
+                        .link_boxes
+                        .iter()
+                        .any(|hit| hit.rect[0] == run.x && hit.rect[2] == run.advance_px)
+                );
+            }
+        }
+        let image = output.image_boxes[0].rect;
+        assert!(output.link_boxes.iter().any(|hit| hit.rect[0] <= image[0]
+            && hit.rect[1] <= image[1]
+            && hit.rect[0] + hit.rect[2] >= image[0] + image[2]
+            && hit.rect[1] + hit.rect[3] >= image[1] + image[3]));
     }
 
     fn node<'a>(
