@@ -79,6 +79,8 @@ mod favicon;
 pub mod vshell {
     pub fn linef(_: std::fmt::Arguments<'_>) {}
 }
+#[path = "../../../src/buttons.rs"]
+mod buttons;
 #[path = "../../../src/layout.rs"]
 mod layout;
 #[path = "../../../src/links.rs"]
@@ -91,6 +93,28 @@ mod viewport;
 mod tests {
     use super::*;
     use static_self::IntoOwned;
+    #[test]
+    fn button_feedback_collects_only_visible_enabled_controls_and_keeps_css_color() {
+        let (_, painted) = export(
+            "<button>yes</button><button disabled>no</button><button hidden>hidden</button><button style='display:none'>none</button><input type=submit><input type=text>",
+            "button {border-color:rgb(20,40,60)}",
+        );
+        assert_eq!(painted.button_boxes.len(), 2);
+        assert_eq!(painted.button_boxes[0].border_color, [20, 40, 60, 255]);
+        assert!(
+            painted
+                .border_quads
+                .iter()
+                .any(|border| border.color == [20, 40, 60, 255])
+        );
+        assert!(
+            painted
+                .background_quads
+                .iter()
+                .any(|quad| quad.color == [255; 4])
+        );
+    }
+
     fn run(html: &str, css_text: &str) -> (rp5::Document, serde_json::Value) {
         let (doc, output) = export(html, css_text);
         (doc, serde_json::from_str(&output.json).unwrap())
@@ -1071,6 +1095,19 @@ pub mod ui4_scene {
     }
 }
 pub mod ui4_winit {
+    #[derive(Clone, Copy, Debug, Default)]
+    pub struct ButtonRegion {
+        pub x: i32,
+        pub y: i32,
+        pub width: u32,
+        pub height: u32,
+        pub clip_x: i32,
+        pub clip_y: i32,
+        pub clip_width: u32,
+        pub clip_height: u32,
+        pub border_rgba: u32,
+    }
+
     #[derive(Clone, Copy, Debug)]
     pub struct HullTextRun<'a> {
         pub text: &'a str,

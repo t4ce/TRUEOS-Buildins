@@ -15,6 +15,7 @@ use winit::window::{Window, WindowAttributes, WindowId};
 
 mod actual_bg_quad;
 mod border_geometry;
+mod buttons;
 mod chrome;
 mod console;
 mod css;
@@ -42,6 +43,7 @@ struct Hull {
     background_quads: Vec<layout::BackgroundQuad>,
     canvas_color: [u8; 4],
     border_quads: Vec<layout::BorderQuad>,
+    button_boxes: Vec<layout::ButtonBox>,
     borders: Option<pink_quad_dbg::BorderPass>,
     chrome_quads: Option<(pink_quad_dbg::Quads, (u32, u32))>,
     redraw_reason: &'static str,
@@ -268,6 +270,10 @@ impl Hull {
                     javascript_input::discard(window.as_ref());
                 }
                 self.links = links::Links::default();
+                self.button_boxes.clear();
+                if let Some(target) = &mut self.target {
+                    let _ = target.set_button_regions(&[]);
+                }
                 self.html = None;
                 self.document = None;
                 self.css = css::Css::default();
@@ -647,6 +653,7 @@ impl ApplicationHandler for Hull {
                 self.background_quads = layout.background_quads;
                 self.canvas_color = layout.canvas_color;
                 self.border_quads = layout.border_quads;
+                self.button_boxes = layout.button_boxes;
                 // CSS overflow can extend beyond the SVG's declared viewBox.
                 // Keep that overflow reachable without allocating a page-sized frame.
                 let mut right = self.layout_extent.0 as f32;
@@ -1053,6 +1060,15 @@ impl ApplicationHandler for Hull {
                         return Err(Error::Busy);
                     }
                     result => result?,
+                }
+                // Update hit regions only with the published geometry, never
+                // on cursor movement. A partial scroll clip retains real edges.
+                let regions = buttons::regions(&self.button_boxes, &self.viewport);
+                if let Err(error) = target.set_button_regions(&regions) {
+                    logl::log(
+                        logl::level::ERROR,
+                        format_args!("hull: button outlines: {error:?}"),
+                    );
                 }
                 self.frame_counter.published();
                 self.pending_publish = false;

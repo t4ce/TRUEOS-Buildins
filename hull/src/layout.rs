@@ -28,6 +28,7 @@ pub(super) struct Export {
     pub background_quads: Vec<BackgroundQuad>,
     pub canvas_color: [u8; 4],
     pub border_quads: Vec<BorderQuad>,
+    pub button_boxes: Vec<ButtonBox>,
     pub line_extent: (u32, u32),
     pub text_runs: Vec<TextRun>,
     /// Frozen content boxes. Image completion changes paint only.
@@ -48,6 +49,13 @@ pub(super) struct BorderQuad {
 struct Radius {
     pixels: f32,
     fraction: f32,
+}
+
+/// Stable document-space button bounds for native cursor feedback.
+#[derive(Clone, Copy, Debug)]
+pub(super) struct ButtonBox {
+    pub rect: [f32; 4],
+    pub border_color: [u8; 4],
 }
 
 /// Solid CSS background, in document coordinates and DOM paint order.
@@ -146,6 +154,25 @@ pub(super) fn compute(
         };
         match &node.kind {
             NodeKind::Element { name, attrs, .. } => {
+                // Native button baseline; authored CSS below still wins.
+                if name == "button"
+                    || (name == "input"
+                        && attrs.iter().any(|a| {
+                            a.name == "type"
+                                && ["button", "submit", "reset"]
+                                    .iter()
+                                    .any(|kind| a.value.eq_ignore_ascii_case(kind))
+                        }))
+                {
+                    let width = LengthPercentage::from_length(3.0);
+                    style.border = Rect {
+                        top: width,
+                        right: width,
+                        bottom: width,
+                        left: width,
+                    };
+                    metrics.background = [255; 4];
+                }
                 // Minimal link default; authored CSS still wins below.
                 if name == "a" && attrs.iter().any(|attr| attr.name == "href") {
                     metrics.color = [0, 0, 255, 255];
@@ -490,6 +517,7 @@ pub(super) fn compute(
     let canvas_color = [r, g, b, 255];
     let mut background_quads = Vec::new();
     let mut border_quads = Vec::new();
+    let mut button_boxes = Vec::new();
     let mut pending = vec![document.root];
     while let Some(id) = pending.pop() {
         if matches!(
@@ -508,6 +536,25 @@ pub(super) fn compute(
             {
                 if let Some(rect) = rect {
                     rectangles.push((id, rect.left, rect.top, rect.width, rect.height));
+                    if !hidden[id]
+                        && !contents[id]
+                        && document.element(id).is_some_and(|(tag, _, attrs)| {
+                            !attrs.iter().any(|a| a.name == "disabled")
+                                && (tag == "button"
+                                    || (tag == "input"
+                                        && attrs.iter().any(|a| {
+                                            a.name == "type"
+                                                && ["button", "submit", "reset"]
+                                                    .iter()
+                                                    .any(|kind| a.value.eq_ignore_ascii_case(kind))
+                                        })))
+                        })
+                    {
+                        button_boxes.push(ButtonBox {
+                            rect: [rect.left, rect.top, rect.width, rect.height],
+                            border_color: text_metrics[id].border_color,
+                        });
+                    }
                     let border = styles[id].border;
                     if [border.top, border.right, border.bottom, border.left]
                         .iter()
@@ -594,6 +641,7 @@ pub(super) fn compute(
         background_quads,
         canvas_color,
         border_quads,
+        button_boxes,
         line_extent: (viewport.0, extent.ceil() as u32),
         text_runs,
         image_boxes,

@@ -79,3 +79,22 @@ Default link navigation:
   anchors have document-space hit boxes, clipped and scrolled like their paint.
 - Chrome, hidden content, unsupported schemes, drags and canceled pointers do
   not launch. Fragments retain the current URL input policy (no anchor scrolling).
+
+Button feedback:
+- Enabled, painted button and input[type=button|submit|reset] boxes expose up to
+  256 visible rectangular regions to UI4 after frame publication. The base
+  button defaults to a white fill and 3px black border; authored CSS overrides
+  those defaults. Disabled/hidden controls expose no feedback region.
+- UI4 derives one live hovered region per routed cursor. Hover uses 8px dashes
+  and 8px gaps, advancing one perimeter pixel at 15Hz; press uses a continuous
+  3px outline. Black/white is selected for luminance contrast with the resolved
+  border color, at alpha 128. Shared-button presses win, without stacking alpha.
+- The effect belongs to slot 4. It changes no page pixels, text, layout or
+  JavaScript state. Viewport clips retain original edges; higher window bounds
+  subtract covered segments. These are rectangular outlines, with conservative
+  clipping for higher translucent/rounded windows; arbitrary page-internal
+  occlusion and CSS hover/active paint changes are outside this baseline.
+- Navigation clears regions, and window/session/owner teardown releases them.
+  The dash timer sleeps when there is no hovered effect; a pressed-only effect
+  has no animation wakeups. Kernel host checks live in
+  TRUEOS/tools/testpy/test_ui4_button_outline.py and test_mouse_visual_cursors.py.

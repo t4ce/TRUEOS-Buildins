@@ -7,6 +7,7 @@
 
 use crate::ui4_solara_text::Frame;
 pub use crate::ui4_solara_text::{Damage, Error, SpriteCorner, SpriteQuad};
+pub use v::bp_abi::TrueosUi4ButtonRegionV1 as ButtonRegion;
 
 /// A simple Hull microfont run in physical foreground pixels. All fonts use
 /// microfont; missing glyphs become red question marks. The service snaps size
@@ -96,6 +97,28 @@ impl SceneTarget {
         let target =
             unsafe { v::bp_abi::trueos_cabi_ui4_scene_frame_layer_v1(self.surface.window_id, 1) };
         Self::for_window(target, self.surface.width, self.surface.height)
+    }
+    /// Replace native button-feedback hit regions without changing page pixels.
+    /// UI4 owns cursor state, 15 Hz dash motion and higher-window clipping.
+    pub fn set_button_regions(
+        &mut self,
+        regions: &[v::bp_abi::TrueosUi4ButtonRegionV1],
+    ) -> Result<(), Error> {
+        if regions.len() > 256 {
+            return Err(Error::Invalid);
+        }
+        let rc = unsafe {
+            v::bp_abi::trueos_cabi_ui4_scene_button_regions_v1(
+                self.surface.window_id,
+                regions.as_ptr(),
+                regions.len(),
+            )
+        };
+        match rc {
+            0 => Ok(()),
+            -7 => Err(Error::Busy),
+            _ => Err(Error::InvalidState),
+        }
     }
     pub fn draw_sprite_commands(&mut self, commands: &[SpriteCommand]) -> Result<(), Error> {
         self.surface.draw_sprite_commands(commands)
