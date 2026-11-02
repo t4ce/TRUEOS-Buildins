@@ -60,11 +60,27 @@ walks have their own finite resource limits. This is not an OS sandbox or a hard
   navigation, `ownerDocument`, and `isConnected`.
 - Static `NodeList` results with indexed access, `item`, iteration and `forEach`.
 
+When Hull attaches its native window producer, `window` and `self` expose the
+existing page global, with the same `document`, console and script globals.
+`innerWidth` and `innerHeight` read the live `Viewport::extent()` also passed to
+layout. Creation and `SurfaceResized` update that state after subtracting Hull's
+chrome: the initial 1280x752 native frame yields 1280x720 content, and a 640x400
+resize yields 640x368 content. No guest callback executes during a native update.
+`window` keeps its identity; `self` and the inner dimensions have standard
+replaceable property behavior if page code assigns them.
+
+This does not add a general Window implementation, DOM window events, child
+browsing contexts or navigation. DPI, outer/screen geometry and focus bindings
+remain absent. In particular the current Winit backend's `scale_factor()` is a
+constant 1 and `has_focus()` is a false placeholder, so neither is reexported as
+measured browser state. DOM-only fixtures without a native producer do not gain
+window globals or fabricated dimensions.
+
 Selectors use the CSS parser and shared matcher, supporting common type, ID,
 class, attribute, combinator, structural and `:scope`/`:is`/`:where`/`:not`
 queries. Malformed selectors raise `SyntaxError`; unsupported valid features
 raise `NotSupportedError`. Bounds raise `QuotaExceededError`. There is no
-`window`, form-control value model, `innerHTML`, computed layout, tree insertion
+form-control value model, `innerHTML`, computed layout, tree insertion
 API, DOM event system or observer API. SVG `className` is explicitly unsupported
 instead of approximating `SVGAnimatedString`. Unpaired UTF-16 surrogates are
 rejected because rp5 stores Unicode scalar strings.
@@ -195,3 +211,9 @@ Host fixtures in `tools/js-tests` compile the production actor and Winit adapter
 The engine crate has separate native tests; `tools/layout-tests` checks the static
 rendering path. Built-in packaging uses `../tools/build.py --app hull` and does
 not launch Hull.
+
+`tools/sandbox/sandbox.py` captures HTML/CSS once and replays this same production
+actor/DOM/layout code on the host, without a kernel build, boot, VM or GPU. It
+exports exact script bytes, per-source traces and optional diagnostic SVG; node
+isolation, local replacements and watch mode support iterative investigation.
+See `tools/sandbox/README.txt` for commands and explicit experiment flags.

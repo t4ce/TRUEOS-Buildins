@@ -1,21 +1,48 @@
 //! A synchronous, bounded gateway to rp5. JavaScript owns lazy node wrappers;
 //! the document arena stays in Rust and preserves handles after detachment.
-use std::{cell::RefCell, rc::Rc};
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc,
+};
 
 use hull_quickjs::Engine;
 use rp5::{Attribute, Document, Namespace, NodeKind};
 use serde_json::{Value, json};
 
 pub(super) type SharedDocument = Rc<RefCell<Document>>;
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct WindowMetrics {
+    pub inner_width: u32,
+    pub inner_height: u32,
+}
+pub(super) type SharedWindowMetrics = Rc<Cell<WindowMetrics>>;
 const MAX_STRING_BYTES: usize = 256 * 1024;
 const MAX_ADDED_NODES: usize = 4096;
 const MAX_MUTATION_BYTES: usize = 4 * 1024 * 1024;
 const MAX_QUERY_RESULTS: usize = 32 * 1024;
 
 pub(super) fn install(engine: &mut Engine, document: SharedDocument) -> Result<(), String> {
+    install_gateway(engine, document, None)
+}
+
+/// Window metrics come from Hull's content viewport, not native frame guesses.
+pub(super) fn install_with_window(
+    engine: &mut Engine,
+    document: SharedDocument,
+    window: SharedWindowMetrics,
+) -> Result<(), String> {
+    install_gateway(engine, document, Some(window))
+}
+
+fn install_gateway(
+    engine: &mut Engine,
+    document: SharedDocument,
+    window: Option<SharedWindowMetrics>,
+) -> Result<(), String> {
     let initial_nodes = document.borrow().nodes.len();
     let mut gateway = Gateway {
         document,
+        window,
         initial_nodes,
         mutation_bytes: 0,
     };
@@ -43,6 +70,7 @@ fn input<'a>(request: &'a [Value], index: usize) -> DomResult<&'a str> {
 
 struct Gateway {
     document: SharedDocument,
+    window: Option<SharedWindowMetrics>,
     initial_nodes: usize,
     mutation_bytes: usize,
 }
@@ -75,6 +103,12 @@ impl Gateway {
         let operation = input(args, 0)?;
         if operation == "root" {
             return Ok(json!(self.document.borrow().root));
+        }
+        if operation == "window" {
+            return Ok(self.window.as_ref().map_or(Value::Null, |window| {
+                let metrics = window.get();
+                json!({"innerWidth": metrics.inner_width, "innerHeight": metrics.inner_height})
+            }));
         }
         let id = args
             .get(1)

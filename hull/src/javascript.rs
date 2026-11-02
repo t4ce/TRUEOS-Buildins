@@ -15,7 +15,7 @@ use trueos::tokio::{
     task::{self, JoinHandle, LocalSet},
 };
 
-use crate::javascript_dom::{self, SharedDocument};
+use crate::javascript_dom::{self, SharedDocument, SharedWindowMetrics, WindowMetrics};
 use crate::scripts::ScriptSource;
 
 const PAGE_EXECUTION_BUDGET: Duration = Duration::from_millis(250);
@@ -106,6 +106,7 @@ struct Page {
     requested: bool,
     active: bool,
     document: Option<SharedDocument>,
+    window: Option<SharedWindowMetrics>,
     initial_started: Option<Instant>,
 }
 
@@ -131,6 +132,7 @@ pub(super) struct Runtime {
     tick: u64,
     initial: Rc<RefCell<InitialRender>>,
     exhausted: Rc<Cell<bool>>,
+    window: Option<SharedWindowMetrics>,
 }
 
 impl Runtime {
@@ -172,6 +174,7 @@ impl Runtime {
             tick: 0,
             initial,
             exhausted,
+            window: None,
         };
         service.drive();
         Ok(service)
@@ -228,11 +231,26 @@ impl Runtime {
             requested: automatic,
             active: automatic,
             document,
+            window: if automatic { self.window.clone() } else { None },
             initial_started: automatic.then(Instant::now),
         }));
         // The local task shares this thread. It processes the reset before any
         // other evaluation and cannot race the caller's navigation state.
         self.drive();
+    }
+
+    /// Called after native creation/resize has updated the very same content
+    /// viewport used by layout. State reads do not execute guest callbacks.
+    pub fn update_viewport(&mut self, inner_width: u32, inner_height: u32) {
+        let metrics = WindowMetrics {
+            inner_width,
+            inner_height,
+        };
+        if let Some(window) = &self.window {
+            window.set(metrics);
+        } else {
+            self.window = Some(Rc::new(Cell::new(metrics)));
+        }
     }
 
     pub fn is_initializing(&self, generation: u64) -> bool {
@@ -470,7 +488,15 @@ async fn worker(
                         .and_then(|_| value.bind_message_handler("__hullInputReceive"));
                     let initialized = initialized.and_then(|_| {
                         if let Some(document) = &page.document {
-                            javascript_dom::install(&mut value, document.clone())
+                            if let Some(window) = &page.window {
+                                javascript_dom::install_with_window(
+                                    &mut value,
+                                    document.clone(),
+                                    window.clone(),
+                                )
+                            } else {
+                                javascript_dom::install(&mut value, document.clone())
+                            }
                         } else {
                             Ok(())
                         }

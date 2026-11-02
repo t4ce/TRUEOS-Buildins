@@ -203,6 +203,10 @@ impl Hull {
         );
         self.viewport
             .resize_with_origin(size.width, size.height, 0, chrome::HEIGHT);
+        if let Some(javascript) = &mut self.javascript {
+            let (width, height) = self.viewport.extent();
+            javascript.update_viewport(width, height);
+        }
         self.quads_dirty = true;
         self.redraw_reason = "initial";
         window.request_redraw();
@@ -717,6 +721,10 @@ impl ApplicationHandler for Hull {
                 self.redraw_reason = "resize";
                 self.viewport
                     .resize_with_origin(size.width, size.height, 0, chrome::HEIGHT);
+                if let Some(javascript) = &mut self.javascript {
+                    let (width, height) = self.viewport.extent();
+                    javascript.update_viewport(width, height);
+                }
                 self.frame_counter.resizing();
                 if let Some(window) = &self.window {
                     window.request_redraw();

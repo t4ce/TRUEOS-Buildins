@@ -1,0 +1,33 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly
+
+    # Group all dependabot version update PRs into one
+    groups:
+      github-actions:
+        applies-to: version-updates
+        patterns:
+          - "*"
+      github-actions-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
+
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: monthly
+
+    # Disable dependabot version updates for npm dependencies. Security update
+    # PRs are not subject to this limit and remain enabled.
+    open-pull-requests-limit: 0
+
+    # Group all dependabot security update PRs into one
+    groups:
+      npm-security:
+        applies-to: security-updates
+        patterns:
+          - "*"

@@ -63,6 +63,11 @@ mod javascript_input;
 mod scripts;
 #[path = "../../../src/selectors.rs"]
 mod selectors;
+#[cfg(test)]
+#[path = "../../../src/viewport.rs"]
+mod viewport;
+#[cfg(test)]
+mod window_tests;
 
 #[cfg(test)]
 mod tests {

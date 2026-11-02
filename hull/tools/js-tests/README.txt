@@ -37,6 +37,12 @@ basic formatting/assertions, interrupted conversions and monotonic time reads.
 Native host/budget fixtures check cumulative time across sources/jobs/callbacks,
 idle exclusion, bounded JSON transport, host errors and exhausted-budget refusal.
 
+Window fixtures use the production Viewport and native engine/DOM gateway to
+check global identity, content dimensions with chrome subtraction, live resize
+updates, replaceable attributes, navigation isolation and the absence of guessed
+DPI/focus/browser services. DOM-only staging without a window producer stays
+without window globals. Host fixtures do not create a kernel-backed Winit window.
+
 Input throughput regressions admit at most 32 messages per UI turn and verify a
 97-message FIFO burst spans at least four turns, with Promise jobs between
 callbacks. Separate fixtures cover two initialization-time queue overflows

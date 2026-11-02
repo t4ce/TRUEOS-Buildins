@@ -35,4 +35,4 @@ strip = "symbols"           # See split-debuginfo - allows us to drop the size b
 incremental = true          # Improves re-compile times
 
 [workspace]
-exclude = ["crates/quickjs-engine", "tools/js-tests", "tools/layout-tests"]
+exclude = ["crates/quickjs-engine", "tools/js-tests", "tools/layout-tests", "tools/sandbox"]

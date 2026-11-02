@@ -144,4 +144,20 @@
         Object.defineProperty(Node.prototype, name, {value, enumerable:true});
     }
     Object.defineProperty(globalThis, 'document', {value:wrap(request('root')), writable:false, configurable:false});
+    if (request('window') !== null) {
+        const pageGlobal = globalThis, define = Object.defineProperty;
+        // The single page realm owns its global identity; replacing the ordinary
+        // globalThis property must not change the window getter's target.
+        define(pageGlobal, 'window', {get:() => pageGlobal, enumerable:true, configurable:false});
+        function replaceable(name, getter) {
+            define(pageGlobal, name, {
+                get:getter,
+                set(value) { define(pageGlobal, name, {value, writable:true, enumerable:true, configurable:true}); },
+                enumerable:true, configurable:true,
+            });
+        }
+        replaceable('self', () => pageGlobal);
+        replaceable('innerWidth', () => request('window').innerWidth);
+        replaceable('innerHeight', () => request('window').innerHeight);
+    }
 })();
