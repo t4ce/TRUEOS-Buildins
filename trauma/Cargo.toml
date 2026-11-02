@@ -15,6 +15,7 @@ futures-util = { version = "=0.3.32", default-features = false, features = ["std
 indicatif = { version = "=0.18.0", optional = true }
 reqwest-middleware = "=0.5.2"
 reqwest-retry = { version = "=0.9.1", default-features = false }
+sha2 = { version = "=0.10.9", default-features = false }
 tokio = { path = "../vendor/tokio-1.54.1", version = "=1.54.1", default-features = false, features = ["rt", "fs", "io-util", "net", "time"] }
 tracing = { path = "../vendor/tracing-0.1.44", version = "=0.1.44", default-features = false, features = ["std"] }
 bon = { version = "=3.9.3", default-features = false, features = ["alloc"] }

@@ -1,4 +1,4 @@
-//! Default document navigation: every supported click opens a fresh Hull.
+//! Document link actions: navigation opens a fresh Hull; download links are submitted to Trauma.
 use super::{layout::LinkBox, shellio, viewport::Viewport};
 use rp5::Document;
 use std::collections::HashMap;
@@ -7,8 +7,17 @@ use url::Url;
 #[derive(Default)]
 pub(super) struct Links {
     boxes: Vec<LinkBox>,
-    targets: HashMap<rp5::NodeId, String>,
-    pressed: HashMap<Option<u64>, (String, f64, f64)>,
+    targets: HashMap<rp5::NodeId, LinkAction>,
+    pressed: HashMap<Option<u64>, (LinkAction, f64, f64)>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) enum LinkAction {
+    Navigate(String),
+    Download {
+        url: String,
+        filename_hint: Option<String>,
+    },
 }
 
 impl Links {
@@ -34,17 +43,25 @@ impl Links {
             if links.targets.contains_key(&hit.node) {
                 continue;
             }
-            if let Some(target) = href(document, hit.node)
+            if let Some(url) = href(document, hit.node)
                 .and_then(|href| base.join(href.trim()).ok())
                 .and_then(|url| shellio::page_url(url.as_str()).ok())
             {
-                links.targets.entry(hit.node).or_insert(target);
+                let action = if has_download_attribute(document, hit.node) {
+                    LinkAction::Download {
+                        url,
+                        filename_hint: download_hint(document, hit.node),
+                    }
+                } else {
+                    LinkAction::Navigate(url)
+                };
+                links.targets.entry(hit.node).or_insert(action);
             }
         }
         links
     }
 
-    fn at(&self, x: f64, y: f64, viewport: &Viewport) -> Option<&str> {
+    fn at(&self, x: f64, y: f64, viewport: &Viewport) -> Option<&LinkAction> {
         if !x.is_finite() || !y.is_finite() {
             return None;
         }
@@ -54,7 +71,7 @@ impl Links {
                 && x < f64::from(left + width)
                 && y >= f64::from(top)
                 && y < f64::from(top + height))
-            .then(|| self.targets.get(&hit.node).map(String::as_str))
+            .then(|| self.targets.get(&hit.node))
             .flatten()
         })
     }
@@ -68,18 +85,16 @@ impl Links {
         x: f64,
         y: f64,
         viewport: &Viewport,
-    ) -> Option<String> {
+    ) -> Option<LinkAction> {
         if down {
             self.pressed.remove(&pointer);
-            if let Some(target) = self.at(x, y, viewport).map(str::to_owned) {
-                self.pressed.insert(pointer, (target, x, y));
+            if let Some(action) = self.at(x, y, viewport).cloned() {
+                self.pressed.insert(pointer, (action, x, y));
             }
             return None;
         }
         let (target, start_x, start_y) = self.pressed.remove(&pointer)?;
-        if (x - start_x).hypot(y - start_y) <= 5.0
-            && self.at(x, y, viewport) == Some(target.as_str())
-        {
+        if (x - start_x).hypot(y - start_y) <= 5.0 && self.at(x, y, viewport) == Some(&target) {
             Some(target)
         } else {
             None
@@ -109,6 +124,45 @@ pub(super) fn href(document: &Document, id: rp5::NodeId) -> Option<&str> {
         .iter()
         .find(|attr| attr.namespace.is_none() && attr.name == "href")
         .map(|attr| attr.value.as_str())
+}
+
+fn has_download_attribute(document: &Document, id: rp5::NodeId) -> bool {
+    document.element(id).is_some_and(|(_, _, attributes)| {
+        attributes
+            .iter()
+            .any(|attr| attr.namespace.is_none() && attr.name == "download")
+    })
+}
+
+fn download_hint(document: &Document, id: rp5::NodeId) -> Option<String> {
+    document.element(id).and_then(|(_, _, attributes)| {
+        attributes
+            .iter()
+            .find(|attr| attr.namespace.is_none() && attr.name == "download")
+            .map(|attr| attr.value.clone())
+            .filter(|value| !value.is_empty())
+    })
+}
+
+/// Encode the endpoint request as URL bytes, a NUL separator, then an optional filename hint.
+pub(super) fn download_request(action: &LinkAction) -> Result<Vec<u8>, &'static str> {
+    let LinkAction::Download { url, filename_hint } = action else {
+        return Err("link is not a download");
+    };
+    if url.len() > 4096 {
+        return Err("download URL exceeds 4096 bytes");
+    }
+    if filename_hint.as_ref().is_some_and(|hint| hint.len() > 512) {
+        return Err("download filename hint exceeds 512 bytes");
+    }
+    let mut bytes =
+        Vec::with_capacity(url.len() + 1 + filename_hint.as_ref().map_or(0, String::len));
+    bytes.extend_from_slice(url.as_bytes());
+    bytes.push(0);
+    if let Some(hint) = filename_hint {
+        bytes.extend_from_slice(hint.as_bytes());
+    }
+    Ok(bytes)
 }
 
 pub(super) fn launch_script(target: &str) -> Result<String, &'static str> {
@@ -165,10 +219,16 @@ mod tests {
         let (mut links, viewport) = fixture("../page?q=1&amp;x=2#part");
         assert!(links.button(Some(1), true, 30.0, 45.0, &viewport).is_none());
         let target = links.button(Some(1), false, 30.0, 45.0, &viewport).unwrap();
-        assert_eq!(target, "https://assets.test/page?q=1&x=2");
         assert_eq!(
-            startup_url(&launch_script(&target).unwrap()).unwrap(),
-            Some(target)
+            target,
+            LinkAction::Navigate("https://assets.test/page?q=1&x=2".into())
+        );
+        let LinkAction::Navigate(url) = target else {
+            panic!("ordinary links should navigate");
+        };
+        assert_eq!(
+            startup_url(&launch_script(&url).unwrap()).unwrap(),
+            Some(url)
         );
         assert!(
             links
@@ -215,6 +275,75 @@ mod tests {
             links.button(None, true, 30.0, 45.0, &viewport);
             assert!(links.button(None, false, 30.0, 45.0, &viewport).is_none());
         }
+    }
+
+    #[test]
+    fn explicit_download_links_submit_url_and_optional_filename_hint() {
+        let document = rp5::parse(
+            "<base href='https://assets.test/files/'><a href='report.csv' download='monthly.csv'>download</a>",
+        );
+        let node = (0..document.nodes.len())
+            .find(|&id| document.name(id) == "a")
+            .unwrap();
+        let mut links = Links::new(
+            &document,
+            vec![LinkBox {
+                node,
+                rect: [20.0, 100.0, 80.0, 22.0],
+            }],
+            "https://example.test/index",
+        );
+        let mut viewport = Viewport::default();
+        viewport.resize_with_origin(200, 100, 0, 20);
+        viewport.set_document(200, 400);
+        viewport.scroll_by(0.0, 80.0);
+
+        links.button(None, true, 30.0, 45.0, &viewport);
+        let action = links.button(None, false, 30.0, 45.0, &viewport).unwrap();
+        assert_eq!(
+            action,
+            LinkAction::Download {
+                url: "https://assets.test/files/report.csv".into(),
+                filename_hint: Some("monthly.csv".into()),
+            }
+        );
+        assert_eq!(
+            download_request(&action).unwrap(),
+            b"https://assets.test/files/report.csv\0monthly.csv"
+        );
+    }
+
+    #[test]
+    fn empty_download_attribute_has_no_hint_and_request_limits_are_reported() {
+        let document = rp5::parse("<a href='https://example.test/file' download>file</a>");
+        let node = (0..document.nodes.len())
+            .find(|&id| document.name(id) == "a")
+            .unwrap();
+        assert!(has_download_attribute(&document, node));
+        assert_eq!(download_hint(&document, node), None);
+
+        let action = LinkAction::Download {
+            url: "https://example.test/file".into(),
+            filename_hint: None,
+        };
+        assert_eq!(
+            download_request(&action).unwrap(),
+            b"https://example.test/file\0"
+        );
+        assert!(
+            download_request(&LinkAction::Download {
+                url: "x".repeat(4097),
+                filename_hint: None,
+            })
+            .is_err()
+        );
+        assert!(
+            download_request(&LinkAction::Download {
+                url: "https://example.test/".into(),
+                filename_hint: Some("x".repeat(513)),
+            })
+            .is_err()
+        );
     }
 
     #[test]

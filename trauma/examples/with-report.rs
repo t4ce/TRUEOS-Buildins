@@ -26,7 +26,6 @@ async fn main() -> Result<(), Box<dyn core::error::Error>> {
     let fake = format!("{}.fake", &reqwest_rs);
     let downloads = vec![
         Download::builder().url(reqwest_rs)?.build(),
-        Download::builder().url(reqwest_rs)?.build(),
         Download::builder().url(fake)?.build(),
     ];
     let downloader = Downloader::builder().directory("output").build();

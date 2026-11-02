@@ -57,7 +57,8 @@ async fn main() -> Result<(), Box<dyn core::error::Error>> {
     let summaries = downloader.download(&downloads).await;
     display_summary(&summaries);
 
-    // Second attempt, the file is already fully downloaded, so it should be skipped.
+    // Repeat the request. A verified strong-ETag checkpoint may skip the file;
+    // without usable validators, safely download it again.
     println!("Downloading file again... ");
     let summaries = downloader.download(&downloads).await;
     display_summary(&summaries);

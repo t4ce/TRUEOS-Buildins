@@ -77,6 +77,9 @@ def main():
             ["--doc", "--features", "terminal-progress"],
         ]:
             subprocess.run(base + flags, cwd=ROOT, env=env, check=True)
+        subprocess.run(["cargo", f"+{toolchain}", "run", "--manifest-path", str(manifest),
+                        "--no-default-features", "--example", "with-resume"],
+                       cwd=ROOT, env=env, check=True)
     print("Host checks passed; TRUEOS runtime and TLS behavior require separate validation.")
 
 

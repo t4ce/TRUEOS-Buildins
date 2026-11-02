@@ -292,3 +292,35 @@ and the entry point. `cargo rigreal` reaches that release packaging path;
 `cargo rig` keeps development packaging without the extra link. The shared
 buildins workflow owns the artifact and AppDB generation. Earlier standalone
 paths and receipts in this document are historical evidence.
+
+
+## Implemented resume and accounting patches
+
+The formerly deferred transfer changes are now implemented in the builtin.
+See `IMPROVEMENT_PLAN.md` for the implementation record, regression coverage,
+and boundaries. The terminal entry point remains the default Download/Downloader
+flow from `examples/simple.rs`, with interactive input and warmed lease reentry.
+The host-side `with-resume` example now creates a real interrupted checkpoint,
+resumes it, and verifies a later skip using a deterministic loopback fixture.
+
+GET validation now precedes file mutation; strong ETag/URL checkpoints bind old
+prefixes to the requested representation; full-response fallbacks restart at
+zero. Completed skips require current identity checks. Body writes flush before
+success, metadata reconciles saved sizes, and optional progress finalizes all
+terminal paths. Sidecar publication on TRUEOS uses the kernel's existing atomic
+libc rename binding rather than the no-replace Tokio or copy/remove std adapters.
+SHA-256 uses the already-present 0.10.9 dependency version with std disabled.
+
+The final host check passed 9 lean unit tests, 11 optional-feature unit tests,
+two smoke tests and 15 parameterized HTTP integration tests in both modes,
+one doctest, and the executable resume example. It uses vendored Tokio/Mio and
+upstream Reqwest HTTP without TLS; log `/tmp/trauma-host-transfer-final.log`.
+The actual TRUEOS library, binary, and all examples passed an all-features
+compile check against the shared buildins private std wrapper and overlays;
+log `/tmp/trauma-resume-trueos-check.log`.
+
+These checks do not execute VMX networking or platform TLS. The checkpoint
+provides representation consistency for a single writer, not content checksum
+verification, protection against local edits, or fsync-based power-loss safety.
+The shared release build continues to validate the final layout and kernel
+imports, and the production decoder/AppDB harness is the packaging check.

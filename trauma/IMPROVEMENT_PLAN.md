@@ -1,77 +1,66 @@
-# Trauma: focused download correctness plan
+# Trauma transfer correctness: implementation record
 
-Reviewed local checkout `58019f9cddc01de8713d23fd38309dd9da577e8a` on 2026-11-02. This is a source review of this fork, not a claim about the published crate. All findings below are source-derived; no HTTP reproducer, build, or tests were run. Dependency restructuring is happening separately. This document proposes three patches; it does not implement them or change dependencies.
+The three focused patches proposed by the original source review are implemented in this TRUEOS-Buildins source copy. The original review examined checkout `58019f9cddc01de8713d23fd38309dd9da577e8a` on 2026-11-02; its findings were source-derived, without a runtime reproducer at that time. The new loopback regressions now exercise those paths against the current code. This document describes local fork behavior, not the published crate.
 
-## Findings and applicability
+## Patch 1 — Validate GET before append or restart (P1, implemented)
 
-| Priority | Finding | Local evidence |
-| --- | --- | --- |
-| P1 | A server ignoring `Range` can cause a full representation to be appended to an existing prefix. | `src/downloader.rs:180–204` decides append from HEAD metadata before GET. `:219–223` only rejects HTTP errors; `:265–270` appends even when GET returned `200`. `src/download.rs:37–50` checks only advertised ranges and a nonzero length. |
-| P1 | An existing prefix is not bound to a representation, and returned ranges are not validated. Same-length remote changes can be skipped or mixed with old bytes. | `src/downloader.rs:189–195` skips on HEAD length alone; `:199–209` sends `Range` without `If-Range`; no ETag, validator checkpoint, or Content-Range parsing exists in `src/`. `src/lib.rs:65–70` treats every Accept-Ranges value except `none` as support. |
-| P1 | The remaining response length can be mistaken for the complete file length. | With a 1,000-byte representation and a 500-byte local prefix, HEAD length 1,000 avoids the first skip. A valid GET `206` with `Content-Length: 500` then satisfies `src/downloader.rs:233–237`, returning `Skipped` with only 500 bytes on disk. This is a traced source path, not an executed reproduction. |
-| P2 | Byte counts and progress are wrong on restart/resume and incomplete on terminal paths. | `src/downloader.rs:248–249` uses response-body length as the total but local length as position. `:285` starts the final count at the old local size even when `:269` truncates. `:301–314` counts bytes before successful writes. Only the success path finishes the child bar and advances the main bar (`:317–325`); skips and failures return earlier. |
+`src/transfer.rs` builds a private transfer plan before any destination mutation. `src/downloader.rs` uses HEAD as metadata, checks its status, and falls back to a full GET on HEAD 405/501. Other HEAD failures preserve the destination. Only the `bytes` Accept-Ranges unit is supported.
 
-The quoted queue-snapshot disconnection and error-string retry classification from another downloader do **not** describe this implementation. Here, tasks receive shared `Arc<ProgressBar>` handles (`src/downloader.rs:119–121, 137–142`), requests use `RetryTransientMiddleware` (`:83–101`), and body-stream errors return a failed summary (`:289–299`). Error strings are produced for reporting; there is no local string-based retry decision or queue snapshot implementation. Do not transplant fixes for those absent structures. The actual progress defects above still warrant repair. Request middleware also does not amount to a visible application-level retry loop around body streaming in this source.
+- GET 200 selects a zero-offset restart, even after a Range request. Existing checkpoint metadata is invalidated before truncation.
+- GET 206 requires a requested suffix, a single valid Content-Range with the exact starting offset and full known total, and compatible Content-Length. This implementation expects that one response to reach the representation's end. The returned strong ETag, resolved URL identity, stored total, and current HEAD total must agree.
+- Missing/malformed/unsolicited ranges, multipart byte ranges, incompatible Content-Encoding, conflicting validators, and 416 fail before opening the destination. Other GET statuses, including unsolicited 304/204, cannot become success.
+- Managed requests use Accept-Encoding identity; automatic Reqwest decompression is explicitly disabled even if compression features are unified by another dependency. Custom Range/If-Range and incompatible Accept-Encoding values fail before sending requests.
+- The response-body-length equality skip was removed. A 1,000-byte object with a saved 500-byte prefix and a 500-byte response remainder now reaches Success with exactly 1,000 bytes.
 
-## Patch 1 — Validate the actual GET before choosing append or restart (P1)
+## Patch 2 — Bind prefixes and skips to a representation (P1, implemented)
 
-**Scope:** Small private response-planning and Content-Range parsing helpers in `src/downloader.rs` / `src/lib.rs`, plus the existing `fetch` path. Keep the public `Download`, `Downloader`, and `Summary` APIs intact.
+`src/checkpoint.rs` provides a bounded, versioned `<output>.trauma-resume` sidecar. It stores SHA-256 fingerprints of the requested/resolved URLs, a strong ETag, the known full length, and partial/complete state. It does not persist URL credentials or query strings as plaintext. Weak and absent ETags do not authorize resumable checkpoints. Last-Modified fallback is deliberately unsupported.
 
-- Treat HEAD as metadata/advice. Check its status; never derive a skip or append decision from an HTTP error response. For HEAD `405`/`501`, allow an ordinary GET with filename inference from its successful response or the URL/override. Other failures must have an explicit failure policy and leave existing data intact.
-- Require the `bytes` range unit when interpreting Accept-Ranges. A positive HEAD hint permits an attempt, not an append operation.
-- Build an internal transfer plan after inspecting GET: `Restart` for `200`, `Append { offset, total, expected_body_bytes }` only for validated `206`. Open/truncate/append the destination only after that plan exists.
-- For append, require one satisfiable byte Content-Range starting exactly at the requested local offset; validate end/start/total bounds and any Content-Length against the returned span. Reject malformed/missing ranges, unexpected multipart bodies, and unsolicited partial responses to a full GET. Use a separate known/unknown full length rather than treating missing length as zero.
-- A `200` after a range request means restart from byte zero with truncation and zero initial progress. A `416` must not become success or `Skipped` merely because its status or a length looks plausible; preserve the file and fail unless later identity/completion checks prove it complete.
-- Remove the GET-body-length equality skip (`src/downloader.rs:232–238`). Patch 2 replaces the HEAD-only skip with representation-aware logic. Prevent caller-supplied `Range`/`If-Range` headers from silently overriding internally managed resume headers; reject conflicting input with a clear summary.
+- Existing data can resume only with a matching partial checkpoint and successful compatible HEAD metadata; requests carry Range and If-Range. Legacy files, malformed/missing checkpoints, changed identities, partial files already at the total length, oversized local files, and disabled resume all select a full GET.
+- A partial checkpoint is atomically published before writing response body bytes. It remains partial on body, write, flush, length-validation, or completion-publication failure. Completion is published only after writes flush and the known full length is satisfied.
+- A skip requires an existing regular output file, a completed checkpoint, matching actual/remote lengths, and matching current remote URL identity and strong ETag. Arbitrary equal-length files and partial checkpoints never qualify. Missing empty files are recreated rather than falsely skipped.
+- Publication uses a create-new temporary file in the same directory, flush/drop, and atomic rename. `src/checkpoint_rename.rs` uses host Tokio rename and the existing native libc rename import on TRUEOS/zkvm, avoiding TRUEOS Tokio's no-replace behavior and the private std copy/remove implementation. Failed publication removes its temporary file and preserves the previous checkpoint.
 
-**Acceptance / local HTTP regression cases:** Use a loopback fixture and isolated temporary directories; disable request retries for deterministic protocol cases. Assert request headers, exact output bytes, summary status, and summary size.
+The SHA-256 dependency is pinned to the existing 0.10.9 graph version with default features disabled. This hashes resource identity; it does not verify downloaded file content.
 
-1. HEAD advertises 1,000 bytes, local prefix is 500, GET returns `206`, `Content-Range: bytes 500-999/1000`, `Content-Length: 500`: download finishes with the exact 1,000-byte fixture and `Success`, never `Skipped`.
-2. Same setup but GET ignores Range and returns the full 1,000 bytes with `200`: output is exactly the full representation, never 1,500 bytes.
-3. Missing/malformed Content-Range, wrong start, impossible bounds, wrong span length, multipart `206`, and `416`: fail without changing the existing prefix. Test invalid and unsupported Accept-Ranges values separately.
-4. HEAD `405`/`501` followed by valid `200`: full download succeeds. HEAD error content-length matching an existing file must never produce a false skip. A conflicting custom Range header must not bypass validation.
+## Patch 3 — Count committed bytes and finalize terminal progress (P2, implemented)
 
-**Boundary:** This patch establishes wire-response correctness. It cannot establish that an old prefix belongs to the current remote object; ship it with patch 2 before claiming safe resume of existing files.
+`src/body.rs` streams through a private sink interface used by the real Tokio File and injected-failure tests. `src/downloader.rs` reconciles every returned summary with destination metadata and advances the main progress bar at one terminal point.
 
-## Patch 2 — Bind saved prefixes and skip decisions to a representation (P1)
+- Restart begins at zero; validated append begins at the saved offset. Child progress uses the full representation total, with an unset length for unknown totals.
+- Bytes/progress advance after successful writes. The sink flushes on stream/write failures as well as EOF before reconciling metadata. A partial write failure reports actual saved bytes rather than the attempted whole chunk.
+- Known short/oversized bodies and flush failures cannot report success or publish a complete checkpoint. Unknown-length successful bodies report their resulting actual size.
+- Summary size consistently means resulting on-disk length when it can be determined, including skips and failures; zero is used if no length can be established. `Summary::fail` preserves its existing metadata.
+- Every returned summary increments the main bar once, including skips and failures. A private guard finalizes all created children on early return; abandoned children retain the saved byte position, including when removed from the display. The renderer and its handles remain gated by terminal-progress.
 
-**Scope:** A private versioned resume checkpoint beside the output and validator handling in `fetch`; no new scheduling system, public builder redesign, or checksum API.
+## Executed regression coverage
 
-- Record a strong ETag from the successful GET, a fingerprint of the requested/final URL identity, and the known full representation length when available. Do not store URL credentials or tokens in plaintext. A HEAD ETag describes the current remote object; it is not evidence for which object created a pre-existing local prefix.
-- Persist the checkpoint before storing resumable body bytes, using atomic replacement; invalidate old metadata before a restart. Distinguish partial and successfully completed states. Mark completion only after successful writes/flush and expected-length validation. Keep the completed checkpoint if future identity-aware skips are supported.
-- Resume an existing prefix only when its checkpoint matches the resource and provides a strong validator; send `Range` plus `If-Range` with that validator. Refuse weak ETags for this policy. If no usable checkpoint/validator exists, download from zero. Last-Modified support can follow later; do not add a weak fallback in this patch.
-- Require GET `206` to agree with the stored validator and any known representation length as well as patch 1's range checks. A changed representation returned as `200` follows the restart path and replaces the checkpoint. A conflicting `206` fails before touching the prefix.
-- Replace size-only early skipping with a completed checkpoint plus a successful remote identity check and matching full length. An arbitrary equal-length file or partial checkpoint must never qualify. A conservative re-download when validation is unavailable is acceptable. Keep `resumable(false)` as a full restart policy for an existing file.
-- Maintain one byte representation across requests and saved offsets: use identity encoding for managed range transfers and reject incompatible Content-Encoding. Verify this with the active reqwest feature configuration rather than assuming decoded and wire-byte offsets coincide.
+`python3 tools/check_host.py` runs the real portable sources with vendored Tokio/Mio and an upstream Reqwest HTTP backend without TLS. It checks lean and terminal-progress/retry-tracing/socks/system-proxy configurations, documentation examples, and the deterministic resume example. Existing vendor Mio unsafe-operation warnings and a Tokio documentation warning remain outside this change.
 
-**Acceptance / local HTTP regression cases:** Extend the same fixture; create checkpoints through an initial interrupted download rather than hand-crafting only the happy path.
+`tests/resume.rs` uses a scripted loopback HTTP server and temporary directories (`tests/support/mod.rs`). The tests assert literal output bytes, request headers, statuses, and saved lengths. Partial checkpoints are created through an actual interrupted HTTP response before testing resume:
 
-1. Initial transfer of ETag `"v1"` interrupts after a prefix; next call sends `If-Range: "v1"` and the correct Range, validates `206`, and produces exact bytes.
-2. Replace the remote file with a different representation of the same length (`"v2"`). A valid `200` fallback replaces old bytes; an invalid mixed-version `206` fails with the prefix intact. Equal length must not trigger a skip.
-3. Legacy partial file, missing/malformed checkpoint, weak/missing ETag, changed URL identity, and local length greater than recorded total: restart safely rather than append. A missing/invalid checkpoint must not discard unrelated files.
-4. Completed file with matching checkpoint and remote validator may skip with the correct final size; changed validator forces a full transfer. Crash/incomplete checkpoint states never qualify as complete. Test an encoded response so byte-range offsets cannot silently refer to a different representation.
+- 1,000/500/500 resume, correct If-Range, exact final bytes, subsequent verified skip;
+- ignored Range / If-Range representation change returning 200, without prefix duplication;
+- absent, duplicate, malformed, wrong-bound, wrong-span, unknown-total, multipart, changed-ETag, encoded, and 416 partial responses preserving the prefix;
+- equal-length legacy files and completed-validator changes requiring full replacement;
+- HEAD error lengths never producing a skip, HEAD 405/501 falling back to GET filename inference;
+- missing/corrupt/weak checkpoints, missing ETag, oversized or total-length partial files, changed URL identity, and disabled resume selecting full transfer;
+- weak/missing ETags succeeding without a checkpoint, unknown-length bodies reporting actual size;
+- invalid Accept-Ranges units and managed-header conflicts never bypassing validation;
+- a missing empty output being recreated despite a retained complete checkpoint.
 
-**Boundary:** This adds representation consistency, not cryptographic content verification or concurrent-writer protection. Preserve filenames and the existing return types. Document the checkpoint lifecycle and the expected single writer per destination.
+Private unit tests additionally inject a real partial write and a flush failure through a wrapped Tokio File. They inspect actual file bytes, reconciled progress, and the still-partial checkpoint. Short and oversized synthetic streams cannot complete a known representation. Terminal tests inspect progress handles without terminal snapshots: full/unknown lengths, abandoned saved positions, cleared failures, and a mixed success/skip/HEAD-failure/GET-failure/interrupted-body batch with one main completion per summary and all created children finalized. Atomic-publication tests exercise replacement, failed publication preserving the old file, and NUL path rejection. The original retry smoke test still verifies middleware request retry behavior.
 
-## Patch 3 — Count committed bytes and finish every terminal progress path (P2)
+Host checks do not execute the TRUEOS runtime or validate platform TLS. Actual target compile/pack and ABI evidence are recorded separately in PORT_PROBE.md.
 
-**Scope:** Local accounting and progress cleanup around `fetch` and the collection in `download_inner`. Retain indicatif and request retry middleware.
+## Boundaries
 
-- Track `initial_committed_bytes`, `bytes_written`, and `expected_final_length` separately. Initialize at the validated append offset or zero for restart; derive progress total from the full representation length, never the remainder length. For unknown totals, use indeterminate progress.
-- Increment byte accounting/progress only after a successful write. On an I/O failure, reconcile the reported committed size with file metadata where possible because `write_all` may have written a partial chunk before returning an error. A restart over a 500-byte file followed by a 1,000-byte body must report 1,000 bytes, not 1,500.
-- At EOF, reject a known short/oversized transfer and flush successfully before reporting success or marking the checkpoint complete. Report `Summary::size()` consistently as the resulting on-disk length, including skips and failures where that length can be determined; document the meaning.
-- Advance the main bar once for each returned summary, including skips and failures. Move that operation to one collection/finalization point so early returns cannot miss it or double-count it. Finish/clear or visibly fail an existing child bar on every terminal return using a small cleanup helper/guard.
-- Keep body interruption as an explicit failed summary with a valid partial checkpoint for the next call. Do not add string-based retry classification or an unbounded body-retry loop. The existing request retry budget remains separate; body retries, if later desired, need their own bounded policy and validated reopen path.
+Use one writer per destination, across Downloader instances and processes, and reserve the checkpoint sidecar name for Trauma. Local edits, adversarial checkpoint tampering, symlink races, concurrent writers, filename containment/collisions, and content checksums are not addressed by this series. Atomic namespace publication is not an fsync-based power-loss guarantee; abandoned create-new temporary files can remain after a process crash.
 
-**Acceptance / local HTTP regression cases:**
+The queue-snapshot disconnection and error-string retry classification quoted from another downloader were absent here. This series retains direct indicatif handles and RetryTransientMiddleware's typed request policy. Body errors return a failed summary and resumable prefix for a later call; there is no unbounded body retry loop, queue rewrite, public progress-event API, or unrelated dependency upgrade.
 
-1. Valid resumed transfer reports total/terminal position 1,000 and `Summary::size() == 1000`; forced full restart over an existing prefix reports the same final size. A truly completed skip reports the actual complete file size.
-2. Loopback server drops a fixed-length body early: status is failure, reported size matches the saved prefix, checkpoint stays incomplete, and the next invocation can resume under patches 1–2. Unknown-length successful bodies report their actual resulting size; known inconsistent totals cannot become success.
-3. A mixed batch containing success, verified skip, HEAD/GET failure, and interrupted body ends with one main completion per returned summary and no unfinished child bars. Inspect progress state through a private test seam/hidden draw target rather than snapshotting terminal escape sequences.
-4. Inject a write/flush failure through a narrow test seam: no success/completed checkpoint, and reported byte counts do not include an unwritten whole chunk. This requires a meaningful failure fixture, not a test that merely repeats arithmetic from the implementation.
+## Hull incremental worker follow-up
 
-## Delivery and verification
+The transfer fixes are reused by a prepared single-download context with one HTTP pool. Worker startup consumes `download-worker <generation>` before requesting an interactive lease; ordinary launches retain the existing terminal session. The kernel owns queue admission/authentication/retirement and crash requeue. Trauma drains incremental jobs with at most 32 claimed entries, serializes conflicting output names, waits without cancelling a potentially claiming broker read, and reports job states on its console. Outputs use stable sanitized basenames plus normalized-URL hashes under `common/hulldownloads`; reserved checkpoint names cannot become download targets.
 
-Implement in the order above, with protocol and validator fixes reviewed together. Add deterministic loopback HTTP tests to the existing repository rather than external download examples; cover literal byte contents as well as lengths to expose mixed representations. Keep test-only dependency/feature choices aligned with the separately updated manifest. Once dependencies settle, run focused regression tests, existing unit/doc tests, formatting, and the repository's required lint/check commands. No runtime validation is claimed by this planning document.
-
-Do not expand this work into a queue rewrite, a new public progress/event API, retry-string parsing, or unrelated dependency upgrades. Filename containment and collisions are separate review topics: the current `directory.join(filename)` path (`src/downloader.rs:155–164`) merits follow-up, but is outside these three transfer-correctness patches.
+Additional tests exercise 81 dynamically arriving jobs, concurrency bounds, duplicate destinations, broker I/O cancellation safety, pre-binding waits, invalid-payload acknowledgment, acknowledgment failure propagation, launch/frame validation, unsafe filename hints, stable URL-fragment normalization, and actual HTTP interrupted/resume/skip behavior through one prepared context.

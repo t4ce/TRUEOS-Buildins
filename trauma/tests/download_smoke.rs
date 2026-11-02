@@ -88,9 +88,7 @@ fn fresh_download_retries_and_writes_exact_bytes() {
         .resumable(false)
         .build();
     let summaries = runtime.block_on(downloader.download(&[download]));
-    // Drain pending Tokio filesystem jobs before inspecting the file. Explicit
-    // flush-on-completion is a separate, deferred transfer-correctness patch.
-    drop(runtime);
+    // The downloader must flush before returning; inspect while the runtime lives.
     let requests = server.join().unwrap();
     let output = fs::read(directory.join("fixture.bin"));
     fs::remove_dir_all(directory).unwrap();

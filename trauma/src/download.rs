@@ -166,7 +166,7 @@ pub struct Summary {
     /// HTTP status code.
     #[builder(default = StatusCode::PROCESSING)]
     statuscode: StatusCode,
-    /// Download size in bytes.
+    /// Resulting on-disk length in bytes, when it can be determined.
     #[builder(default)]
     size: u64,
     /// Status.
@@ -188,7 +188,8 @@ impl Summary {
         self.statuscode
     }
 
-    /// Get the summary's size.
+    /// Get the resulting on-disk length, including a saved prefix after failure.
+    /// Zero is reported when no destination length could be determined.
     pub fn size(&self) -> u64 {
         self.size
     }
@@ -204,10 +205,7 @@ impl Summary {
     }
 
     pub fn fail(self, msg: impl core::fmt::Display) -> Self {
-        Self::builder()
-            .download(self.download)
-            .status(Status::Fail(format!("{msg}")))
-            .build()
+        self.with_status(Status::Fail(format!("{msg}")))
     }
 
     /// Set the summary's resumable.

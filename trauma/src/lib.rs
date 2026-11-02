@@ -3,9 +3,19 @@
 
 extern crate alloc;
 
+mod body;
+mod checkpoint;
+mod checkpoint_rename;
+mod transfer;
+
 pub mod download;
 pub mod downloader;
 pub mod path;
+pub mod worker;
+
+#[cfg(test)]
+#[path = "../tests/support/mod.rs"]
+mod test_support;
 
 use alloc::string::String;
 use core::fmt;
@@ -70,8 +80,7 @@ pub(crate) trait ResponseExt {
 
     /// Check whether the server supports range requests.
     ///
-    /// Returns false if the "accept-ranges" header is missing or if its value
-    /// is "none".
+    /// Returns true only for the supported `bytes` range unit.
     fn accept_ranges(&self) -> bool;
 
     /// Get the content disposition header from the headers.
@@ -90,11 +99,12 @@ impl ResponseExt for reqwest::Response {
     }
 
     fn accept_ranges(&self) -> bool {
-        match self.headers().get(ACCEPT_RANGES) {
-            None => false,
-            Some(x) if x == "none" => false,
-            Some(_) => true,
-        }
+        self.headers().get_all(ACCEPT_RANGES).iter().count() == 1
+            && self
+                .headers()
+                .get(ACCEPT_RANGES)
+                .and_then(|value| value.to_str().ok())
+                .is_some_and(|value| value.eq_ignore_ascii_case("bytes"))
     }
 
     fn content_disposition(&self) -> Option<String> {

@@ -73,9 +73,9 @@ cargo run --features terminal-progress --example with-style
 ```
 
 The examples use a single-thread Tokio runtime. Their error reporting, tables,
-and partial-download fixture use standard Rust facilities without extra dev
+and loopback resume fixture use standard Rust facilities without extra dev
 libraries. See [PORT_PROBE.md](PORT_PROBE.md) for platform build evidence and
-remaining transfer-correctness limitations.
+[IMPROVEMENT_PLAN.md](IMPROVEMENT_PLAN.md) for transfer changes and regression coverage.
 
 
 The vendored Reqwest fork maps the `default-tls` compatibility alias to rustls:
@@ -84,6 +84,75 @@ The vendored Reqwest fork maps the `default-tls` compatibility alias to rustls:
 [dependencies]
 trauma = { version = "3", default-features = false, features = ["default-tls"] }
 ```
+
+### Hull download worker
+
+Hull can submit HTTP(S) links to the kernel download broker. A worker launch
+script `download-worker <generation>` selects Trauma's incremental queue mode
+before terminal ownership is requested. Manual launches retain the interactive
+URL prompt and normal terminal handoff/reentry. The worker prints accepted,
+completed, already-saved, and failed job states to its usual console/Matrix slot;
+it does not require a terminal lease to make progress.
+
+Downloads and checkpoints go to `common/hulldownloads`, relative to the disk
+root. Suggested names are reduced to a bounded ASCII lowercase basename; the
+normalized URL's full SHA-256 fingerprint disambiguates them while retaining a
+simple extension. URL fragments are removed. Names cannot target paths or
+another job's checkpoint sidecar. The naming rule is stable across worker
+restarts, so interrupted downloads retain the existing resume behavior.
+
+The worker shares one prepared HTTP client and admits at most 32 claimed jobs
+at a time, including jobs waiting for an identical destination to finish. It
+continues reading dynamically arriving jobs while transfers run and serializes
+writers for the same destination. Broker reads and acknowledgments run
+alongside transfers without cancellation: a read may already have claimed a
+job. Invalid payloads with a valid job ID are acknowledged as failed; malformed
+frames, duplicate in-flight IDs, and broker I/O failures terminate the worker
+for kernel observer recovery. Acknowledgment marks both successful and failed
+jobs terminal; results are reported on the console. Only an atomic broker
+`D` response ends a drained generation; `W` waits for further work or launch
+observer binding.
+
+The broker protocol uses `vFile:hulldownloads/next/<generation>` (`J` + a
+little-endian u64 ID + URL UTF-8 + NUL + filename hint, `W`, or `D`) and
+`vFile:hulldownloads/done/<generation>` (the u64 ID). Queue admission,
+authentication, generation ownership, and requeue after worker crashes belong
+to the kernel. `Downloader::prepare()` and `PreparedDownloader::download_one()`
+expose the same shared-client, renderer-free transfer path to library callers;
+those callers remain responsible for concurrency and destination ownership.
+
+### Resume and completion
+
+Downloads use identity encoding so saved byte offsets match the remote
+representation. A successful response with a strong ETag creates a private
+`<output>.trauma-resume` checkpoint. It records SHA-256 fingerprints of the
+requested and resolved URLs, the ETag, the known full length, and partial or
+complete state. URL credentials and query strings are not stored as plaintext.
+Reserve that sidecar name for Trauma, keep it with the output, and use one
+writer per destination, including across separate Downloader instances.
+
+An interrupted body returns a failed summary after flushing the saved prefix.
+The next call resumes only when its checkpoint and successful HEAD metadata
+agree, using `Range` and `If-Range`. A validated `206` appends the matching
+suffix; a `200` restarts from byte zero. Invalid ranges, changed partial-response
+validators, encoded responses, and `416` fail before modifying an existing
+prefix. An old file without a valid checkpoint, a missing/weak ETag, or
+`resumable(false)` causes a full transfer. A completed checkpoint can skip a
+file only when its actual length and the remote identity still match. A
+missing output file is recreated, even if a checkpoint remains.
+
+HEAD `405`/`501` falls back to a full GET; other HEAD errors fail without
+changing the destination. Resume headers are managed internally: custom
+`Range`/`If-Range` are rejected, and custom `Accept-Encoding` must be `identity`.
+Last-Modified validators and multipart byte ranges are not supported.
+
+`Summary::size()` reports the resulting on-disk length when it can be
+established, including skipped files and saved prefixes after failure. A
+successful transfer flushes writes and verifies every known full length before
+marking its checkpoint complete. Checkpoints are published by atomic rename;
+this is not an fsync-based power-loss durability guarantee or content checksum.
+Request retry middleware retains its bounded policy. Body-stream failures are
+returned to the caller rather than retried automatically within the same call.
 
 ### Platform types and verification
 

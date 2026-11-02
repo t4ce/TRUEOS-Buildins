@@ -1,3 +1,6 @@
+use core::future::Future;
+use core::pin::Pin;
+use core::task::{Context, Poll, Waker};
 use std::collections::VecDeque;
 use trueos::ui4_scene::output_dimensions;
 use trueos::ui4_winit::{Damage, Error, HullTextRun, SceneTarget};
@@ -64,10 +67,134 @@ struct Hull {
     snapshot: snapshot::Snapshot,
     page_url: String,
     console: Option<console::Console>,
-    queued_urls: VecDeque<String>,
+    queued_urls: VecDeque<QueuedNavigation>,
+    navigation_probe: Option<NavigationProbe>,
+    ready_navigation: Option<QueuedNavigation>,
+    pending_submissions: VecDeque<DownloadSubmission>,
+}
+
+struct NavigationProbe {
+    url: String,
+    new_shell: bool,
+    future: Pin<Box<dyn Future<Output = Result<Vec<u8>, i32>>>>,
+}
+
+struct QueuedNavigation {
+    url: String,
+    new_shell: bool,
+}
+
+struct DownloadSubmission {
+    url: String,
+    filename_hint: Option<String>,
+    future: Pin<Box<dyn Future<Output = Result<(), i32>>>>,
 }
 
 impl Hull {
+    fn begin_navigation_probe(&mut self, url: String, new_shell: bool) {
+        let path = format!("vFile:hull-navigation/{url}").into_bytes();
+        let future = Box::pin(async move { trueos::async_fs::read_file(&path).await });
+        self.navigation_probe = Some(NavigationProbe {
+            url,
+            new_shell,
+            future,
+        });
+    }
+
+    fn poll_navigation_probe(&mut self) {
+        let Some(probe) = self.navigation_probe.as_mut() else {
+            return;
+        };
+        let mut context = Context::from_waker(Waker::noop());
+        let result = match probe.future.as_mut().poll(&mut context) {
+            Poll::Pending => return,
+            Poll::Ready(result) => result,
+        };
+        let probe = self.navigation_probe.take().unwrap();
+        let is_download = result.is_ok_and(|decision| decision.as_slice() == b"D");
+        if is_download {
+            self.submit_download(probe.url, None);
+        } else if probe.new_shell {
+            self.launch_navigation(probe.url);
+        } else if self.page_pending() {
+            self.ready_navigation = Some(QueuedNavigation {
+                url: probe.url,
+                new_shell: false,
+            });
+        } else {
+            self.start_page(probe.url);
+        }
+    }
+
+    fn launch_navigation(&mut self, url: String) {
+        match links::launch_script(&url)
+            .map_err(str::to_owned)
+            .and_then(|script| {
+                vshell::launch_with_destination(
+                    "hull",
+                    &script,
+                    vshell::LaunchDestination::NewShell3,
+                )
+                .map_err(|code| format!("could not launch a new Hull: {code}"))
+            }) {
+            Ok(()) => shellio::linef(format_args!("hull: opening {url} in a new Hull")),
+            Err(error) => shellio::linef(format_args!("hull: {error}")),
+        }
+    }
+
+    fn submit_download(&mut self, url: String, filename_hint: Option<String>) {
+        if self.pending_submissions.len() >= 32 {
+            shellio::line("hull: Trauma submission queue is full");
+            return;
+        }
+        let action = links::LinkAction::Download { url, filename_hint };
+        let request = match links::download_request(&action) {
+            Ok(request) => request,
+            Err(error) => {
+                shellio::linef(format_args!("hull: {error}"));
+                return;
+            }
+        };
+        let links::LinkAction::Download { url, filename_hint } = action else {
+            unreachable!();
+        };
+        let future = Box::pin(async move {
+            trueos::async_fs::write_file(b"vFile:hulldownloads/submit", &request).await
+        });
+        self.pending_submissions.push_back(DownloadSubmission {
+            url,
+            filename_hint,
+            future,
+        });
+    }
+
+    fn poll_download_submission(&mut self) {
+        let Some(submission) = self.pending_submissions.front_mut() else {
+            return;
+        };
+        let mut context = Context::from_waker(Waker::noop());
+        let result = match submission.future.as_mut().poll(&mut context) {
+            Poll::Pending => return,
+            Poll::Ready(result) => result,
+        };
+        let submission = self.pending_submissions.pop_front().unwrap();
+        match result {
+            Ok(()) => shellio::linef(format_args!(
+                "hull: download accepted by Trauma: {}{}",
+                submission.url,
+                submission
+                    .filename_hint
+                    .as_deref()
+                    .map(|hint| format!(" as {hint}"))
+                    .unwrap_or_default()
+            )),
+            Err(code) => shellio::linef(format_args!(
+                "hull: download submission failed ({code}): {}",
+                submission.url
+            )),
+        }
+    }
+
     fn create_window(
         &mut self,
         event_loop: &dyn ActiveEventLoop,
@@ -170,7 +297,10 @@ impl Hull {
         for command in commands {
             match command {
                 console::Command::Url(url) if self.queued_urls.len() < 16 => {
-                    self.queued_urls.push_back(url)
+                    self.queued_urls.push_back(QueuedNavigation {
+                        url,
+                        new_shell: false,
+                    })
                 }
                 console::Command::Url(_) => shellio::line("hull: URL queue is full"),
                 console::Command::Scripts => self.list_scripts(),
@@ -249,7 +379,8 @@ impl Hull {
     }
 
     fn page_pending(&self) -> bool {
-        self.download.is_some()
+        self.navigation_probe.is_some()
+            || self.download.is_some()
             || self.css.is_pending()
             || (self.document.is_some()
                 && (!self.layout_attempted
@@ -422,6 +553,8 @@ impl ApplicationHandler for Hull {
             }
         }
         self.poll_console(event_loop);
+        self.poll_navigation_probe();
+        self.poll_download_submission();
         self.poll_download();
         self.css.poll_downloads();
         // Images and persistence can only begin after this navigation's initial
@@ -505,8 +638,10 @@ impl ApplicationHandler for Hull {
             }
         }
         if self.window.is_some() && !self.page_pending() {
-            if let Some(url) = self.queued_urls.pop_front() {
-                self.start_page(url);
+            if let Some(navigation) = self.ready_navigation.take() {
+                self.start_page(navigation.url);
+            } else if let Some(navigation) = self.queued_urls.pop_front() {
+                self.begin_navigation_probe(navigation.url, navigation.new_shell);
             }
         }
         // ShellIO input does not wake Winit's window-event wait. Keep polling
@@ -525,20 +660,21 @@ impl ApplicationHandler for Hull {
     }
 
     fn window_event(&mut self, event_loop: &dyn ActiveEventLoop, id: WindowId, event: WindowEvent) {
-        let Some(window) = self.window.as_ref().filter(|window| window.id() == id) else {
+        if !self.window.as_ref().is_some_and(|window| window.id() == id) {
             return;
-        };
+        }
         // A supplemental state callback must not overtake the raw input that
         // Winit already captured before issuing this callback.
-        let inputs = javascript_input::before_supplemental(window.as_ref(), &event);
+        let inputs =
+            javascript_input::before_supplemental(self.window.as_ref().unwrap().as_ref(), &event);
         if let Some(javascript) = &mut self.javascript {
             for input in inputs {
                 javascript_input::forward(javascript, self.generation, input);
             }
         }
-        let Some(target) = self.target.as_mut() else {
+        if self.target.is_none() {
             return;
-        };
+        }
         let result = match event {
             WindowEvent::CloseRequested | WindowEvent::Destroyed => {
                 event_loop.exit();
@@ -555,8 +691,13 @@ impl ApplicationHandler for Hull {
                 self.viewport
                     .resize_with_origin(size.width, size.height, 0, chrome::HEIGHT);
                 self.frame_counter.resizing();
-                window.request_redraw();
-                target.set_extent(size.width, size.height)
+                if let Some(window) = &self.window {
+                    window.request_redraw();
+                }
+                self.target
+                    .as_mut()
+                    .unwrap()
+                    .set_extent(size.width, size.height)
             })(),
             WindowEvent::PointerMoved {
                 device_id,
@@ -578,28 +719,28 @@ impl ApplicationHandler for Hull {
                 ..
             } => {
                 if self.published_generation == Some(self.generation) {
-                    if let Some(url) = self.links.button(
+                    if let Some(action) = self.links.button(
                         device_id.map(|device| device.into_raw() as u64),
                         state == ElementState::Pressed,
                         position.x,
                         position.y,
                         &self.viewport,
                     ) {
-                        match links::launch_script(&url)
-                            .map_err(str::to_owned)
-                            .and_then(|script| {
-                                vshell::launch_with_destination(
-                                    "hull",
-                                    &script,
-                                    vshell::LaunchDestination::NewShell3,
-                                )
-                                .map_err(|code| format!("could not launch a new Hull: {code}"))
-                            }) {
-                            Ok(()) => {
-                                shellio::linef(format_args!("hull: opening {url} in a new Hull"));
+                        match action {
+                            links::LinkAction::Navigate(url) => {
+                                if self.navigation_probe.is_none() {
+                                    self.begin_navigation_probe(url, true);
+                                } else if self.queued_urls.len() < 16 {
+                                    self.queued_urls.push_back(QueuedNavigation {
+                                        url,
+                                        new_shell: true,
+                                    });
+                                } else {
+                                    shellio::line("hull: navigation queue is full");
+                                }
                             }
-                            Err(error) => {
-                                shellio::linef(format_args!("hull: {error}"));
+                            links::LinkAction::Download { url, filename_hint } => {
+                                self.submit_download(url, filename_hint);
                             }
                         }
                     }
@@ -630,7 +771,9 @@ impl ApplicationHandler for Hull {
                     self.links.cancel();
                     self.quads_dirty = true;
                     self.redraw_reason = "scroll";
-                    window.request_redraw();
+                    if let Some(window) = &self.window {
+                        window.request_redraw();
+                    }
                 }
                 Ok(())
             }
@@ -662,11 +805,15 @@ impl ApplicationHandler for Hull {
                     } else {
                         "scroll"
                     };
-                    window.request_redraw();
+                    if let Some(window) = &self.window {
+                        window.request_redraw();
+                    }
                 }
                 Ok(())
             }
             WindowEvent::RedrawRequested => (|| {
+                let window = self.window.as_ref().unwrap();
+                let target = self.target.as_mut().unwrap();
                 // Moving the retained UI4 frame is compositor work. A generic
                 // redraw notification does not invalidate our content.
                 if !self.quads_dirty && !self.pending_publish {
@@ -892,7 +1039,9 @@ impl ApplicationHandler for Hull {
             Ok(()) => {}
             Err(Error::Busy) => {
                 self.frame_counter.busy();
-                window.request_redraw();
+                if let Some(window) = &self.window {
+                    window.request_redraw();
+                }
             }
             Err(error) => {
                 logl::log(logl::level::ERROR, format_args!("hull: {error:?}"));
@@ -920,7 +1069,10 @@ fn main() {
             .map_err(|_| "startup script must be UTF-8")
             .and_then(links::startup_url);
         match startup {
-            Ok(Some(url)) => app.queued_urls.push_back(url),
+            Ok(Some(url)) => app.queued_urls.push_back(QueuedNavigation {
+                url,
+                new_shell: false,
+            }),
             Ok(None) => {}
             Err(error) => {
                 shellio::linef(format_args!("hull: {error}"));
@@ -936,7 +1088,7 @@ fn main() {
             let script = app
                 .queued_urls
                 .front()
-                .map(|url| format!("open {url}\n"))
+                .map(|navigation| format!("open {}\n", navigation.url))
                 .unwrap_or_default();
             if let Err(code) = vshell::launch_with_destination(
                 "hull",

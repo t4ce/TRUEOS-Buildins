@@ -1,4 +1,4 @@
-//! Terminal entrypoint for the unported Trauma library.
+//! Interactive terminal or headless Hull download worker entrypoint.
 extern crate alloc;
 
 #[cfg(any(target_os = "trueos", target_os = "zkvm"))]
@@ -18,6 +18,16 @@ fn run() -> Result<(), Box<dyn core::error::Error>> {
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()?;
+    #[cfg(any(target_os = "trueos", target_os = "zkvm"))]
+    if let Ok(script) = trueos::async_fs::block_on(trueos::async_fs::read_file(b"vFile:launch")) {
+        if let Some(generation) =
+            trauma::worker::launch_generation(&script).map_err(io::Error::other)?
+        {
+            return runtime
+                .block_on(trauma::worker::run(generation))
+                .map_err(|e| io::Error::other(e).into());
+        }
+    }
     #[cfg(any(target_os = "trueos", target_os = "zkvm"))]
     let mut lease = trueos::vshell::terminal_initial_lease()
         .map_err(|error| io::Error::other(error.to_string()))?;
@@ -55,7 +65,7 @@ fn session(runtime: &tokio::runtime::Runtime) -> Result<(), Box<dyn core::error:
             return Ok(());
         }
         let download = Download::builder().url(line.trim())?.build();
-        // Exercise the existing transfer implementation; platform porting is deferred.
+        // Use the same Download/Downloader flow as examples/simple.rs.
         let downloader = Downloader::builder().build();
         for summary in runtime.block_on(downloader.download(&[download])) {
             println!("{summary:?}");
