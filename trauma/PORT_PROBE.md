@@ -277,3 +277,18 @@ The ordinary `../TRUEOS-Blueprints/dist/trauma.bp` and packer remain unchanged.
 This is a statically checked experiment, not a successful VMX execution test.
 The raw payload of the compact candidate is 5,541,400 bytes; its packed size is
 1,939,684 bytes (about 1.94 MB / 1.85 MiB).
+
+
+## Maintained as a builtin
+
+The source copy now lives directly at `TRUEOS-Buildins/trauma`, with local
+`../vendor` paths. It replaces the retired `hyper` application in `buildins.json`;
+the Hyper networking library and its platform overlays remain in use. The old
+standalone Blueprint catalog entry has been removed.
+
+The release layout experiment is implemented in the shared buildins driver,
+including validation of allocated contents, relocation destinations, imports,
+and the entry point. `cargo rigreal` reaches that release packaging path;
+`cargo rig` keeps development packaging without the extra link. The shared
+buildins workflow owns the artifact and AppDB generation. Earlier standalone
+paths and receipts in this document are historical evidence.

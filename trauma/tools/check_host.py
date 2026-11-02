@@ -4,7 +4,7 @@
 The TRUEOS Reqwest/Hyper forks have platform-only dependencies and incomplete
 host branches. This temporary harness uses upstream Reqwest of the same version
 without TLS. It retains vendored Tokio/Mio and compiles the real Trauma sources,
-examples, and tests. Run `cargo bp trauma` separately for platform validation.
+examples, and tests. Use the shared buildins driver separately for platform validation.
 """
 import json
 import os
@@ -50,8 +50,8 @@ def host_manifest():
         lines.append(f"{name} = {json.dumps(features)}")
     lines += [
         "[patch.crates-io]",
-        "tokio = " + inline_table({"path": str(ROOT.parent / "TRUEOS-Buildins/vendor/tokio-1.54.1")}),
-        "mio = " + inline_table({"path": str(ROOT.parent / "TRUEOS/vendor/mio-1.2.0")}),
+        "tokio = " + inline_table({"path": str(ROOT.parent / "vendor/tokio-1.54.1")}),
+        "mio = " + inline_table({"path": str(ROOT.parent.parent / "TRUEOS/vendor/mio-1.2.0")}),
     ]
     for path in sorted((ROOT / "examples").glob("*.rs")):
         lines += ["[[example]]", f"name = {json.dumps(path.stem)}", f"path = {json.dumps(str(path))}"]
@@ -63,7 +63,7 @@ def host_manifest():
 
 
 def main():
-    toolchain = tomllib.loads((ROOT.parent / "TRUEOS-Blueprints/rust-toolchain.toml").read_text())["toolchain"]["channel"]
+    toolchain = tomllib.loads((ROOT.parent / "rust-toolchain.toml").read_text())["toolchain"]["channel"]
     env = dict(os.environ)
     env["CARGO_TARGET_DIR"] = str(ROOT / "target/host-smoke")
     env["RUSTFLAGS"] = env.get("RUSTFLAGS", "") + ' --check-cfg=cfg(target_os,values("trueos","zkvm"))'

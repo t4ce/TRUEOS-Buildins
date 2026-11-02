@@ -15,12 +15,12 @@ futures-util = { version = "=0.3.32", default-features = false, features = ["std
 indicatif = { version = "=0.18.0", optional = true }
 reqwest-middleware = "=0.5.2"
 reqwest-retry = { version = "=0.9.1", default-features = false }
-tokio = { path = "../TRUEOS-Buildins/vendor/tokio-1.54.1", version = "=1.54.1", default-features = false, features = ["rt", "fs", "io-util", "net", "time"] }
-tracing = { path = "../TRUEOS-Buildins/vendor/tracing-0.1.44", version = "=0.1.44", default-features = false, features = ["std"] }
+tokio = { path = "../vendor/tokio-1.54.1", version = "=1.54.1", default-features = false, features = ["rt", "fs", "io-util", "net", "time"] }
+tracing = { path = "../vendor/tracing-0.1.44", version = "=0.1.44", default-features = false, features = ["std"] }
 bon = { version = "=3.9.3", default-features = false, features = ["alloc"] }
 
 [dependencies.reqwest]
-path = "../TRUEOS-Buildins/vendor/reqwest-0.13.3"
+path = "../vendor/reqwest-0.13.3"
 version = "=0.13.3"
 default-features = false
 features = [
@@ -30,7 +30,7 @@ features = [
 
 [dev-dependencies]
 # Only examples use the Tokio entrypoint macro.
-tokio = { path = "../TRUEOS-Buildins/vendor/tokio-1.54.1", version = "=1.54.1", features = ["macros"] }
+tokio = { path = "../vendor/tokio-1.54.1", version = "=1.54.1", features = ["macros"] }
 
 [features]
 default = ["rustls"]
@@ -50,7 +50,7 @@ test = false
 bench = false
 
 [target.'cfg(any(target_os = "trueos", target_os = "zkvm"))'.dependencies]
-trueos = { path = "../TRUEOS-Buildins/vendor/trueos", features = ["tokio-runtime"] }
+trueos = { path = "../vendor/trueos", features = ["tokio-runtime"] }
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("trueos", "zkvm"))'] }

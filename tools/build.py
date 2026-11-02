@@ -2,7 +2,8 @@
 """Build the kernel-owned app.db inputs. No publishing or independent app releases.
 
 Cargo builds and tracks complete relocatable objects; this driver stages target
-adaptations, strips debug information, and writes the existing TRBP containers.
+adaptations, strips debug information, validates release layout compaction, and
+writes the existing TRBP containers.
 All generated sources, Cargo locks, caches and packages live below --output.
 """
 from __future__ import annotations
@@ -25,6 +26,8 @@ import tempfile
 import time
 import tomllib
 
+from elf_layout import Elf, freeze_merge_sections, validate as validate_layout
+
 ROOT = Path(__file__).resolve().parents[1]
 TOOLCHAIN = "nightly-2026-07-10"
 COMMIT = "af3d95584dbddcae597890340995509a7fb47a50"
@@ -33,7 +36,7 @@ KERNEL_PLATFORM_SOURCES = {"hyper": "hyper-1.10.0", "mio": "mio-1.2.0", "httpdat
                            "getrandom": "getrandom-0.4.3", "rand_core": "rand_core-0.6.4"}
 KERNEL_OVERLAYS = {"crc32fast", "futures-util", "http", "http-body", "httpdate", "hyper", "mio", "getrandom", "rand_core", "ring", "want"}
 # Bump when the stripping or container recipe changes, independently of Rust inputs.
-PACKAGE_REVISION = 2
+PACKAGE_REVISION = 3
 
 
 def run(args, **kwargs):
@@ -238,7 +241,8 @@ def staged_manifest(path: Path, original: Path):
         # img/paper inherited their SDK dependency from the old Blueprint workspace.
         if re.match(r"\s*trueos\s*=.*workspace\s*=\s*true", line):
             line = re.sub(r"workspace\s*=\s*true", f"path = {json.dumps(str(ROOT / 'vendor/trueos'))}", line)
-        dependency = table.endswith("dependencies") or ".dependencies." in table
+        dependency = (table.endswith("dependencies") or ".dependencies." in table
+                      or table.startswith(("dependencies.", "dev-dependencies.", "build-dependencies.")))
         if dependency and (match := re.search(r'\bpath\s*=\s*"([^"]+)"', line)):
             relative = match[1]
             app_root = ROOT / original.relative_to(ROOT).parts[0]
@@ -474,6 +478,29 @@ def build_database(output: Path, kernel: Path, cargo: Path, env: dict, names):
     return database
 
 
+def compact_object(source: Path, target: Path, binaries: Path, env: dict):
+    """Re-layout the live Cargo object, preserving its loader-facing behavior."""
+    before = Elf(source)
+    frozen = target.with_name("module.layout-input.o")
+    freeze_merge_sections(before, frozen)
+    run([binaries / "rust-lld", "-flavor", "gnu", "-r", "--no-relax", "--discard-all",
+         "-T", ROOT / "tools/rel-coalesce.ld", "-o", target, frozen], env=env)
+    after = Elf(target)
+    checked = validate_layout(before, after, True)
+    receipt = {"before": before.stats(), "after": after.stats(), **checked}
+    write_changed(target.with_name("layout.json"), (json.dumps(receipt, indent=2) + "\n").encode())
+    print(f"buildins: compacted {target.parent.name}: {len(before.sections):,} -> "
+          f"{len(after.sections):,} sections; {len(before.data):,} -> {len(after.data):,} ELF bytes", flush=True)
+
+
+def prune_obsolete_packages(output: Path, names):
+    """Remove retired app packages only after the current set builds successfully."""
+    for package in (output / "dist").glob("*.bp"):
+        if package.stem not in names:
+            package.unlink()
+            print(f"buildins: removed retired package {package.name}", flush=True)
+
+
 def build_app(name: str, output: Path, profile: str, cargo: Path, binaries: Path, env: dict, overlays):
     manifest, source, needs_std, features, doc = settings(name)
     staged = stage_app(name, output, manifest, source)
@@ -533,7 +560,12 @@ def build_app(name: str, output: Path, profile: str, cargo: Path, binaries: Path
     metadata = doc.get("package", {}).get("metadata", {}).get("trueos-blueprint", {})
     flags = sum(bit for key, value, bit in [("replicatable", True, 1 << 8), ("entry-abi", "argv-v1", 1 << 9),
                 ("filesystem-independent", True, 1 << 10), ("fs-scope", "trueosfs", 1 << 11)] if metadata.get(key) == value)
-    inputs = {"module": hashlib.sha256(module.read_bytes()).hexdigest(), "flags": flags, "format": PACKAGE_REVISION}
+    layout = "original"
+    if profile == "release":
+        layout = hashlib.sha256((ROOT / "tools/rel-coalesce.ld").read_bytes()
+                                + (ROOT / "tools/elf_layout.py").read_bytes()).hexdigest()
+    inputs = {"module": hashlib.sha256(module.read_bytes()).hexdigest(), "flags": flags,
+              "format": PACKAGE_REVISION, "layout": layout}
     if package.is_file() and stripped.is_file() and stamp.is_file():
         try:
             previous = json.loads(stamp.read_text())
@@ -548,8 +580,12 @@ def build_app(name: str, output: Path, profile: str, cargo: Path, binaries: Path
     checkpoint(output, name, "strip start")
     # Relocatable LTO links retain compiler_builtins' excluded LLVM bitcode.
     # Drop that compiler input while keeping native symbols and relocations.
+    intermediate = work / "module.debug-stripped.o" if profile == "release" else stripped
     run([binaries / "rust-objcopy", "--strip-debug", "--remove-section=.llvmbc", "--remove-section=.llvmcmd",
-         "--set-section-flags", ".trueos.shaders=readonly", module, stripped], env=env)
+         "--set-section-flags", ".trueos.shaders=readonly", module, intermediate], env=env)
+    if profile == "release":
+        checkpoint(output, name, "compact start")
+        compact_object(intermediate, stripped, binaries, env)
     payload = stripped.read_bytes()
     checkpoint(output, name, "compress start")
     compressed = compress_module(payload)
@@ -599,6 +635,7 @@ def main():
         build_app(name, output, args.profile, cargo, binaries, env, overlays)
     verify_abi(kernel, output, selected)
     if not args.app:
+        prune_obsolete_packages(output, names)
         checkpoint(output, "app.db", "image start")
         database = build_database(output, kernel, cargo, env, names)
         checkpoint(output, "app.db", "image complete")

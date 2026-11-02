@@ -8,7 +8,8 @@ Tokio Rust Asynchronous Universal download MAnager
 
 ## Description
 
-This TRUEOS fork provides asynchronous HTTP(S) downloads as a library and a
+This source copy is maintained directly in TRUEOS-Buildins, without a submodule
+or a separate repository. It provides asynchronous HTTP(S) downloads as a library and a
 terminal application. The default build keeps download, retry, and execution
 logic without terminal progress rendering or HTTP telemetry.
 
@@ -92,11 +93,18 @@ Portable traits use `core`; owned strings, collections, and shared pointers use
 current platform facade reexports std-compatible types; this is not a full
 `no_std` port. OS I/O and current-directory access still use `std`.
 
-Build the actual platform application from the sibling Blueprint checkout:
+The normal kernel commands prepare this builtin automatically: `cargo rig`
+uses the development profile; `cargo rigreal` uses release. Release packaging
+coalesces sections and removes dispensable local symbols for every builtin.
+
+To build just Trauma for diagnostics from this directory:
 
 ```sh
-TRUEOS_BLUEPRINT_SKIP_APPS_PUBLISH=1 cargo bp trauma
+python3 ../tools/build.py --profile release --app trauma --output ../../TRUEOS/tgt/buildins/release
 ```
+
+A selected-app diagnostic build does not produce a complete kernel AppDB set.
+See [the shared workflow](../tools/README.md) for complete-set preparation.
 
 From this checkout, run the supplemental host checks:
 

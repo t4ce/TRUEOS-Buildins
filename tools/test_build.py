@@ -18,6 +18,29 @@ spec.loader.exec_module(build)
 
 
 class BuildInputs(unittest.TestCase):
+    def test_dependency_tables_are_rebased_after_the_trauma_move(self):
+        manifest = build.ROOT / "trauma/Cargo.toml"
+        with tempfile.TemporaryDirectory() as directory:
+            staged = Path(directory) / "sources/trauma/Cargo.toml"
+            doc = tomllib.loads(build.staged_manifest(staged, manifest).decode())
+            for group in (doc["dependencies"], doc["dev-dependencies"],
+                          doc["target"]['cfg(any(target_os = "trueos", target_os = "zkvm"))']["dependencies"]):
+                for name, spec in group.items():
+                    if isinstance(spec, dict) and "path" in spec:
+                        self.assertTrue(Path(spec["path"]).is_absolute(), name)
+                        self.assertTrue((Path(spec["path"]) / "Cargo.toml").is_file(), name)
+
+    def test_retired_packages_are_removed_without_touching_current_apps(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)
+            (output / "dist").mkdir()
+            for name in ("hyper.bp", "trauma.bp", "receipt.json"):
+                (output / "dist" / name).write_text(name)
+            build.prune_obsolete_packages(output, ["trauma"])
+            self.assertFalse((output / "dist/hyper.bp").exists())
+            self.assertTrue((output / "dist/trauma.bp").exists())
+            self.assertTrue((output / "dist/receipt.json").exists())
+
     def test_declared_app_features_do_not_become_trueos_api_features(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -188,6 +211,8 @@ class CargoObjects(unittest.TestCase):
         self.source.write_text("fn main() {}\n")
         (self.root / "tools").mkdir()
         (self.root / "tools/trueos-object.json").write_text('{"exe-suffix":".o"}\n')
+        (self.root / "tools/rel-coalesce.ld").write_text("fixture linker recipe\n")
+        (self.root / "tools/elf_layout.py").write_text("fixture validator\n")
         self.current = self.output / "cargo/trueos-object/debug/paper.o"
         self.current.parent.mkdir(parents=True)
         self.current.write_bytes(b"current Cargo object")
@@ -219,6 +244,12 @@ class CargoObjects(unittest.TestCase):
         replacement = patch.object(build, "compress_module", side_effect=lambda data: b"packed:" + data)
         self.compress = replacement.start()
         self.addCleanup(replacement.stop)
+        replacement = patch.object(build, "compact_object", side_effect=self.compact)
+        self.compactor = replacement.start()
+        self.addCleanup(replacement.stop)
+
+    def compact(self, source, target, binaries, env):
+        target.write_bytes(b"compacted:" + source.read_bytes())
 
     def artifact(self, paths, *, name="paper", kind="bin", fresh=False):
         return {"reason": "compiler-artifact", "manifest_path": str(self.manifest),
@@ -233,8 +264,8 @@ class CargoObjects(unittest.TestCase):
                                wait=lambda: self.status)
 
     def strip(self, command, **kwargs):
-        # The driver must package Cargo's combined object, not invoke another
-        # linker or rediscover old objects and dependency archives.
+        # Strip Cargo's authoritative combined object. Release's separate layout
+        # step is mocked independently and must not rediscover dependencies.
         command = list(map(str, command))
         self.assertEqual(Path(command[0]).name, "rust-objcopy")
         self.assertIn("--strip-debug", command)
@@ -271,6 +302,9 @@ class CargoObjects(unittest.TestCase):
         self.assertEqual(env, original, "later host builds must retain their original release settings")
         self.assertIsNot(child_env, env)
         self.run.assert_called_once()
+        self.compactor.assert_called_once()
+        self.assertEqual(Path(self.compactor.call_args.args[0]).name, "module.debug-stripped.o")
+        self.assertEqual(Path(self.compactor.call_args.args[1]).name, "module.stripped.o")
 
     def test_dev_does_not_apply_the_release_profile_or_change_its_environment(self):
         env = {"CARGO_PROFILE_RELEASE_LTO": "false", "CARGO_PROFILE_DEV_OPT_LEVEL": "0"}
@@ -279,6 +313,23 @@ class CargoObjects(unittest.TestCase):
         self.assertNotIn("--release", command)
         self.assertNotIn(str(self.root / "tools/release-profile.toml"), command)
         self.assertEqual(self.popen.call_args.kwargs["env"], env)
+        self.compactor.assert_not_called()
+
+    def test_layout_changes_repackage_even_when_cargo_object_is_fresh(self):
+        self.package("release")
+        self.package("release")
+        self.assertEqual(self.compactor.call_count, 1)
+        script = self.root / "tools/rel-coalesce.ld"
+        script.write_text(script.read_text() + "/* changed layout */\n")
+        self.package("release")
+        self.assertEqual(self.compactor.call_count, 2)
+
+    def test_profile_switch_does_not_reuse_a_dev_package_for_release(self):
+        package = self.package()
+        original = package.read_bytes()
+        self.package("release")
+        self.compactor.assert_called_once()
+        self.assertNotEqual(original, package.read_bytes())
 
     def test_packages_only_the_selected_cargo_binary_object(self):
         self.artifacts.insert(0, self.artifact([self.stale], kind="lib"))
