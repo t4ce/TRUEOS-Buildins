@@ -9,6 +9,9 @@ rp5 = { path = "../../rp5" }
 hull-quickjs = { path = "../../crates/quickjs-engine" }
 url = "2.5"
 serde_json = "1"
+lightningcss = { version = "=1.0.0-alpha.72", default-features = false, features = ["into_owned", "substitute_variables"] }
+parcel_selectors = "0.28.3"
+cssparser = "0.37"
 winit-trueos = { path = "../../../vendor/winit/winit-trueos" }
 winit-core = { path = "../../../vendor/winit/winit-core" }
 tokio = { path = "../../../vendor/tokio-1.54.1", default-features = false, features = ["rt", "sync", "time"] }

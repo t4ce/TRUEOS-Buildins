@@ -9,6 +9,7 @@ const ADAPTER: &str = r#"
 
 #define CONSOLE_CAPACITY 64
 #define CONSOLE_BYTES 4096
+#define HOST_JSON_BYTES (1024 * 1024)
 typedef struct ConsoleRecord {
     int level;
     size_t length;
@@ -24,6 +25,10 @@ typedef struct HullQuickJs {
     uint64_t console_dropped;
     double (*now)(void *);
     void *clock_opaque;
+    int (*host)(void *, const char *, size_t, const char **, size_t *);
+    void *host_opaque;
+    JSInterruptHandler *interrupt;
+    void *interrupt_opaque;
     char error[8192];
 } HullQuickJs;
 
@@ -32,6 +37,8 @@ void *hull_quickjs_new(size_t heap_limit, size_t stack_limit,
     HullQuickJs *engine = calloc(1, sizeof(*engine));
     if (!engine) return NULL;
     engine->receiver = JS_UNDEFINED;
+    engine->interrupt = interrupt;
+    engine->interrupt_opaque = opaque;
     engine->runtime = JS_NewRuntime();
     if (!engine->runtime) { free(engine); return NULL; }
     JS_SetMemoryLimit(engine->runtime, heap_limit);
@@ -50,6 +57,52 @@ void hull_quickjs_free(void *pointer) {
     JS_FreeContext(engine->context);
     JS_FreeRuntime(engine->runtime);
     free(engine);
+}
+
+static JSValue host_call(JSContext *context, JSValueConst self,
+                         int argc, JSValueConst *argv) {
+    HullQuickJs *engine = JS_GetContextOpaque(context);
+    if (!engine->host) return JS_ThrowInternalError(context, "host handler is unavailable");
+    if (argc != 1) return JS_ThrowTypeError(context, "host handler requires one JSON value");
+    JSValue json = JS_JSONStringify(context, argv[0], JS_UNDEFINED, JS_UNDEFINED);
+    if (JS_IsException(json)) return json;
+    if (JS_IsUndefined(json)) return JS_ThrowTypeError(context, "host request is not a JSON value");
+    size_t length;
+    const char *text = JS_ToCStringLen(context, &length, json);
+    JS_FreeValue(context, json);
+    if (!text) return JS_EXCEPTION;
+    if (length > HOST_JSON_BYTES) {
+        JS_FreeCString(context, text);
+        return JS_ThrowRangeError(context, "host request exceeds 1 MiB");
+    }
+    const char *response = NULL;
+    size_t response_length = 0;
+    int status = engine->host(engine->host_opaque, text, length, &response, &response_length);
+    JS_FreeCString(context, text);
+    if (!response || response_length > HOST_JSON_BYTES)
+        return JS_ThrowInternalError(context, "invalid host response");
+    if (engine->interrupt(engine->runtime, engine->interrupt_opaque))
+        return JS_ThrowInternalError(context, "interrupted");
+    if (status < 0)
+        return JS_ThrowInternalError(context, "%.*s", (int)(response_length < 8192 ? response_length : 8192), response);
+    // Response storage belongs to Rust and remains valid through this parse.
+    return JS_ParseJSON(context, response, response_length, "<host-response>");
+}
+
+int hull_quickjs_bind_host_handler(void *pointer, const char *name,
+                                 int (*host)(void *, const char *, size_t, const char **, size_t *),
+                                 void *opaque) {
+    HullQuickJs *engine = pointer;
+    JSContext *context = engine->context;
+    JSValue global = JS_GetGlobalObject(context);
+    int status = JS_SetPropertyStr(context, global, name,
+                                  JS_NewCFunction(context, host_call, name, 1));
+    JS_FreeValue(context, global);
+    if (status >= 0) {
+        engine->host = host;
+        engine->host_opaque = opaque;
+    }
+    return status;
 }
 
 static JSValue console_write(JSContext *context, JSValueConst self,
@@ -208,6 +261,12 @@ int hull_quickjs_pending_job(void *pointer) {
 int hull_quickjs_has_pending_jobs(const void *pointer) {
     const HullQuickJs *engine = pointer;
     return JS_IsJobPending(engine->runtime);
+}
+
+void hull_quickjs_discard_exception(void *pointer) {
+    HullQuickJs *engine = pointer;
+    JSValue exception = JS_GetException(engine->context);
+    JS_FreeValue(engine->context, exception);
 }
 
 static void append_text(HullQuickJs *engine, JSValueConst value) {

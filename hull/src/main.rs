@@ -22,12 +22,14 @@ mod css;
 mod favicon;
 mod images;
 mod javascript;
+mod javascript_dom;
 mod javascript_input;
 mod layout;
 mod links;
 #[path = "../xxx/mod.rs"]
 mod pink_quad_dbg;
 mod scripts;
+mod selectors;
 mod shellio;
 mod snapshot;
 mod viewport;
@@ -362,12 +364,17 @@ impl Hull {
             }
         }
         shellio::line(
-            "hull: :run requests collected inline JavaScript; :paste runs your own source with :end",
+            "hull: inline JavaScript is admitted before layout; :paste runs your own source with :end",
         );
     }
 
     fn page_pending(&self) -> bool {
         self.download.is_some()
+            || self
+                .javascript
+                .as_ref()
+                .is_some_and(|js| js.is_initializing(self.generation))
+            || (self.html.is_some() && self.document.is_none())
             || self.css.is_pending()
             || (self.document.is_some()
                 && (!self.layout_attempted
@@ -413,17 +420,19 @@ impl Hull {
                             document.errors.len(),
                         ),
                     );
-                    self.css.parse_document(&document, &self.page_url);
-                    self.images.collect_favicon(&document, &self.page_url);
                     self.scripts.extract(&document, &self.page_url);
                     if let Some(javascript) = &mut self.javascript {
-                        javascript.replace_page(
+                        javascript.begin_page(
                             self.generation,
                             self.page_url.clone(),
                             self.scripts.sources.clone(),
+                            document,
                         );
+                    } else {
+                        self.css.parse_document(&document, &self.page_url);
+                        self.images.collect_favicon(&document, &self.page_url);
+                        self.document = Some(document);
                     }
-                    self.document = Some(document);
                     self.html = Some(bytes);
                 }
                 Err(code) => logl::log(
@@ -453,14 +462,14 @@ impl ApplicationHandler for Hull {
                 match report {
                     javascript::Report::Online => logl::log(
                         logl::level::INFO,
-                        format_args!("hull: QuickJS task online; page execution is explicit"),
+                        format_args!("hull: QuickJS task online; initial page budget=250ms"),
                     ),
                     javascript::Report::Page {
                         generation,
                         sources,
                     } => logl::log(
                         logl::level::INFO,
-                        format_args!("hull: QuickJS page={generation} stored={sources} dormant"),
+                        format_args!("hull: QuickJS page={generation} stored={sources}"),
                     ),
                     javascript::Report::Evaluated {
                         generation,
@@ -544,7 +553,32 @@ impl ApplicationHandler for Hull {
                             }
                         }
                     }
+                    javascript::Report::Initialized {
+                        generation,
+                        capped,
+                        remaining_sources,
+                    } => {
+                        if generation == self.generation {
+                            shellio::linef(format_args!(
+                                "hull: initial JavaScript {} ({} sources left); render snapshot captured",
+                                if capped { "capped" } else { "finished" },
+                                remaining_sources
+                            ));
+                        }
+                    }
+                    javascript::Report::BudgetExhausted { generation } => {
+                        if generation == self.generation {
+                            shellio::line(
+                                "hull: page JavaScript execution budget exhausted (250ms total)",
+                            );
+                        }
+                    }
                 }
+            }
+            if let Some(document) = javascript.take_initial_document(self.generation) {
+                self.css.parse_document(&document, &self.page_url);
+                self.images.collect_favicon(&document, &self.page_url);
+                self.document = Some(document);
             }
         }
         self.poll_console(event_loop);

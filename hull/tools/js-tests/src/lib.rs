@@ -44,17 +44,25 @@ pub mod logl {
 #[cfg(test)]
 mod console_tests;
 #[cfg(test)]
+mod dom_tests;
+#[cfg(test)]
 mod helpers_tests;
+#[cfg(test)]
+mod initialization_tests;
 #[cfg(test)]
 mod input_actor_tests;
 #[cfg(test)]
 mod input_adapter_tests;
 #[path = "../../../src/javascript.rs"]
 mod javascript;
+#[path = "../../../src/javascript_dom.rs"]
+mod javascript_dom;
 #[path = "../../../src/javascript_input.rs"]
 mod javascript_input;
 #[path = "../../../src/scripts.rs"]
 mod scripts;
+#[path = "../../../src/selectors.rs"]
+mod selectors;
 
 #[cfg(test)]
 mod tests {

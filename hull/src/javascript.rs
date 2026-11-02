@@ -1,6 +1,6 @@
-//! One idle Tokio local task. Page arrival never authorizes execution.
+//! Cooperative page initialization and explicit console execution on one local task.
 use std::{
-    cell::RefCell,
+    cell::{Cell, RefCell},
     collections::VecDeque,
     rc::Rc,
     sync::Arc,
@@ -15,7 +15,11 @@ use trueos::tokio::{
     task::{self, JoinHandle, LocalSet},
 };
 
+use crate::javascript_dom::{self, SharedDocument};
 use crate::scripts::ScriptSource;
+
+const PAGE_EXECUTION_BUDGET: Duration = Duration::from_millis(250);
+const INITIAL_RENDER_WAIT: Duration = Duration::from_millis(250);
 
 #[derive(Debug)]
 pub(super) enum Report {
@@ -51,6 +55,14 @@ pub(super) enum Report {
     Pasted {
         generation: u64,
         result: Result<(), String>,
+    },
+    Initialized {
+        generation: u64,
+        capped: bool,
+        remaining_sources: usize,
+    },
+    BudgetExhausted {
+        generation: u64,
     },
 }
 
@@ -93,6 +105,15 @@ struct Page {
     sources: Arc<[ScriptSource]>,
     requested: bool,
     active: bool,
+    document: Option<SharedDocument>,
+    initial_started: Option<Instant>,
+}
+
+#[derive(Default)]
+struct InitialRender {
+    generation: u64,
+    pending: bool,
+    snapshot: Option<rp5::Document>,
 }
 
 pub(super) struct Runtime {
@@ -108,6 +129,8 @@ pub(super) struct Runtime {
     sequence: u64,
     revision: u64,
     tick: u64,
+    initial: Rc<RefCell<InitialRender>>,
+    exhausted: Rc<Cell<bool>>,
 }
 
 impl Runtime {
@@ -122,6 +145,8 @@ impl Runtime {
         let (input, input_rx) = mpsc::channel(INPUT_CAPACITY);
         let pasted = Rc::new(RefCell::new(VecDeque::new()));
         let (losses, loss_rx) = watch::channel(InputLoss::default());
+        let initial = Rc::new(RefCell::new(InitialRender::default()));
+        let exhausted = Rc::new(Cell::new(false));
         let task = local.spawn_local(worker(
             page_rx,
             tick_rx,
@@ -129,6 +154,8 @@ impl Runtime {
             input_rx,
             loss_rx,
             pasted.clone(),
+            initial.clone(),
+            exhausted.clone(),
         ));
         let mut service = Self {
             local,
@@ -143,6 +170,8 @@ impl Runtime {
             sequence: 0,
             revision: 0,
             tick: 0,
+            initial,
+            exhausted,
         };
         service.drive();
         Ok(service)
@@ -155,23 +184,75 @@ impl Runtime {
         url: impl Into<String>,
         sources: Vec<ScriptSource>,
     ) {
+        self.store_page(generation, url.into(), sources, None);
+    }
+
+    /// A completed parse explicitly admits the finite initial inline script set.
+    /// Layout receives a frozen clone; later script mutations stay in this tree.
+    pub fn begin_page(
+        &mut self,
+        generation: u64,
+        url: impl Into<String>,
+        sources: Vec<ScriptSource>,
+        document: rp5::Document,
+    ) {
+        self.store_page(
+            generation,
+            url.into(),
+            sources,
+            Some(Rc::new(RefCell::new(document))),
+        );
+    }
+
+    fn store_page(
+        &mut self,
+        generation: u64,
+        url: String,
+        sources: Vec<ScriptSource>,
+        document: Option<SharedDocument>,
+    ) {
         self.revision = self.revision.wrapping_add(1).max(1);
         self.pasted.borrow_mut().clear();
+        let automatic = document.is_some();
+        self.exhausted.set(false);
+        *self.initial.borrow_mut() = InitialRender {
+            generation,
+            pending: automatic,
+            snapshot: None,
+        };
         self.pages.send_replace(Some(Page {
             revision: self.revision,
             generation,
-            url: url.into(),
+            url,
             sources: sources.into(),
-            requested: false,
-            active: false,
+            requested: automatic,
+            active: automatic,
+            document,
+            initial_started: automatic.then(Instant::now),
         }));
         // The local task shares this thread. It processes the reset before any
         // other evaluation and cannot race the caller's navigation state.
         self.drive();
     }
 
+    pub fn is_initializing(&self, generation: u64) -> bool {
+        let initial = self.initial.borrow();
+        initial.generation == generation && initial.pending
+    }
+
+    pub fn take_initial_document(&mut self, generation: u64) -> Option<rp5::Document> {
+        let mut initial = self.initial.borrow_mut();
+        if initial.generation != generation {
+            return None;
+        }
+        initial.snapshot.take()
+    }
+
     /// Explicit capability, deliberately not called by Hull's page-loading path.
     pub fn run(&mut self) -> Result<(), &'static str> {
+        if self.exhausted.get() {
+            return Err("page JavaScript execution budget exhausted");
+        }
         let Some(mut page) = self.pages.borrow().clone() else {
             return Err("no page is loaded");
         };
@@ -187,6 +268,9 @@ impl Runtime {
     /// Explicit console execution shares this page's VM without requesting its
     /// collected scripts. Navigation discards queued pastes along with the VM.
     pub fn execute_pasted(&mut self, source: String) -> Result<(), &'static str> {
+        if self.exhausted.get() {
+            return Err("page JavaScript execution budget exhausted");
+        }
         if source.len() > 64 * 1024 {
             return Err("script exceeds 64 KiB");
         }
@@ -209,6 +293,9 @@ impl Runtime {
 
     /// Input is data only; it never creates a VM or authorizes page scripts.
     pub fn enqueue_input(&mut self, generation: u64, mut event: Value) -> EnqueueResult {
+        if self.exhausted.get() {
+            return EnqueueResult::Dormant;
+        }
         let (revision, active) = {
             let page = self.pages.borrow();
             let Some(page) = page.as_ref() else {
@@ -309,6 +396,8 @@ async fn worker(
     mut inputs: mpsc::Receiver<InputPacket>,
     mut losses: watch::Receiver<InputLoss>,
     pasted: Rc<RefCell<VecDeque<PastedScript>>>,
+    initial: Rc<RefCell<InitialRender>>,
+    exhausted: Rc<Cell<bool>>,
 ) {
     let _ = reports.try_send(Report::Online);
     let mut page: Option<Page> = None;
@@ -360,6 +449,7 @@ async fn worker(
             started = true;
             match Engine::new() {
                 Ok(mut value) => {
+                    value.set_execution_budget(PAGE_EXECUTION_BUDGET);
                     let initialized = value
                         .install_console()
                         .and_then(|_| value.install_clock())
@@ -378,6 +468,13 @@ async fn worker(
                             )
                         })
                         .and_then(|_| value.bind_message_handler("__hullInputReceive"));
+                    let initialized = initialized.and_then(|_| {
+                        if let Some(document) = &page.document {
+                            javascript_dom::install(&mut value, document.clone())
+                        } else {
+                            Ok(())
+                        }
+                    });
                     match initialized {
                         Ok(()) => engine = Some(value),
                         Err(error) => {
@@ -385,6 +482,8 @@ async fn worker(
                                 generation: page.generation,
                                 error,
                             });
+                            finish_initial(page, &initial, &reports, true, next);
+                            exhausted.set(true);
                             continue;
                         }
                     }
@@ -394,6 +493,8 @@ async fn worker(
                         generation: page.generation,
                         error,
                     });
+                    finish_initial(page, &initial, &reports, true, next);
+                    exhausted.set(true);
                     continue;
                 }
             }
@@ -401,6 +502,25 @@ async fn worker(
         let Some(engine) = &mut engine else {
             continue;
         };
+        if engine.execution_budget_exhausted() || exhausted.get() {
+            if !exhausted.replace(true) {
+                let _ = reports.try_send(Report::BudgetExhausted {
+                    generation: page.generation,
+                });
+            }
+            finish_initial(page, &initial, &reports, true, next);
+            while inputs.try_recv().is_ok() {}
+            pasted.borrow_mut().clear();
+            continue;
+        }
+        if initial.borrow().pending
+            && page
+                .initial_started
+                .is_some_and(|started| started.elapsed() >= INITIAL_RENDER_WAIT)
+        {
+            finish_initial(page, &initial, &reports, true, next);
+            next = page.sources.len();
+        }
         if engine.has_pending_jobs() {
             let until = Instant::now() + Duration::from_millis(25);
             for _ in 0..16 {
@@ -428,6 +548,10 @@ async fn worker(
             None
         };
         let Some(source) = source else {
+            if initial.borrow().pending {
+                finish_initial(page, &initial, &reports, false, next);
+                continue;
+            }
             // Pasted work is explicit and runs one source per turn after any
             // requested page scripts and their Promise checkpoints.
             let mut selected = None;
@@ -552,6 +676,29 @@ async fn worker(
             result,
         });
     }
+}
+
+fn finish_initial(
+    page: &Page,
+    initial: &RefCell<InitialRender>,
+    reports: &mpsc::Sender<Report>,
+    capped: bool,
+    next: usize,
+) {
+    let mut initial = initial.borrow_mut();
+    if !initial.pending || initial.generation != page.generation {
+        return;
+    }
+    initial.snapshot = page
+        .document
+        .as_ref()
+        .map(|document| document.borrow().clone());
+    initial.pending = false;
+    let _ = reports.try_send(Report::Initialized {
+        generation: page.generation,
+        capped,
+        remaining_sources: page.sources.len().saturating_sub(next),
+    });
 }
 
 fn flush_console(engine: &mut Engine, generation: u64, reports: &mpsc::Sender<Report>) {

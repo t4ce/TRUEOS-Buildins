@@ -76,6 +76,8 @@ mod chrome;
 mod css;
 #[path = "../../../src/favicon.rs"]
 mod favicon;
+#[path = "../../../src/javascript_dom.rs"]
+mod javascript_dom;
 pub mod vshell {
     pub fn linef(_: std::fmt::Arguments<'_>) {}
 }
@@ -85,6 +87,8 @@ mod buttons;
 mod layout;
 #[path = "../../../src/links.rs"]
 mod links;
+#[path = "../../../src/selectors.rs"]
+mod selectors;
 #[path = "../../../src/shellio.rs"]
 mod shellio;
 #[path = "../../../src/viewport.rs"]
@@ -93,6 +97,71 @@ mod viewport;
 mod tests {
     use super::*;
     use static_self::IntoOwned;
+
+    #[test]
+    fn javascript_dom_initialization_changes_first_layout_and_later_writes_leave_it_frozen() {
+        use std::{cell::RefCell, rc::Rc};
+
+        fn render(document: &rp5::Document) -> layout::Export {
+            let mut css = css::Css::default();
+            css.parse_document(document, "https://fixture.test/page");
+            layout::compute(document, &css, (200, 100)).unwrap()
+        }
+
+        let live = Rc::new(RefCell::new(rp5::parse(
+            "<!doctype html><style>#message{color:red;background-color:black}</style><div id='message'>before<b>child</b></div>",
+        )));
+        let mut engine = hull_quickjs::Engine::new().unwrap();
+        javascript_dom::install(&mut engine, live.clone()).unwrap();
+        engine.eval(
+            br"const message=document.querySelector('#message');message.textContent='initialized';message.setAttribute('style','color:rgb(12,34,56);background-color:rgb(78,90,123);width:120px;height:24px')",
+            "initial-render.js",
+            false,
+        ).unwrap();
+
+        let frozen = live.borrow().clone();
+        let first = render(&frozen);
+        assert_eq!(first.text_runs.len(), 1);
+        assert_eq!(first.text_runs[0].text, "initialized");
+        assert_eq!(first.text_runs[0].color, [12, 34, 56, 255]);
+        assert!(
+            first
+                .background_quads
+                .iter()
+                .any(|quad| quad.color == [78, 90, 123, 255])
+        );
+        assert!(first.svg.contains(">initialized</text>"));
+        assert!(first.svg.contains("fill=\"#0c2238\""));
+        assert!(!first.svg.contains("before"));
+        assert!(!first.svg.contains(">child</text>"));
+
+        engine.eval(
+            br"message.textContent='later';message.setAttribute('style','color:red;background-color:lime;width:120px;height:24px')",
+            "after-freeze.js",
+            false,
+        ).unwrap();
+        let later = render(&live.borrow());
+        assert_eq!(later.text_runs[0].text, "later");
+        assert_eq!(later.text_runs[0].color, [255, 0, 0, 255]);
+        assert!(
+            later
+                .background_quads
+                .iter()
+                .any(|quad| quad.color == [0, 255, 0, 255])
+        );
+
+        let frozen_again = render(&frozen);
+        assert_eq!(frozen_again.svg, first.svg);
+        assert_eq!(frozen_again.text_runs[0].text, "initialized");
+        assert_eq!(frozen_again.text_runs[0].color, [12, 34, 56, 255]);
+        assert!(
+            frozen_again
+                .background_quads
+                .iter()
+                .any(|quad| quad.color == [78, 90, 123, 255])
+        );
+    }
+
     #[test]
     fn button_feedback_collects_only_visible_enabled_controls_and_keeps_css_color() {
         let (_, painted) = export(

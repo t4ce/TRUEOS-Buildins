@@ -4,12 +4,71 @@ Hull starts one idle Tokio local task with its event loop. It shares Hull's
 thread; there is no additional OS worker. The standalone QuickJS crate has an
 opaque native value boundary and no dependency on the old workbench/experiments.
 
-Page extraction only stores script bytes and references. Navigation and page
-loading never execute them. The terminal's explicit `:run` calls `Runtime::run()`
-once for the collected sources. Input never creates a VM or activates dormant
-scripts. Navigation drops the context, globals, promise jobs, listeners, queued
-input and queued pastes. The new page requires explicit execution again. Closing
-Hull drops the task.
+After rp5 completes an HTML parse, Hull admits its collected inline JavaScript
+for a finite initialization pass. External script references remain unfetched;
+there is no guest network or filesystem API. Navigation drops the context,
+document wrappers, Promise jobs, listeners, queued input and queued pastes.
+Closing Hull drops the task. The lower-level `replace_page` path remains inert
+for navigation reset and explicit-execution fixtures.
+
+## Initial document and rendering
+
+The parsed rp5 document lives behind a single Rust-owned shared handle. Native
+JSON calls connect lazily created JavaScript node wrappers to that same arena;
+node identity is stable across queries and detachment. No second HTML parser or
+independently maintained JavaScript tree is involved.
+
+Initialization evaluates at most one source per task turn, with Promise jobs
+before the next source (at most sixteen jobs per batch). There are two bounds:
+
+- Each page VM gets **250 ms total active execution time**, shared by bootstrap,
+  sources, Promise jobs, input callbacks, console pastes and native DOM calls.
+  Idle time between turns does not spend this allowance. It is set once per
+  page, not renewed for each script. Exhaustion refuses further guest work.
+- The initial render waits at most a **250 ms wall-time window**, checked when
+  the actor is driven. This also bounds a long collection of tiny sources or a
+  self-replenishing microtask queue. At the cutoff, unstarted page sources are
+  omitted from this pass. Remaining jobs may use the remaining active budget.
+
+When admitted work finishes or a bound is reached, Hull clones the current
+document once for layout. CSS extraction runs on that frozen clone, so admitted
+text, attribute and authored style changes participate in the first frame and
+saved layout SVG. Later mutations affect the live script-visible document only:
+they do not request layout, redraw, update native hit boxes or rewrite the SVG.
+Native button hover and scrolling continue to operate on the rendered snapshot.
+
+The work is interleaved on Hull's thread, not parallel on another OS thread.
+Each guest call retains its 25 ms cooperative interrupt. Interrupted calls abort
+rather than resume; completed mutations remain. These bounds are cooperative:
+parsing, GC, native operations and cloning can overrun a checkpoint. Rust selector
+walks have their own finite resource limits. This is not an OS sandbox or a hard
+250 ms UI-latency guarantee.
+
+## Small standard DOM subset
+
+- `document.getElementById`, `querySelector`, `querySelectorAll`,
+  `documentElement`, `head`, and `body`.
+- Element queries, `getAttribute`, `hasAttribute`, `setAttribute`,
+  `removeAttribute`, reflected HTML `id`/`className`, `tagName`, `localName`, and
+  `namespaceURI`. Authored CSS is accessible through the ordinary `style`
+  attribute, not a fabricated computed style API.
+- Node `textContent`, `nodeValue`, `nodeName`, `nodeType`, parent/child/sibling
+  navigation, `ownerDocument`, and `isConnected`.
+- Static `NodeList` results with indexed access, `item`, iteration and `forEach`.
+
+Selectors use the CSS parser and shared matcher, supporting common type, ID,
+class, attribute, combinator, structural and `:scope`/`:is`/`:where`/`:not`
+queries. Malformed selectors raise `SyntaxError`; unsupported valid features
+raise `NotSupportedError`. Bounds raise `QuotaExceededError`. There is no
+`window`, form-control value model, `innerHTML`, computed layout, tree insertion
+API, DOM event system or observer API. SVG `className` is explicitly unsupported
+instead of approximating `SVGAnimatedString`. Unpaired UTF-16 surrogates are
+rejected because rp5 stores Unicode scalar strings.
+
+The native gateway admits at most 1 MiB of JSON per call, 256 KiB per assigned
+DOM string, 4 MiB cumulative assigned bytes, 4096 added text nodes and 32768
+query results. Selector queries also have input, nesting, node and traversal
+limits. Unsupported features fail explicitly rather than returning guessed data.
 
 ## Terminal console
 
@@ -21,7 +80,8 @@ terminal-capable NewShell3 Hull instance before creating a browser window.
 
 - `:scripts` lists collected inline/external sources, node IDs, types, byte counts
   and resolved origins. External sources are labeled unfetched.
-- `:run` requests the collected inline JavaScript once for this page.
+- `:run` is retained for explicitly staged inert pages. Normal HTML navigation
+  already requests its initial inline sources; this command does not rerun them.
 - `:paste` starts an inert multiline JavaScript buffer; type `:end` on its own
   line to execute it, or `:cancel`/Ctrl-C to discard it. Bracketed paste preserves
   script text literally: command-looking lines inside the pasted payload do not
@@ -30,10 +90,10 @@ terminal-capable NewShell3 Hull instance before creating a browser window.
 - Esc restores the terminal and parks it back at the shell. `tui` re-enters the
   same console while Hull continues processing its browser window. Ctrl-Q exits.
 
-Pasted sources require a loaded page and share its VM and globals. They enable
-the input endpoint but do not request the page's collected scripts. Requested
-page sources and their Promise jobs finish before queued pastes; each paste runs
-as one classic script per turn, with Promise checkpoints between sources.
+Pasted sources require a loaded page and share its VM, live document, globals
+and remaining execution budget. They do not alter the frozen render snapshot.
+Requested page sources and their Promise jobs precede queued pastes; each paste
+runs as one classic script per turn, with Promise checkpoints between sources.
 
 The text console supports `log`, `debug`, `info`, `warn`, `error`, and `assert`.
 Arguments are joined with spaces; `%s`, `%d`, `%i`, `%f`, `%o`, `%O`, and `%%`
@@ -63,10 +123,10 @@ messages → native JSON parsing/function call → callbacks in the Tokio task.
 JSON payloads are never interpolated as JavaScript source. The receiver is pinned
 as a native JS value and its temporary global name is removed.
 
-The native input endpoint is `hullInput`. **There is no DOM connection:**
-no `document`, `window`, nodes, selectors, hit testing, scene commands, layout,
-painting, or SVG access. Callbacks may change their own JavaScript business state;
-they have no path to change Hull's parsed document, rendered frame or SVG snapshot.
+The native input endpoint is `hullInput`. It does not dispatch DOM events or
+perform hit testing. Callbacks may change JavaScript state and the live document
+within the remaining budget, but have no scene commands, layout, painting or SVG
+access and do not invalidate the rendered snapshot.
 
 After explicit execution, script code can subscribe with:
 
@@ -117,16 +177,15 @@ rejected explicitly; Hull logs the rejection without logging typed text.
 
 ## Execution limits and scope
 
-Explicit execution evaluates one source per turn; data MIME types are skipped,
+Execution evaluates one source per turn; data MIME types are skipped,
 external references remain unfetched, and modules have no import loader. Jobs
 run before the following source, at most sixteen per batch. There are no
 filesystem, network or timer bindings. Unhandled Promise rejection tracking is
 not installed yet.
 
-The engine defaults to a 32 MiB heap, 1 MiB stack and 25 ms cooperative execution
-interrupt, with at most 1 ms extra cooperative diagnostic time. Parsing, GC and
-native builtins can overrun it: this is not a hard UI-latency guarantee or an OS
-sandbox. Interrupted evaluation aborts rather than resuming on the next turn.
+The engine defaults to a 32 MiB heap and 1 MiB stack. Its optional cumulative
+allowance charges native callbacks and exception diagnostics as well as guest
+evaluation. Diagnostics get at most 1 ms and cannot renew an exhausted budget.
 
 Host fixtures in `tools/js-tests` compile the production actor and Winit adapter.
 The engine crate has separate native tests; `tools/layout-tests` checks the static

@@ -1,13 +1,14 @@
 Host fixtures compile Hull's production script extractor and JavaScript actor,
 using a minimal trueos facade over the repository's Tokio and the native
-hull-quickjs engine. They do not include a DOM, browser API environment, network
-client, the qjs-web-lab copy, or kernel UI services. Input adapter fixtures
+hull-quickjs engine, minimal DOM gateway and shared selector matcher. They do not
+include a network client, the qjs-web-lab copy, or kernel UI services. Input adapter fixtures
 use the actual Winit TRUEOS/core record types; they never create a window.
 
-The default is deliberately inactive. Actor startup and page replacement never
-execute or classify scripts. Fixtures call Runtime::run explicitly to test the
-available execution capability. Navigation drops the old VM and pending work;
-the replacement page stays inactive until another explicit run request.
+Actor startup and replace_page remain inactive. begin_page admits the parsed
+document's inline scripts with one 250 ms active execution allowance and a 250 ms
+initial wall window. Initialization fixtures check real rp5 mutations, frozen
+render snapshots, faults, navigation reset, infinite sources and microtask
+chains. Other fixtures call Runtime::run explicitly to isolate execution paths.
 
 Fixtures cover explicit script/Promise ordering, per-poll work admission,
 navigation isolation, native syntax errors, metadata-only JSON/data skips,
@@ -24,7 +25,8 @@ keyboard data/modifiers/raw bytes, loss/reset ordering, IME byte ranges, no
 duplicate standard pointer delivery, immutable payloads/snapshots, callback
 ordering and Promise jobs, listener errors/once/removal, inactive input discard,
 navigation epoch isolation, oversized-input rejection, and queue overflow reset.
-No input fixture exposes or connects a DOM, layout, SVG, or renderer.
+Input-only fixtures use inert staging without a DOM. Initialization fixtures
+connect the actual minimal DOM, but never create a window or trigger a redraw.
 
 Console fixtures cover explicit pasted execution without requesting collected
 scripts, shared page globals, Promise ordering, callback logs, navigation reset,
@@ -32,6 +34,8 @@ paste queue/byte limits, console overflow and error recovery. Base64 fixtures
 check byte-string round trips, whitespace/padding, coercion and invalid input.
 Native engine integration tests additionally cover bounded UTF-8 console text,
 basic formatting/assertions, interrupted conversions and monotonic time reads.
+Native host/budget fixtures check cumulative time across sources/jobs/callbacks,
+idle exclusion, bounded JSON transport, host errors and exhausted-budget refusal.
 
 Input throughput regressions admit at most 32 messages per UI turn and verify a
 97-message FIFO burst spans at least four turns, with Promise jobs between

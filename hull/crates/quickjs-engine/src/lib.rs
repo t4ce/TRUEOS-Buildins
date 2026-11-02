@@ -4,9 +4,10 @@
 //! upstream header. Engine ownership stays on one local executor task; dropping
 //! an engine releases its context, pending jobs and runtime together.
 use std::{
-    cell::Cell,
+    cell::{Cell, RefCell},
     ffi::{CStr, CString, c_char, c_int, c_void},
     marker::PhantomData,
+    panic::{AssertUnwindSafe, catch_unwind},
     ptr::NonNull,
     rc::Rc,
     time::{Duration, Instant},
@@ -35,6 +36,51 @@ impl Default for Limits {
 struct InterruptState {
     deadline: Cell<Instant>,
     started: Instant,
+}
+
+const HOST_JSON_BYTES: usize = 1024 * 1024;
+type HostHandler = dyn FnMut(&[u8]) -> Result<Vec<u8>, String>;
+struct HostState {
+    handler: RefCell<Box<HostHandler>>,
+    response: RefCell<Vec<u8>>,
+}
+
+unsafe extern "C" fn host_call(
+    opaque: *mut c_void,
+    input: *const c_char,
+    length: usize,
+    output: *mut *const c_char,
+    output_length: *mut usize,
+) -> c_int {
+    // SAFETY: the engine owns this stable Box until after the native context is
+    // freed; C supplies valid request storage and output slots for this call.
+    let state = unsafe { &*opaque.cast::<HostState>() };
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        if length > HOST_JSON_BYTES {
+            return Err("host request exceeds 1 MiB".into());
+        }
+        let input = unsafe { std::slice::from_raw_parts(input.cast::<u8>(), length) };
+        let mut handler = state
+            .handler
+            .try_borrow_mut()
+            .map_err(|_| "host handler is already executing".to_owned())?;
+        handler(input)
+    }))
+    .unwrap_or_else(|_| Err("host handler panicked".into()));
+    let (status, bytes) = match result {
+        Ok(bytes) if bytes.len() <= HOST_JSON_BYTES => (0, bytes),
+        Ok(_) => (-1, b"host response exceeds 1 MiB".to_vec()),
+        Err(error) if error.len() <= HOST_JSON_BYTES => (-1, error.into_bytes()),
+        Err(_) => (-1, b"host error exceeds 1 MiB".to_vec()),
+    };
+    let mut response = state.response.borrow_mut();
+    *response = bytes;
+    response.push(0); // JS_ParseJSON requires a terminator beyond its exact length.
+    unsafe {
+        *output = response.as_ptr().cast();
+        *output_length = response.len() - 1;
+    }
+    status
 }
 unsafe extern "C" fn elapsed_ms(opaque: *mut c_void) -> f64 {
     // SAFETY: the stable interrupt state outlives its native context.
@@ -89,6 +135,19 @@ unsafe extern "C" {
         opaque: *mut c_void,
     ) -> *mut c_void;
     fn hull_quickjs_free(engine: *mut c_void);
+    fn hull_quickjs_bind_host_handler(
+        engine: *mut c_void,
+        name: *const c_char,
+        handler: unsafe extern "C" fn(
+            *mut c_void,
+            *const c_char,
+            usize,
+            *mut *const c_char,
+            *mut usize,
+        ) -> c_int,
+        opaque: *mut c_void,
+    ) -> c_int;
+    fn hull_quickjs_discard_exception(engine: *mut c_void);
     fn hull_quickjs_install_console(engine: *mut c_void) -> c_int;
     fn hull_quickjs_console_pop(
         engine: *mut c_void,
@@ -121,6 +180,8 @@ pub struct Engine {
     native: NonNull<c_void>,
     interrupt: Box<InterruptState>,
     limits: Limits,
+    budget_remaining: Cell<Option<Duration>>,
+    host: Option<Box<HostState>>,
     _local_owner: PhantomData<Rc<()>>,
 }
 impl Engine {
@@ -151,23 +212,24 @@ impl Engine {
             native: NonNull::new(native).ok_or("QuickJS runtime/context allocation failed")?,
             interrupt: state,
             limits,
+            budget_remaining: Cell::new(None),
+            host: None,
             _local_owner: PhantomData,
         })
     }
     /// Install a text-only console backed by 64 native records, at most 4096
     /// UTF-8 bytes each. The caller explicitly drains output outside guest calls.
     pub fn install_console(&mut self) -> Result<(), String> {
-        self.begin_call();
+        let started = self.begin_call()?;
         // SAFETY: installation operates on the owned context only.
-        if unsafe { hull_quickjs_install_console(self.native.as_ptr()) } < 0 {
-            return Err(self.exception());
-        }
+        let status = unsafe { hull_quickjs_install_console(self.native.as_ptr()) };
+        self.finish_call(started, status)?;
         self.eval(include_bytes!("console.js"), "hull:console", false)
     }
 
     /// Install monotonic milliseconds since this engine was created. No timers.
     pub fn install_clock(&mut self) -> Result<(), String> {
-        self.begin_call();
+        let started = self.begin_call()?;
         // SAFETY: the stable state and callback outlive the owned native context.
         let status = unsafe {
             hull_quickjs_install_clock(
@@ -178,11 +240,58 @@ impl Engine {
                     .cast(),
             )
         };
-        if status < 0 {
-            Err(self.exception())
-        } else {
-            Ok(())
+        self.finish_call(started, status)
+    }
+
+    /// Install one synchronous JSON endpoint. No native JS values escape C.
+    /// Input and output are limited to 1 MiB each. The callback must do bounded
+    /// work: its elapsed time is charged, but native work cannot be preempted.
+    pub fn bind_host_handler(
+        &mut self,
+        global_name: &str,
+        handler: impl FnMut(&[u8]) -> Result<Vec<u8>, String> + 'static,
+    ) -> Result<(), String> {
+        if self.host.is_some() {
+            return Err("host handler is already installed".into());
         }
+        let name =
+            CString::new(global_name).map_err(|_| "host handler name contains a NUL byte")?;
+        let mut state = Box::new(HostState {
+            handler: RefCell::new(Box::new(handler)),
+            response: RefCell::new(Vec::new()),
+        });
+        let started = self.begin_call()?;
+        // SAFETY: Box storage is stable and retained on every successful native
+        // installation, including if accounting expires immediately afterwards.
+        let status = unsafe {
+            hull_quickjs_bind_host_handler(
+                self.native.as_ptr(),
+                name.as_ptr(),
+                host_call,
+                (&mut *state as *mut HostState).cast(),
+            )
+        };
+        if status >= 0 {
+            self.host = Some(state);
+        }
+        self.finish_call(started, status)
+    }
+
+    /// Set a shared allowance for active native engine calls, including host
+    /// callbacks and diagnostic conversion. Idle time between calls is excluded.
+    /// Only the host can set this allowance; guest sources cannot renew it.
+    pub fn set_execution_budget(&mut self, budget: Duration) {
+        self.budget_remaining.set(Some(budget));
+    }
+
+    pub fn execution_budget_remaining(&self) -> Option<Duration> {
+        self.budget_remaining.get()
+    }
+
+    pub fn execution_budget_exhausted(&self) -> bool {
+        self.budget_remaining
+            .get()
+            .is_some_and(|remaining| remaining.is_zero())
     }
 
     pub fn take_console(&mut self) -> ConsoleBatch {
@@ -227,17 +336,49 @@ impl Engine {
         batch.dropped = unsafe { hull_quickjs_console_dropped(self.native.as_ptr()) };
         batch
     }
-    fn begin_call(&self) {
-        self.interrupt
-            .deadline
-            .set(Instant::now() + self.limits.time_slice);
+    fn begin_call(&self) -> Result<Instant, String> {
+        let allowance = self
+            .budget_remaining
+            .get()
+            .map_or(self.limits.time_slice, |remaining| {
+                remaining.min(self.limits.time_slice)
+            });
+        if allowance.is_zero() {
+            return Err("JavaScript execution budget exhausted".into());
+        }
+        let started = Instant::now();
+        self.interrupt.deadline.set(started + allowance);
+        Ok(started)
     }
-    fn exception(&self) -> String {
+    fn finish_call(&self, started: Instant, status: c_int) -> Result<(), String> {
+        let result = if status < 0 {
+            Err(self.exception(started))
+        } else {
+            Ok(())
+        };
+        if let Some(remaining) = self.budget_remaining.get() {
+            self.budget_remaining
+                .set(Some(remaining.saturating_sub(started.elapsed())));
+        }
+        if result.is_ok() && self.execution_budget_exhausted() {
+            Err("JavaScript execution budget exhausted".into())
+        } else {
+            result
+        }
+    }
+    fn exception(&self, started: Instant) -> String {
         // Error conversion can invoke user code. Give diagnostics a separate,
         // small cooperative allowance rather than another full evaluation slice.
-        self.interrupt
-            .deadline
-            .set(Instant::now() + self.limits.time_slice.min(Duration::from_millis(1)));
+        let diagnostic = self.limits.time_slice.min(Duration::from_millis(1));
+        let diagnostic = self.budget_remaining.get().map_or(diagnostic, |remaining| {
+            diagnostic.min(remaining.saturating_sub(started.elapsed()))
+        });
+        if diagnostic.is_zero() {
+            // No guest coercion is allowed to obtain another execution slice.
+            unsafe { hull_quickjs_discard_exception(self.native.as_ptr()) };
+            return "JavaScript execution budget exhausted".into();
+        }
+        self.interrupt.deadline.set(Instant::now() + diagnostic);
         // SAFETY: the C adapter returns its own live, NUL-terminated error buffer.
         unsafe { CStr::from_ptr(hull_quickjs_exception(self.native.as_ptr())) }
             .to_string_lossy()
@@ -252,7 +393,7 @@ impl Engine {
         let mut terminated = Vec::with_capacity(source.len() + 1);
         terminated.extend_from_slice(source);
         terminated.push(0);
-        self.begin_call();
+        let started = self.begin_call()?;
         // SAFETY: the adapter owns the native context and receives valid inputs.
         let status = unsafe {
             hull_quickjs_eval(
@@ -263,11 +404,7 @@ impl Engine {
                 module as c_int,
             )
         };
-        if status < 0 {
-            Err(self.exception())
-        } else {
-            Ok(())
-        }
+        self.finish_call(started, status)
     }
     /// Pin an explicitly installed global function as the native message receiver.
     /// The configurable global property is removed after validation, so later
@@ -276,16 +413,12 @@ impl Engine {
     pub fn bind_message_handler(&mut self, global_name: &str) -> Result<(), String> {
         let name =
             CString::new(global_name).map_err(|_| "QuickJS handler name contains a NUL byte")?;
-        self.begin_call();
+        let started = self.begin_call()?;
         // SAFETY: the adapter owns all native values, including the retained
         // function, and the property name stays live for the synchronous call.
         let status =
             unsafe { hull_quickjs_bind_message_handler(self.native.as_ptr(), name.as_ptr()) };
-        if status < 0 {
-            Err(self.exception())
-        } else {
-            Ok(())
-        }
+        self.finish_call(started, status)
     }
     /// Parse a JSON message as data and call the pinned native receiver once.
     /// Payload bytes are never interpolated into executable JavaScript source.
@@ -295,29 +428,23 @@ impl Engine {
         let mut terminated = Vec::with_capacity(json.len() + 1);
         terminated.extend_from_slice(json);
         terminated.push(0);
-        self.begin_call();
+        let started = self.begin_call()?;
         // SAFETY: the native JSON parser receives the exact byte length and a
         // live NUL-terminated buffer; all parsed values stay inside the adapter.
         let status = unsafe {
             hull_quickjs_dispatch_json(self.native.as_ptr(), terminated.as_ptr().cast(), json.len())
         };
-        if status < 0 {
-            Err(self.exception())
-        } else {
-            Ok(())
-        }
+        self.finish_call(started, status)
     }
     /// Execute at most one pending promise job. A caller can yield its local
     /// Tokio task between jobs instead of draining a page's queue synchronously.
     pub fn execute_pending_job(&mut self) -> Result<bool, String> {
-        self.begin_call();
+        let started = self.begin_call()?;
         // SAFETY: the adapter owns every context and transfers exceptions back
         // into the engine's context before returning an error status.
-        match unsafe { hull_quickjs_pending_job(self.native.as_ptr()) } {
-            value if value < 0 => Err(self.exception()),
-            0 => Ok(false),
-            _ => Ok(true),
-        }
+        let status = unsafe { hull_quickjs_pending_job(self.native.as_ptr()) };
+        self.finish_call(started, status)?;
+        Ok(status != 0)
     }
     pub fn has_pending_jobs(&self) -> bool {
         // SAFETY: the engine is live and cannot be shared across threads.

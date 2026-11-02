@@ -1,5 +1,6 @@
 //! Typed Lightning CSS -> Taffy bridge, with token substitution before property resolution.
 use super::css::Css;
+use crate::selectors::{MatchDom, matches_components};
 #[path = "custom_properties.rs"]
 mod custom_properties;
 use custom_properties::Variables;
@@ -11,11 +12,9 @@ use lightningcss::properties::{
     },
     size::Size as CssSize,
 };
-use lightningcss::selector::Selector;
 use lightningcss::values::length::{
     LengthPercentage as CssLengthPercentage, LengthPercentageOrAuto, LengthValue,
 };
-use parcel_selectors::parser::Component;
 use rp5::{Document, NodeId as HtmlId, NodeKind};
 use std::collections::HashMap;
 use std::fmt::Write;
@@ -771,110 +770,6 @@ fn image_style(style: &mut Style, attrs: &[rp5::Attribute], viewport: (u32, u32)
     }
 }
 
-fn matches_selector(
-    document: &Document,
-    dom: &MatchDom<'_>,
-    id: HtmlId,
-    selector: &Selector<'_>,
-) -> bool {
-    let components: Vec<_> = selector.iter_raw_match_order().cloned().collect();
-    matches_components(document, dom, id, &components, &mut Vec::new())
-}
-
-fn matches_components(
-    document: &Document,
-    dom: &MatchDom<'_>,
-    id: HtmlId,
-    components: &[lightningcss::selector::Component<'_>],
-    pending: &mut Vec<(HtmlId, usize)>,
-) -> bool {
-    use lightningcss::selector::PseudoClass;
-    use parcel_selectors::parser::Combinator;
-    pending.clear();
-    pending.push((id, 0));
-    while let Some((id, start)) = pending.pop() {
-        let Some((name, namespace, _)) = document.element(id) else {
-            continue;
-        };
-        let attr = |name: &str| dom.attributes[id].get(name).copied();
-        let mut matched = true;
-        for (offset, component) in components.iter().enumerate().skip(start) {
-            if let Component::Combinator(combinator) = component {
-                let next = offset + 1;
-                match combinator {
-                    Combinator::Child => {
-                        if let Some(parent) = document.nodes[id]
-                            .parent
-                            .filter(|&parent| document.element(parent).is_some())
-                        {
-                            pending.push((parent, next));
-                        }
-                    }
-                    Combinator::Descendant => {
-                        let mut parent = document.nodes[id].parent;
-                        while let Some(id) = parent {
-                            if document.element(id).is_some() {
-                                pending.push((id, next));
-                            }
-                            parent = document.nodes[id].parent;
-                        }
-                    }
-                    Combinator::NextSibling | Combinator::LaterSibling => {
-                        let mut previous = dom.siblings[id].previous;
-                        while let Some(sibling) = previous {
-                            pending.push((sibling, next));
-                            if matches!(combinator, Combinator::NextSibling) {
-                                break;
-                            }
-                            previous = dom.siblings[sibling].previous;
-                        }
-                    }
-                    _ => {}
-                }
-                matched = false;
-                break;
-            }
-            let ok=match component {
-                Component::ExplicitUniversalType|Component::ExplicitAnyNamespace=>true,
-                Component::LocalName(local)=>name==local.name.as_ref(),
-                Component::ID(value)=>attr("id")==Some(value.as_ref()),
-                Component::Class(value)=>dom.classes[id].contains(value.as_ref()),
-                Component::AttributeInNoNamespaceExists{local_name,..}=>attr(local_name.as_ref()).is_some(),
-                Component::AttributeInNoNamespace{local_name,operator,value,case_sensitivity,never_matches,..}=>!never_matches && attr(local_name.as_ref()).is_some_and(|actual|operator.eval_str(actual,value.as_ref(),case_sensitivity.to_unconditional(namespace==rp5::Namespace::Html))),
-                Component::Where(selectors)|Component::Is(selectors)=>selectors.iter().any(|selector|matches_selector(document,dom,id,selector)),
-                Component::Negation(selectors)=>!selectors.iter().any(|selector|matches_selector(document,dom,id,selector)),
-                Component::Root=>document.nodes[id].parent==Some(document.root),
-                Component::Empty=>document.nodes[id].children.iter().all(|&child|matches!(&document.nodes[child].kind,NodeKind::Comment(_)) || matches!(&document.nodes[child].kind,NodeKind::Text(text) if text.is_empty())),
-                Component::Nth(nth)=>{
-                    let siblings = dom.siblings[id];
-                    let (index, count) = if nth.ty.is_of_type() { (siblings.type_index, siblings.type_count) } else { (siblings.index, siblings.count) };
-                    if nth.ty.is_only() { count == 1 } else if index > 0 {
-                        let position = if nth.ty.is_from_end() { count-index+1 } else { index } as i32;
-                        let delta = position - nth.b;
-                        if nth.a == 0 { delta == 0 } else { delta % nth.a == 0 && delta / nth.a >= 0 }
-                    } else { false }
-                }
-                Component::NonTSPseudoClass(pseudo)=>match pseudo {
-                    PseudoClass::Link|PseudoClass::AnyLink(_)=>matches!(name,"a"|"area"|"link") && attr("href").is_some(),
-                    PseudoClass::Disabled=>attr("disabled").is_some(),
-                    PseudoClass::Enabled=>matches!(name,"button"|"input"|"select"|"textarea"|"option"|"optgroup") && attr("disabled").is_none(),
-                    PseudoClass::Checked=>attr("checked").is_some() || (name=="option" && attr("selected").is_some()),
-                    _=>false,
-                },
-                _=>false,
-            };
-            if !ok {
-                matched = false;
-                break;
-            }
-        }
-        if matched {
-            return true;
-        }
-    }
-    false
-}
-
 #[derive(Clone, Copy)]
 struct TextMetrics {
     font_size: f32,
@@ -1511,79 +1406,6 @@ fn apply_property(style: &mut Style, property: &Property<'_>, context: ResolveCo
 }
 
 type Declaration<'a> = (bool, bool, u32, usize, &'a Property<'static>);
-#[derive(Clone, Copy, Default)]
-struct SiblingPosition {
-    previous: Option<HtmlId>,
-    index: usize,
-    count: usize,
-    type_index: usize,
-    type_count: usize,
-}
-
-/// Immutable DOM facts shared by every selector match in this layout pass.
-struct MatchDom<'a> {
-    attributes: Vec<HashMap<&'a str, &'a str>>,
-    classes: Vec<std::collections::HashSet<&'a str>>,
-    siblings: Vec<SiblingPosition>,
-}
-
-impl<'a> MatchDom<'a> {
-    fn new(document: &'a Document) -> Self {
-        let mut attributes = Vec::with_capacity(document.nodes.len());
-        let mut classes = Vec::with_capacity(document.nodes.len());
-        for id in 0..document.nodes.len() {
-            let mut node_attributes = HashMap::new();
-            let mut node_classes = std::collections::HashSet::new();
-            if let Some((_, _, attrs)) = document.element(id) {
-                for attribute in attrs
-                    .iter()
-                    .filter(|attribute| attribute.namespace.is_none())
-                {
-                    // Preserve the matcher's first-attribute behavior.
-                    node_attributes
-                        .entry(attribute.name.as_str())
-                        .or_insert(attribute.value.as_str());
-                }
-                if let Some(value) = node_attributes.get("class") {
-                    node_classes.extend(value.split_ascii_whitespace());
-                }
-            }
-            attributes.push(node_attributes);
-            classes.push(node_classes);
-        }
-        let mut siblings = vec![SiblingPosition::default(); document.nodes.len()];
-        for parent in &document.nodes {
-            let mut previous = None;
-            let mut count = 0;
-            let mut types = HashMap::new();
-            for &id in &parent.children {
-                if let Some((name, namespace, _)) = document.element(id) {
-                    count += 1;
-                    let type_count = types.entry((namespace as u8, name)).or_insert(0);
-                    *type_count += 1;
-                    siblings[id] = SiblingPosition {
-                        previous,
-                        index: count,
-                        type_index: *type_count,
-                        ..SiblingPosition::default()
-                    };
-                    previous = Some(id);
-                }
-            }
-            for &id in &parent.children {
-                if let Some((name, namespace, _)) = document.element(id) {
-                    siblings[id].count = count;
-                    siblings[id].type_count = types[&(namespace as u8, name)];
-                }
-            }
-        }
-        Self {
-            attributes,
-            classes,
-            siblings,
-        }
-    }
-}
 
 struct IndexedStyle<'a> {
     rule: &'a lightningcss::rules::style::StyleRule<'static>,
