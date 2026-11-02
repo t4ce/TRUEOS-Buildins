@@ -10,6 +10,7 @@ test = false
 bench = false
 
 [dependencies]
+infer = { path = "../../TRUEOS/vendor/infer", default-features = false }
 hull-quickjs = { path = "crates/quickjs-engine" }
 crossterm = { path = "../../vendor/crossterm-0.29.0-trueos", default-features = false, features = ["events", "bracketed-paste"] }
 trueos = { path = "../../api", features = ["ui4-scene", "tokio-runtime"] }

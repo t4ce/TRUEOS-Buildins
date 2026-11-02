@@ -70,15 +70,7 @@ struct Hull {
     page_url: String,
     console: Option<console::Console>,
     queued_urls: VecDeque<QueuedNavigation>,
-    navigation_probe: Option<NavigationProbe>,
-    ready_navigation: Option<QueuedNavigation>,
     pending_submissions: VecDeque<DownloadSubmission>,
-}
-
-struct NavigationProbe {
-    url: String,
-    new_shell: bool,
-    future: Pin<Box<dyn Future<Output = Result<Vec<u8>, i32>>>>,
 }
 
 struct QueuedNavigation {
@@ -93,55 +85,13 @@ struct DownloadSubmission {
 }
 
 impl Hull {
-    fn begin_navigation_probe(&mut self, url: String, new_shell: bool) {
-        let path = format!("vFile:hull-navigation/{url}").into_bytes();
-        let future = Box::pin(async move { trueos::async_fs::read_file(&path).await });
-        self.navigation_probe = Some(NavigationProbe {
-            url,
-            new_shell,
-            future,
-        });
-    }
-
-    fn poll_navigation_probe(&mut self) {
-        let Some(probe) = self.navigation_probe.as_mut() else {
-            return;
-        };
-        let mut context = Context::from_waker(Waker::noop());
-        let result = match probe.future.as_mut().poll(&mut context) {
-            Poll::Pending => return,
-            Poll::Ready(result) => result,
-        };
-        let probe = self.navigation_probe.take().unwrap();
-        let decision = match result {
-            Ok(decision) if matches!(decision.as_slice(), b"D" | b"N") => decision,
-            Ok(_) => {
-                shellio::linef(format_args!(
-                    "hull: invalid download probe response: {}",
-                    probe.url
-                ));
-                return;
-            }
-            Err(code) => {
-                shellio::linef(format_args!(
-                    "hull: link probe failed ({code}): {}; link left unopened",
-                    probe.url
-                ));
-                return;
-            }
-        };
-        let is_download = decision.as_slice() == b"D";
-        if is_download {
-            self.submit_download(probe.url, None);
-        } else if probe.new_shell {
-            self.launch_navigation(probe.url);
-        } else if self.page_pending() {
-            self.ready_navigation = Some(QueuedNavigation {
-                url: probe.url,
-                new_shell: false,
-            });
+    fn open_link(&mut self, url: String, new_shell: bool) {
+        if links::download_url(&url) {
+            self.submit_download(url, None);
+        } else if new_shell {
+            self.launch_navigation(url);
         } else {
-            self.start_page(probe.url);
+            self.start_page(url);
         }
     }
 
@@ -417,8 +367,7 @@ impl Hull {
     }
 
     fn page_pending(&self) -> bool {
-        self.navigation_probe.is_some()
-            || self.download.is_some()
+        self.download.is_some()
             || self.css.is_pending()
             || (self.document.is_some()
                 && (!self.layout_attempted
@@ -448,7 +397,7 @@ impl Hull {
                         format_args!("hull: downloaded {} bytes={}", self.page_url, bytes.len()),
                     );
                     if links::binary_download(&bytes) {
-                        // A server may give HEAD different headers from GET.
+                        // Undeclared binary responses are handed off with their received bytes.
                         // Never feed executable/archive payloads to the HTML parser.
                         let _ = netfs::fetch_bytes_discard(operation);
                         self.download = None;
@@ -599,7 +548,6 @@ impl ApplicationHandler for Hull {
             }
         }
         self.poll_console(event_loop);
-        self.poll_navigation_probe();
         self.poll_download_submission();
         self.poll_download();
         self.css.poll_downloads();
@@ -685,10 +633,8 @@ impl ApplicationHandler for Hull {
             }
         }
         if self.window.is_some() && !self.page_pending() {
-            if let Some(navigation) = self.ready_navigation.take() {
-                self.start_page(navigation.url);
-            } else if let Some(navigation) = self.queued_urls.pop_front() {
-                self.begin_navigation_probe(navigation.url, navigation.new_shell);
+            if let Some(navigation) = self.queued_urls.pop_front() {
+                self.open_link(navigation.url, navigation.new_shell);
             }
         }
         // ShellIO input does not wake Winit's window-event wait. Keep polling
@@ -774,18 +720,7 @@ impl ApplicationHandler for Hull {
                         &self.viewport,
                     ) {
                         match action {
-                            links::LinkAction::Navigate(url) => {
-                                if self.navigation_probe.is_none() {
-                                    self.begin_navigation_probe(url, true);
-                                } else if self.queued_urls.len() < 16 {
-                                    self.queued_urls.push_back(QueuedNavigation {
-                                        url,
-                                        new_shell: true,
-                                    });
-                                } else {
-                                    shellio::line("hull: navigation queue is full");
-                                }
-                            }
+                            links::LinkAction::Navigate(url) => self.launch_navigation(url),
                             links::LinkAction::Download { url, filename_hint } => {
                                 self.submit_download(url, filename_hint);
                             }

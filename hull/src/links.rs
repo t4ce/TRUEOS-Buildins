@@ -20,6 +20,20 @@ pub(super) enum LinkAction {
     },
 }
 
+/// File links use the shared type catalogue locally; no network preflight.
+pub(super) fn download_url(text: &str) -> bool {
+    let Ok(url) = Url::parse(text) else {
+        return false;
+    };
+    let name = url.path().rsplit('/').next().unwrap_or("");
+    let Some((_, extension)) = name.rsplit_once('.') else {
+        return false;
+    };
+    infer::content_type_from_extension(extension)
+        .and_then(infer::content_type_info)
+        .is_some_and(|kind| !matches!(kind.mime_type, "text/html" | "application/xhtml+xml"))
+}
+
 impl Links {
     pub fn new(document: &Document, boxes: Vec<LinkBox>, page_url: &str) -> Self {
         let mut links = Self {
@@ -47,7 +61,7 @@ impl Links {
                 .and_then(|href| base.join(href.trim()).ok())
                 .and_then(|url| shellio::page_url(url.as_str()).ok())
             {
-                let action = if has_download_attribute(document, hit.node) {
+                let action = if has_download_attribute(document, hit.node) || download_url(&url) {
                     LinkAction::Download {
                         url,
                         filename_hint: download_hint(document, hit.node),
@@ -212,6 +226,34 @@ mod tests {
         viewport.set_document(200, 400);
         viewport.scroll_by(0.0, 80.0);
         (links, viewport)
+    }
+
+    #[test]
+    fn github_installer_click_goes_directly_to_trauma() {
+        for url in [
+            "https://github.com/ip7z/7zip/releases/download/26.05/7z2605.exe",
+            "https://github.com/ip7z/7zip/releases/download/26.05/7z2605-x64.exe",
+            "https://example.test/archive.zip?token=123",
+            "https://example.test/image.PNG",
+        ] {
+            let (mut links, viewport) = fixture(url);
+            links.button(Some(1), true, 30.0, 45.0, &viewport);
+            assert!(
+                matches!(
+                    links.button(Some(1), false, 30.0, 45.0, &viewport),
+                    Some(LinkAction::Download { .. })
+                ),
+                "{url}"
+            );
+        }
+        for url in [
+            "https://www.7-zip.org/",
+            "https://example.test/index.html",
+            "https://example.test/a.zip/page",
+            "https://example.test/page?file=installer.exe",
+        ] {
+            assert!(!download_url(url), "{url}");
+        }
     }
 
     #[test]

@@ -156,6 +156,7 @@ name = "hull-layout-tests"
 version = "0.1.0"
 dependencies = [
  "cssparser",
+ "infer",
  "lightningcss",
  "parcel_selectors",
  "rp5",
@@ -280,6 +281,10 @@ dependencies = [
  "serde",
  "serde_core",
 ]
+
+[[package]]
+name = "infer"
+version = "0.22.0-trueos.1"
 
 [[package]]
 name = "itertools"

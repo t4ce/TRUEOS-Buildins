@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 publish = false
 [dependencies]
+infer = { path = "../../../../TRUEOS/vendor/infer", default-features = false }
 rp5 = { path = "../../rp5" }
 lightningcss = { version = "=1.0.0-alpha.72", default-features = false, features = ["into_owned", "substitute_variables"] }
 static-self = "0.1.2"
