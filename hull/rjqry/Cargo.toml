@@ -1,0 +1,10 @@
+[package]
+name = "rjqry"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Dependency-free no_std native translations of jQuery's portable core"
+
+[dependencies]
+
+[workspace]

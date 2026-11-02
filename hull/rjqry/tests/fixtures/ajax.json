@@ -1,0 +1,2954 @@
+{
+  "description": "Expected results from unchanged vendored Ajax helpers; see tools/ajax_oracle.mjs",
+  "cases": [
+    {
+      "name": "settings-empty",
+      "op": "settings",
+      "input": {
+        "target": {},
+        "source": {},
+        "flat": [
+          "url",
+          "context"
+        ]
+      },
+      "result": {}
+    },
+    {
+      "name": "settings-context-flat",
+      "op": "settings",
+      "input": {
+        "target": {
+          "context": {
+            "a": 1
+          },
+          "headers": {
+            "a": 1
+          }
+        },
+        "source": {
+          "context": {
+            "b": 2
+          },
+          "headers": {
+            "b": 2
+          }
+        },
+        "flat": [
+          "url",
+          "context"
+        ]
+      },
+      "result": {
+        "context": {
+          "b": 2
+        },
+        "headers": {
+          "a": 1,
+          "b": 2
+        }
+      }
+    },
+    {
+      "name": "settings-url-flat",
+      "op": "settings",
+      "input": {
+        "target": {
+          "url": {
+            "a": 1
+          },
+          "headers": {
+            "nested": {
+              "a": 1
+            }
+          }
+        },
+        "source": {
+          "url": {
+            "b": 2
+          },
+          "headers": {
+            "nested": {
+              "b": 2
+            }
+          }
+        },
+        "flat": [
+          "url",
+          "context"
+        ]
+      },
+      "result": {
+        "url": {
+          "b": 2
+        },
+        "headers": {
+          "nested": {
+            "a": 1,
+            "b": 2
+          }
+        }
+      }
+    },
+    {
+      "name": "settings-custom-flat",
+      "op": "settings",
+      "input": {
+        "target": {
+          "headers": {
+            "a": 1
+          },
+          "context": {
+            "a": 1
+          }
+        },
+        "source": {
+          "headers": {
+            "b": 2
+          },
+          "context": {
+            "b": 2
+          }
+        },
+        "flat": [
+          "headers"
+        ]
+      },
+      "result": {
+        "headers": {
+          "b": 2
+        },
+        "context": {
+          "a": 1,
+          "b": 2
+        }
+      }
+    },
+    {
+      "name": "settings-array-merge",
+      "op": "settings",
+      "input": {
+        "target": {
+          "a": [
+            1,
+            2,
+            3
+          ]
+        },
+        "source": {
+          "a": [
+            9
+          ]
+        },
+        "flat": [
+          "url",
+          "context"
+        ]
+      },
+      "result": {
+        "a": [
+          9,
+          2,
+          3
+        ]
+      }
+    },
+    {
+      "name": "settings-nested-arrays",
+      "op": "settings",
+      "input": {
+        "target": {
+          "a": [
+            {
+              "a": 1
+            },
+            {
+              "b": 2
+            }
+          ]
+        },
+        "source": {
+          "a": [
+            {
+              "b": 3
+            }
+          ]
+        },
+        "flat": [
+          "url",
+          "context"
+        ]
+      },
+      "result": {
+        "a": [
+          {
+            "a": 1,
+            "b": 3
+          },
+          {
+            "b": 2
+          }
+        ]
+      }
+    },
+    {
+      "name": "settings-null-replaces",
+      "op": "settings",
+      "input": {
+        "target": {
+          "a": {
+            "nested": true
+          },
+          "context": {
+            "a": 1
+          }
+        },
+        "source": {
+          "a": null,
+          "context": null
+        },
+        "flat": [
+          "url",
+          "context"
+        ]
+      },
+      "result": {
+        "a": null,
+        "context": null
+      }
+    },
+    {
+      "name": "settings-object-over-scalar",
+      "op": "settings",
+      "input": {
+        "target": {
+          "a": false,
+          "b": "text"
+        },
+        "source": {
+          "a": {
+            "nested": 1
+          },
+          "b": [
+            1,
+            2
+          ]
+        },
+        "flat": [
+          "url",
+          "context"
+        ]
+      },
+      "result": {
+        "a": {
+          "nested": 1
+        },
+        "b": [
+          1,
+          2
+        ]
+      }
+    },
+    {
+      "name": "settings-scalar-over-object",
+      "op": "settings",
+      "input": {
+        "target": {
+          "a": {
+            "nested": 1
+          },
+          "b": [
+            1,
+            2
+          ]
+        },
+        "source": {
+          "a": false,
+          "b": "text"
+        },
+        "flat": [
+          "url",
+          "context"
+        ]
+      },
+      "result": {
+        "a": false,
+        "b": "text"
+      }
+    },
+    {
+      "name": "settings-undefined-skipped",
+      "op": "settings",
+      "input": {
+        "target": {
+          "a": 1,
+          "context": 2
+        },
+        "source": {
+          "a": {
+            "$undefined": true
+          },
+          "b": {
+            "$undefined": true
+          },
+          "context": {
+            "$undefined": true
+          }
+        },
+        "flat": [
+          "url",
+          "context"
+        ]
+      },
+      "result": {
+        "a": 1,
+        "context": 2
+      }
+    },
+    {
+      "name": "settings-integer-property-order",
+      "op": "settings",
+      "input": {
+        "target": {
+          "2": {
+            "a": 1
+          },
+          "b": 1
+        },
+        "source": {
+          "2": {
+            "b": 2
+          },
+          "10": 3,
+          "b": 2
+        },
+        "flat": [
+          "url",
+          "context"
+        ]
+      },
+      "result": {
+        "2": {
+          "a": 1,
+          "b": 2
+        },
+        "10": 3,
+        "b": 2
+      }
+    },
+    {
+      "name": "settings-no-flat-options",
+      "op": "settings",
+      "input": {
+        "target": {
+          "context": {
+            "a": 1
+          },
+          "url": {
+            "a": 1
+          }
+        },
+        "source": {
+          "context": {
+            "b": 2
+          },
+          "url": {
+            "b": 2
+          }
+        },
+        "flat": []
+      },
+      "result": {
+        "context": {
+          "a": 1,
+          "b": 2
+        },
+        "url": {
+          "a": 1,
+          "b": 2
+        }
+      }
+    },
+    {
+      "name": "convert-no-stages",
+      "op": "conversion",
+      "input": {
+        "dataTypes": [],
+        "response": "x",
+        "isSuccess": true,
+        "responseFields": [
+          [
+            "text",
+            "responseText"
+          ],
+          [
+            "mid",
+            "responseMid"
+          ],
+          [
+            "json",
+            "responseJSON"
+          ]
+        ]
+      },
+      "result": {
+        "result": {
+          "state": "success",
+          "data": "x"
+        },
+        "fields": {},
+        "trace": []
+      }
+    },
+    {
+      "name": "convert-one-stage",
+      "op": "conversion",
+      "input": {
+        "dataTypes": [
+          "text"
+        ],
+        "response": "x",
+        "isSuccess": true,
+        "responseFields": [
+          [
+            "text",
+            "responseText"
+          ],
+          [
+            "mid",
+            "responseMid"
+          ],
+          [
+            "json",
+            "responseJSON"
+          ]
+        ]
+      },
+      "result": {
+        "result": {
+          "state": "success",
+          "data": "x"
+        },
+        "fields": {
+          "responseText": "x"
+        },
+        "trace": []
+      }
+    },
+    {
+      "name": "convert-empty-next-stops",
+      "op": "conversion",
+      "input": {
+        "dataTypes": [
+          "text",
+          ""
+        ],
+        "response": "x",
+        "isSuccess": true,
+        "responseFields": [
+          [
+            "text",
+            "responseText"
+          ],
+          [
+            "mid",
+            "responseMid"
+          ],
+          [
+            "json",
+            "responseJSON"
+          ]
+        ]
+      },
+      "result": {
+        "result": {
+          "state": "success",
+          "data": "x"
+        },
+        "fields": {
+          "responseText": "x"
+        },
+        "trace": []
+      }
+    },
+    {
+      "name": "convert-empty-first-stops",
+      "op": "conversion",
+      "input": {
+        "dataTypes": [
+          "",
+          "json"
+        ],
+        "response": "x",
+        "isSuccess": true,
+        "responseFields": [
+          [
+            "text",
+            "responseText"
+          ],
+          [
+            "mid",
+            "responseMid"
+          ],
+          [
+            "json",
+            "responseJSON"
+          ]
+        ]
+      },
+      "result": {
+        "result": {
+          "state": "success",
+          "data": "x"
+        },
+        "fields": {},
+        "trace": []
+      }
+    },
+    {
+      "name": "convert-direct",
+      "op": "conversion",
+      "input": {
+        "dataTypes": [
+          "text",
+          "json"
+        ],
+        "response": "x",
+        "isSuccess": true,
+        "responseFields": [
+          [
+            "text",
+            "responseText"
+          ],
+          [
+            "mid",
+            "responseMid"
+          ],
+          [
+            "json",
+            "responseJSON"
+          ]
+        ],
+        "converters": [
+          {
+            "key": "text json",
+            "kind": "append",
+            "value": "A"
+          }
+        ]
+      },
+      "result": {
+        "result": {
+          "state": "success",
+          "data": "xA"
+        },
+        "fields": {
+          "responseText": "x",
+          "responseJSON": "xA"
+        },
+        "trace": [
+          {
+            "stage": "text json",
+            "response": "x"
+          }
+        ]
+      }
+    },
+    {
+      "name": "convert-case-insensitive",
+      "op": "conversion",
+      "input": {
+        "dataTypes": [
+          "text",
+          "json"
+        ],
+        "response": "x",
+        "isSuccess": true,
+        "responseFields": [
+          [
+            "text",
+            "responseText"
+          ],
+          [
+            "mid",
+            "responseMid"
+          ],
+          [
+            "json",
+            "responseJSON"
+          ]
+        ],
+        "converters": [
+          {
+            "key": "TEXT JSON",
+            "kind": "append",
+            "value": "A"
+          }
+        ]
+      },
+      "result": {
+        "result": {
+          "state": "success",
+          "data": "xA"
+        },
+        "fields": {
+          "responseText": "x",
+          "responseJSON": "xA"
+        },
+        "trace": [
+          {
+            "stage": "TEXT JSON",
+            "response": "x"
+          }
+        ]
+      }
+    },
+    {
+      "name": "convert-wildcard-input",
+      "op": "conversion",
+      "input": {
+        "dataTypes": [
+          "text",
+          "json"
+        ],
+        "response": "x",
+        "isSuccess": true,
+        "responseFields": [
+          [
+            "text",
+            "responseText"
+          ],
+          [
+            "mid",
+            "responseMid"
+          ],
+          [
+            "json",
+            "responseJSON"
+          ]
+        ],
+        "converters": [
+          {
+            "key": "* json",
+            "kind": "append",
+            "value": "A"
+          }
+        ]
+      },
+      "result": {
+        "result": {
+          "state": "success",
+          "data": "xA"
+        },
+        "fields": {
+          "responseText": "x",
+          "responseJSON": "xA"
+        },
+        "trace": [
+          {
+            "stage": "* json",
+            "response": "x"
+          }
+        ]
+      }
+    },
+    {
+      "name": "convert-direct-before-wildcard",
+      "op": "conversion",
+      "input": {
+        "dataTypes": [
+          "text",
+          "json"
+        ],
+        "response": "x",
+        "isSuccess": true,
+        "responseFields": [
+          [
+            "text",
+            "responseText"
+          ],
+          [
+            "mid",
+            "responseMid"
+          ],
+          [
+            "json",
+            "responseJSON"
+          ]
+        ],
+        "converters": [
+          {
+            "key": "* json",
+            "kind": "append",
+            "value": "B"
+          },
+          {
+            "key": "text json",
+            "kind": "append",
+            "value": "A"
+          }
+        ]
+      },
+      "result": {
+        "result": {
+          "state": "success",
+          "data": "xA"
+        },
+        "fields": {
+          "responseText": "x",
+          "responseJSON": "xA"
+        },
+        "trace": [
+          {
+            "stage": "text json",
+            "response": "x"
+          }
+        ]
+      }
+    },
+    {
+      "name": "convert-auto-output",
+      "op": "conversion",
+      "input": {
+        "dataTypes": [
+          "text",
+          "*",
+          "json"
+        ],
+        "response": "x",
+        "isSuccess": true,
+        "responseFields": [
+          [
+            "text",
+            "responseText"
+          ],
+          [
+            "mid",
+            "responseMid"
+          ],
+          [
+            "json",
+            "responseJSON"
+          ]
+        ],
+        "converters": [
+          {
+            "key": "text json",
+            "kind": "append",
+            "value": "A"
+          }
+        ]
+      },
+      "result": {
+        "result": {
+          "state": "success",
+          "data": "xA"
+        },
+        "fields": {
+          "responseText": "x",
+          "responseJSON": "xA"
+        },
+        "trace": [
+          {
+            "stage": "text json",
+            "response": "x"
+          }
+        ]
+      }
+    },
+    {
+      "name": "convert-auto-input",
+      "op": "conversion",
+      "input": {
+        "dataTypes": [
+          "*",
+          "json"
+        ],
+        "response": "x",
+        "isSuccess": true,
+        "responseFields": [
+          [
+            "text",
+            "responseText"
+          ],
+          [
+            "mid",
+            "responseMid"
+          ],
+          [
+            "json",
+            "responseJSON"
+          ]
+        ],
+        "converters": [
+          {
+            "key": "* json",
+            "kind": "append",
+            "value": "A"
+          }
+        ]
+      },
+      "result": {
+        "result": {
+          "state": "success",
+          "data": "x"
+        },
+        "fields": {
+          "responseJSON": "x"
+        },
+        "trace": []
+      }
+    },
+    {
+      "name": "convert-repeated-stage",
+      "op": "conversion",
+      "input": {
+        "dataTypes": [
+          "text",
+          "text",
+          "json"
+        ],
+        "response": "x",
+        "isSuccess": true,
+        "responseFields": [
+          [
+            "text",
+            "responseText"
+          ],
+          [
+            "mid",
+            "responseMid"
+          ],
+          [
+            "json",
+            "responseJSON"
+          ]
+        ],
+        "converters": [
+          {
+            "key": "text json",
+            "kind": "append",
+            "value": "A"
+          }
+        ]
+      },
+      "result": {
+        "result": {
+          "state": "success",
+          "data": "xA"
+        },
+        "fields": {
+          "responseText": "x",
+          "responseJSON": "xA"
+        },
+        "trace": [
+          {
+            "stage": "text json",
+            "response": "x"
+          }
+        ]
+      }
+    },
+    {
+      "name": "convert-direct-identity",
+      "op": "conversion",
+      "input": {
+        "dataTypes": [
+          "text",
+          "json"
+        ],
+        "response": "x",
+        "isSuccess": true,
+        "responseFields": [
+          [
+            "text",
+            "responseText"
+          ],
+          [
+            "mid",
+            "responseMid"
+          ],
+          [
+            "json",
+            "responseJSON"
+          ]
+        ],
+        "converters": [
+          {
+            "key": "text json",
+            "kind": "identity"
+          }
+        ]
+      },
+      "result": {
+        "result": {
+          "state": "success",
+          "data": "x"
+        },
+        "fields": {
+          "responseText": "x",
+          "responseJSON": "x"
+        },
+        "trace": []
+      }
+    },
+    {
+      "name": "convert-intermediate-functions",
+      "op": "conversion",
+      "input": {
+        "dataTypes": [
+          "text",
+          "json"
+        ],
+        "response": "x",
+        "isSuccess": true,
+        "responseFields": [
+          [
+            "text",
+            "responseText"
+          ],
+          [
+            "mid",
+            "responseMid"
+          ],
+          [
+            "json",
+            "responseJSON"
+          ]
+        ],
+        "converters": [
+          {
+            "key": "text mid",
+            "kind": "append",
+            "value": "A"
+          },
+          {
+            "key": "mid json",
+            "kind": "append",
+            "value": "B"
+          }
+        ]
+      },
+      "result": {
+        "result": {
+          "state": "success",
+          "data": "xAB"
+        },
+        "fields": {
+          "responseText": "x",
+          "responseMid": "xA",
+          "responseJSON": "xAB"
+        },
+        "trace": [
+          {
+            "stage": "text mid",
+            "response": "x"
+          },
+          {
+            "stage": "mid json",
+            "response": "xA"
+          }
+        ]
+      }
+    },
+    {
+      "name": "convert-intermediate-first-identity",
+      "op": "conversion",
+      "input": {
+        "dataTypes": [
+          "text",
+          "json"
+        ],
+        "response": "x",
+        "isSuccess": true,
+        "responseFields": [
+          [
+            "text",
+            "responseText"
+          ],
+          [
+            "mid",
+            "responseMid"
+          ],
+          [
+            "json",
+            "responseJSON"
+          ]
+        ],
+        "converters": [
+          {
+            "key": "text mid",
+            "kind": "identity"
+          },
+          {
+            "key": "mid json",
+            "kind": "append",
+            "value": "B"
+          }
+        ]
+      },
+      "result": {
+        "result": {
+          "state": "success",
+          "data": "xB"
+        },
+        "fields": {
+          "responseText": "x",
+          "responseJSON": "xB"
+        },
+        "trace": [
+          {
+            "stage": "mid json",
+            "response": "x"
+          }
+        ]
+      }
+    },
+    {
+      "name": "convert-intermediate-second-identity",
+      "op": "conversion",
+      "input": {
+        "dataTypes": [
+          "text",
+          "json"
+        ],
+        "response": "x",
+        "isSuccess": true,
+        "responseFields": [
+          [
+            "text",
+            "responseText"
+          ],
+          [
+            "mid",
+            "responseMid"
+          ],
+          [
+            "json",
+            "responseJSON"
+          ]
+        ],
+        "converters": [
+          {
+            "key": "text mid",
+            "kind": "append",
+            "value": "A"
+          },
+          {
+            "key": "mid json",
+            "kind": "identity"
+          }
+        ]
+      },
+      "result": {
+        "result": {
+          "state": "success",
+          "data": "xA"
+        },
+        "fields": {
+          "responseText": "x",
+          "responseJSON": "xA"
+        },
+        "trace": [
+          {
+            "stage": "text mid",
+            "response": "x"
+          }
+        ]
+      }
+    },
+    {
+      "name": "convert-intermediate-both-identity",
+      "op": "conversion",
+      "input": {
+        "dataTypes": [
+          "text",
+          "json"
+        ],
+        "response": "x",
+        "isSuccess": true,
+        "responseFields": [
+          [
+            "text",
+            "responseText"
+          ],
+          [
+            "mid",
+            "responseMid"
+          ],
+          [
+            "json",
+            "responseJSON"
+          ]
+        ],
+        "converters": [
+          {
+            "key": "text mid",
+            "kind": "identity"
+          },
+          {
+            "key": "mid json",
+            "kind": "identity"
+          }
+        ]
+      },
+      "result": {
+        "result": {
+          "state": "success",
+          "data": "x"
+        },
+        "fields": {
+          "responseText": "x",
+          "responseJSON": "x"
+        },
+        "trace": []
+      }
+    },
+    {
+      "name": "convert-intermediate-wildcard",
+      "op": "conversion",
+      "input": {
+        "dataTypes": [
+          "text",
+          "json"
+        ],
+        "response": "x",
+        "isSuccess": true,
+        "responseFields": [
+          [
+            "text",
+            "responseText"
+          ],
+          [
+            "mid",
+            "responseMid"
+          ],
+          [
+            "json",
+            "responseJSON"
+          ]
+        ],
+        "converters": [
+          {
+            "key": "* mid",
+            "kind": "append",
+            "value": "A"
+          },
+          {
+            "key": "mid json",
+            "kind": "append",
+            "value": "B"
+          }
+        ]
+      },
+      "result": {
+        "result": {
+          "state": "success",
+          "data": "xAB"
+        },
+        "fields": {
+          "responseText": "x",
+          "responseMid": "xA",
+          "responseJSON": "xAB"
+        },
+        "trace": [
+          {
+            "stage": "* mid",
+            "response": "x"
+          },
+          {
+            "stage": "mid json",
+            "response": "xA"
+          }
+        ]
+      }
+    },
+    {
+      "name": "convert-intermediate-first-in-order",
+      "op": "conversion",
+      "input": {
+        "dataTypes": [
+          "text",
+          "json"
+        ],
+        "response": "x",
+        "isSuccess": true,
+        "responseFields": [
+          [
+            "text",
+            "responseText"
+          ],
+          [
+            "mid",
+            "responseMid"
+          ],
+          [
+            "json",
+            "responseJSON"
+          ]
+        ],
+        "converters": [
+          {
+            "key": "text a",
+            "kind": "append",
+            "value": "A"
+          },
+          {
+            "key": "a json",
+            "kind": "append",
+            "value": "B"
+          },
+          {
+            "key": "text b",
+            "kind": "append",
+            "value": "C"
+          },
+          {
+            "key": "b json",
+            "kind": "append",
+            "value": "D"
+          }
+        ]
+      },
+      "result": {
+        "result": {
+          "state": "success",
+          "data": "xAB"
+        },
+        "fields": {
+          "responseText": "x",
+          "responseJSON": "xAB"
+        },
+        "trace": [
+          {
+            "stage": "text a",
+            "response": "x"
+          },
+          {
+            "stage": "a json",
+            "response": "xA"
+          }
+        ]
+      }
+    },
+    {
+      "name": "convert-normalized-key-overwrite",
+      "op": "conversion",
+      "input": {
+        "dataTypes": [
+          "text",
+          "json"
+        ],
+        "response": "x",
+        "isSuccess": true,
+        "responseFields": [
+          [
+            "text",
+            "responseText"
+          ],
+          [
+            "mid",
+            "responseMid"
+          ],
+          [
+            "json",
+            "responseJSON"
+          ]
+        ],
+        "converters": [
+          {
+            "key": "Text Json",
+            "kind": "append",
+            "value": "A"
+          },
+          {
+            "key": "text json",
+            "kind": "append",
+            "value": "B"
+          }
+        ]
+      },
+      "result": {
+        "result": {
+          "state": "success",
+          "data": "xB"
+        },
+        "fields": {
+          "responseText": "x",
+          "responseJSON": "xB"
+        },
+        "trace": [
+          {
+            "stage": "text json",
+            "response": "x"
+          }
+        ]
+      }
+    },
+    {
+      "name": "convert-missing",
+      "op": "conversion",
+      "input": {
+        "dataTypes": [
+          "text",
+          "json"
+        ],
+        "response": "x",
+        "isSuccess": true,
+        "responseFields": [
+          [
+            "text",
+            "responseText"
+          ],
+          [
+            "mid",
+            "responseMid"
+          ],
+          [
+            "json",
+            "responseJSON"
+          ]
+        ]
+      },
+      "result": {
+        "result": {
+          "state": "parsererror",
+          "error": "No conversion from text to json"
+        },
+        "fields": {
+          "responseText": "x"
+        },
+        "trace": []
+      }
+    },
+    {
+      "name": "convert-missing-throws-still-parsererror",
+      "op": "conversion",
+      "input": {
+        "dataTypes": [
+          "text",
+          "json"
+        ],
+        "response": "x",
+        "isSuccess": true,
+        "responseFields": [
+          [
+            "text",
+            "responseText"
+          ],
+          [
+            "mid",
+            "responseMid"
+          ],
+          [
+            "json",
+            "responseJSON"
+          ]
+        ],
+        "throws": true
+      },
+      "result": {
+        "result": {
+          "state": "parsererror",
+          "error": "No conversion from text to json"
+        },
+        "fields": {
+          "responseText": "x"
+        },
+        "trace": []
+      }
+    },
+    {
+      "name": "convert-error-false-string",
+      "op": "conversion",
+      "input": {
+        "dataTypes": [
+          "text",
+          "json"
+        ],
+        "response": "x",
+        "isSuccess": true,
+        "responseFields": [
+          [
+            "text",
+            "responseText"
+          ],
+          [
+            "mid",
+            "responseMid"
+          ],
+          [
+            "json",
+            "responseJSON"
+          ]
+        ],
+        "throws": false,
+        "converters": [
+          {
+            "key": "text json",
+            "kind": "throw",
+            "value": "bad conversion"
+          }
+        ]
+      },
+      "result": {
+        "result": {
+          "state": "parsererror",
+          "error": "bad conversion"
+        },
+        "fields": {
+          "responseText": "x"
+        },
+        "trace": [
+          {
+            "stage": "text json",
+            "response": "x"
+          }
+        ]
+      }
+    },
+    {
+      "name": "convert-error-false-object",
+      "op": "conversion",
+      "input": {
+        "dataTypes": [
+          "text",
+          "json"
+        ],
+        "response": "x",
+        "isSuccess": true,
+        "responseFields": [
+          [
+            "text",
+            "responseText"
+          ],
+          [
+            "mid",
+            "responseMid"
+          ],
+          [
+            "json",
+            "responseJSON"
+          ]
+        ],
+        "throws": false,
+        "converters": [
+          {
+            "key": "text json",
+            "kind": "throw",
+            "value": {
+              "reason": 7
+            }
+          }
+        ]
+      },
+      "result": {
+        "result": {
+          "state": "parsererror",
+          "error": {
+            "reason": 7
+          }
+        },
+        "fields": {
+          "responseText": "x"
+        },
+        "trace": [
+          {
+            "stage": "text json",
+            "response": "x"
+          }
+        ]
+      }
+    },
+    {
+      "name": "convert-error-true-string",
+      "op": "conversion",
+      "input": {
+        "dataTypes": [
+          "text",
+          "json"
+        ],
+        "response": "x",
+        "isSuccess": true,
+        "responseFields": [
+          [
+            "text",
+            "responseText"
+          ],
+          [
+            "mid",
+            "responseMid"
+          ],
+          [
+            "json",
+            "responseJSON"
+          ]
+        ],
+        "throws": true,
+        "converters": [
+          {
+            "key": "text json",
+            "kind": "throw",
+            "value": "bad conversion"
+          }
+        ]
+      },
+      "result": {
+        "result": {
+          "thrown": "bad conversion"
+        },
+        "fields": {
+          "responseText": "x"
+        },
+        "trace": [
+          {
+            "stage": "text json",
+            "response": "x"
+          }
+        ]
+      }
+    },
+    {
+      "name": "convert-error-true-object",
+      "op": "conversion",
+      "input": {
+        "dataTypes": [
+          "text",
+          "json"
+        ],
+        "response": "x",
+        "isSuccess": true,
+        "responseFields": [
+          [
+            "text",
+            "responseText"
+          ],
+          [
+            "mid",
+            "responseMid"
+          ],
+          [
+            "json",
+            "responseJSON"
+          ]
+        ],
+        "throws": true,
+        "converters": [
+          {
+            "key": "text json",
+            "kind": "throw",
+            "value": {
+              "reason": 7
+            }
+          }
+        ]
+      },
+      "result": {
+        "result": {
+          "thrown": {
+            "reason": 7
+          }
+        },
+        "fields": {
+          "responseText": "x"
+        },
+        "trace": [
+          {
+            "stage": "text json",
+            "response": "x"
+          }
+        ]
+      }
+    },
+    {
+      "name": "convert-filter-before-stages",
+      "op": "conversion",
+      "input": {
+        "dataTypes": [
+          "text",
+          "mid",
+          "json"
+        ],
+        "response": "x",
+        "isSuccess": true,
+        "responseFields": [
+          [
+            "text",
+            "responseText"
+          ],
+          [
+            "mid",
+            "responseMid"
+          ],
+          [
+            "json",
+            "responseJSON"
+          ]
+        ],
+        "dataType": "requested-type",
+        "filter": {
+          "kind": "append",
+          "value": "F"
+        },
+        "converters": [
+          {
+            "key": "text mid",
+            "kind": "append",
+            "value": "A"
+          },
+          {
+            "key": "mid json",
+            "kind": "append",
+            "value": "B"
+          }
+        ]
+      },
+      "result": {
+        "result": {
+          "state": "success",
+          "data": "xFAB"
+        },
+        "fields": {
+          "responseText": "x",
+          "responseMid": "xFA",
+          "responseJSON": "xFAB"
+        },
+        "trace": [
+          {
+            "stage": "filter",
+            "response": "x",
+            "dataType": "requested-type"
+          },
+          {
+            "stage": "text mid",
+            "response": "xF"
+          },
+          {
+            "stage": "mid json",
+            "response": "xFA"
+          }
+        ]
+      }
+    },
+    {
+      "name": "convert-filter-failure-skipped",
+      "op": "conversion",
+      "input": {
+        "dataTypes": [
+          "text",
+          "json"
+        ],
+        "response": "x",
+        "isSuccess": false,
+        "responseFields": [
+          [
+            "text",
+            "responseText"
+          ],
+          [
+            "mid",
+            "responseMid"
+          ],
+          [
+            "json",
+            "responseJSON"
+          ]
+        ],
+        "filter": {
+          "kind": "throw",
+          "value": "filter error"
+        },
+        "converters": [
+          {
+            "key": "text json",
+            "kind": "identity"
+          }
+        ]
+      },
+      "result": {
+        "result": {
+          "state": "success",
+          "data": "x"
+        },
+        "fields": {
+          "responseText": "x",
+          "responseJSON": "x"
+        },
+        "trace": []
+      }
+    },
+    {
+      "name": "convert-filter-error-propagates",
+      "op": "conversion",
+      "input": {
+        "dataTypes": [
+          "text",
+          "json"
+        ],
+        "response": "x",
+        "isSuccess": true,
+        "responseFields": [
+          [
+            "text",
+            "responseText"
+          ],
+          [
+            "mid",
+            "responseMid"
+          ],
+          [
+            "json",
+            "responseJSON"
+          ]
+        ],
+        "filter": {
+          "kind": "throw",
+          "value": "filter error"
+        },
+        "converters": [
+          {
+            "key": "text json",
+            "kind": "identity"
+          }
+        ]
+      },
+      "result": {
+        "result": {
+          "thrown": "filter error"
+        },
+        "fields": {
+          "responseText": "x"
+        },
+        "trace": [
+          {
+            "stage": "filter",
+            "response": "x",
+            "dataType": ""
+          }
+        ]
+      }
+    },
+    {
+      "name": "convert-response-field-overwrite",
+      "op": "conversion",
+      "input": {
+        "dataTypes": [
+          "text",
+          "json"
+        ],
+        "response": "x",
+        "isSuccess": true,
+        "responseFields": [
+          [
+            "text",
+            "shared"
+          ],
+          [
+            "json",
+            "shared"
+          ]
+        ],
+        "converters": [
+          {
+            "key": "text json",
+            "kind": "append",
+            "value": "A"
+          }
+        ]
+      },
+      "result": {
+        "result": {
+          "state": "success",
+          "data": "xA"
+        },
+        "fields": {
+          "shared": "xA"
+        },
+        "trace": [
+          {
+            "stage": "text json",
+            "response": "x"
+          }
+        ]
+      }
+    },
+    {
+      "name": "convert-empty-response-field-skipped",
+      "op": "conversion",
+      "input": {
+        "dataTypes": [
+          "text",
+          "json"
+        ],
+        "response": "x",
+        "isSuccess": true,
+        "responseFields": [
+          [
+            "text",
+            ""
+          ],
+          [
+            "json",
+            "responseJSON"
+          ]
+        ],
+        "converters": [
+          {
+            "key": "text json",
+            "kind": "append",
+            "value": "A"
+          }
+        ]
+      },
+      "result": {
+        "result": {
+          "state": "success",
+          "data": "xA"
+        },
+        "fields": {
+          "responseJSON": "xA"
+        },
+        "trace": [
+          {
+            "stage": "text json",
+            "response": "x"
+          }
+        ]
+      }
+    },
+    {
+      "name": "convert-numeric-then-object",
+      "op": "conversion",
+      "input": {
+        "dataTypes": [
+          "text",
+          "json"
+        ],
+        "response": "12",
+        "isSuccess": true,
+        "responseFields": [
+          [
+            "text",
+            "responseText"
+          ],
+          [
+            "mid",
+            "responseMid"
+          ],
+          [
+            "json",
+            "responseJSON"
+          ]
+        ],
+        "converters": [
+          {
+            "key": "text mid",
+            "kind": "add",
+            "value": 3
+          },
+          {
+            "key": "mid json",
+            "kind": "wrap",
+            "value": "converted"
+          }
+        ]
+      },
+      "result": {
+        "result": {
+          "state": "success",
+          "data": {
+            "value": 15,
+            "tag": "converted"
+          }
+        },
+        "fields": {
+          "responseText": "12",
+          "responseMid": 15,
+          "responseJSON": {
+            "value": 15,
+            "tag": "converted"
+          }
+        },
+        "trace": [
+          {
+            "stage": "text mid",
+            "response": "12"
+          },
+          {
+            "stage": "mid json",
+            "response": 15
+          }
+        ]
+      }
+    },
+    {
+      "name": "select-exact",
+      "op": "selection",
+      "input": {
+        "dataTypes": [
+          "json"
+        ],
+        "responses": [
+          [
+            "text",
+            "raw"
+          ],
+          [
+            "json",
+            {
+              "parsed": true
+            }
+          ]
+        ],
+        "contents": [
+          {
+            "type": "xml",
+            "source": "\\bxml\\b",
+            "matched": false
+          },
+          {
+            "type": "html",
+            "source": "\\bhtml",
+            "matched": false
+          },
+          {
+            "type": "json",
+            "source": "\\bjson\\b",
+            "matched": false
+          }
+        ]
+      },
+      "result": {
+        "response": {
+          "parsed": true
+        },
+        "dataTypes": [
+          "json"
+        ]
+      }
+    },
+    {
+      "name": "select-convertible",
+      "op": "selection",
+      "input": {
+        "dataTypes": [
+          "json"
+        ],
+        "responses": [
+          [
+            "binary",
+            "bits"
+          ],
+          [
+            "text",
+            "raw"
+          ]
+        ],
+        "contents": [
+          {
+            "type": "xml",
+            "source": "\\bxml\\b",
+            "matched": false
+          },
+          {
+            "type": "html",
+            "source": "\\bhtml",
+            "matched": false
+          },
+          {
+            "type": "json",
+            "source": "\\bjson\\b",
+            "matched": false
+          }
+        ],
+        "converterKeys": [
+          "text json"
+        ]
+      },
+      "result": {
+        "response": "raw",
+        "dataTypes": [
+          "text",
+          "json"
+        ]
+      }
+    },
+    {
+      "name": "select-fallback",
+      "op": "selection",
+      "input": {
+        "dataTypes": [
+          "json"
+        ],
+        "responses": [
+          [
+            "binary",
+            "bits"
+          ],
+          [
+            "text",
+            "raw"
+          ]
+        ],
+        "contents": [
+          {
+            "type": "xml",
+            "source": "\\bxml\\b",
+            "matched": false
+          },
+          {
+            "type": "html",
+            "source": "\\bhtml",
+            "matched": false
+          },
+          {
+            "type": "json",
+            "source": "\\bjson\\b",
+            "matched": false
+          }
+        ]
+      },
+      "result": {
+        "response": "bits",
+        "dataTypes": [
+          "binary",
+          "json"
+        ]
+      }
+    },
+    {
+      "name": "select-no-desired",
+      "op": "selection",
+      "input": {
+        "dataTypes": [],
+        "responses": [
+          [
+            "text",
+            "raw"
+          ],
+          [
+            "json",
+            {
+              "parsed": true
+            }
+          ]
+        ],
+        "contents": [
+          {
+            "type": "xml",
+            "source": "\\bxml\\b",
+            "matched": false
+          },
+          {
+            "type": "html",
+            "source": "\\bhtml",
+            "matched": false
+          },
+          {
+            "type": "json",
+            "source": "\\bjson\\b",
+            "matched": false
+          }
+        ]
+      },
+      "result": {
+        "response": "raw",
+        "dataTypes": [
+          "text"
+        ]
+      }
+    },
+    {
+      "name": "select-empty-desired",
+      "op": "selection",
+      "input": {
+        "dataTypes": [
+          ""
+        ],
+        "responses": [
+          [
+            "text",
+            "raw"
+          ],
+          [
+            "json",
+            {
+              "parsed": true
+            }
+          ]
+        ],
+        "contents": [
+          {
+            "type": "xml",
+            "source": "\\bxml\\b",
+            "matched": false
+          },
+          {
+            "type": "html",
+            "source": "\\bhtml",
+            "matched": false
+          },
+          {
+            "type": "json",
+            "source": "\\bjson\\b",
+            "matched": false
+          }
+        ],
+        "converterKeys": [
+          "json "
+        ]
+      },
+      "result": {
+        "response": "raw",
+        "dataTypes": [
+          "text",
+          ""
+        ]
+      }
+    },
+    {
+      "name": "select-auto-json",
+      "op": "selection",
+      "input": {
+        "dataTypes": [
+          "*"
+        ],
+        "responses": [
+          [
+            "text",
+            "raw"
+          ]
+        ],
+        "contents": [
+          {
+            "type": "xml",
+            "source": "\\bxml\\b",
+            "matched": false
+          },
+          {
+            "type": "html",
+            "source": "\\bhtml",
+            "matched": false
+          },
+          {
+            "type": "json",
+            "source": "\\bjson\\b",
+            "matched": true
+          }
+        ],
+        "contentType": "application/json",
+        "converterKeys": [
+          "text json"
+        ]
+      },
+      "result": {
+        "response": "raw",
+        "dataTypes": [
+          "text",
+          "json"
+        ]
+      }
+    },
+    {
+      "name": "select-auto-repeated",
+      "op": "selection",
+      "input": {
+        "dataTypes": [
+          "*",
+          "*"
+        ],
+        "responses": [
+          [
+            "text",
+            "raw"
+          ]
+        ],
+        "contents": [
+          {
+            "type": "xml",
+            "source": "\\bxml\\b",
+            "matched": false
+          },
+          {
+            "type": "html",
+            "source": "\\bhtml",
+            "matched": true
+          },
+          {
+            "type": "json",
+            "source": "\\bjson\\b",
+            "matched": false
+          }
+        ],
+        "contentType": "text/html"
+      },
+      "result": {
+        "response": "raw",
+        "dataTypes": [
+          "text",
+          "html"
+        ]
+      }
+    },
+    {
+      "name": "select-mime-override",
+      "op": "selection",
+      "input": {
+        "dataTypes": [
+          "*"
+        ],
+        "responses": [
+          [
+            "text",
+            "raw"
+          ]
+        ],
+        "contents": [
+          {
+            "type": "xml",
+            "source": "\\bxml\\b",
+            "matched": false
+          },
+          {
+            "type": "html",
+            "source": "\\bhtml",
+            "matched": true
+          },
+          {
+            "type": "json",
+            "source": "\\bjson\\b",
+            "matched": false
+          }
+        ],
+        "contentType": "application/json",
+        "mimeOverride": "text/html"
+      },
+      "result": {
+        "response": "raw",
+        "dataTypes": [
+          "text",
+          "html"
+        ]
+      }
+    },
+    {
+      "name": "select-empty-override-falls-back",
+      "op": "selection",
+      "input": {
+        "dataTypes": [
+          "*"
+        ],
+        "responses": [
+          [
+            "text",
+            "raw"
+          ]
+        ],
+        "contents": [
+          {
+            "type": "xml",
+            "source": "\\bxml\\b",
+            "matched": false
+          },
+          {
+            "type": "html",
+            "source": "\\bhtml",
+            "matched": false
+          },
+          {
+            "type": "json",
+            "source": "\\bjson\\b",
+            "matched": true
+          }
+        ],
+        "contentType": "application/json",
+        "mimeOverride": ""
+      },
+      "result": {
+        "response": "raw",
+        "dataTypes": [
+          "text",
+          "json"
+        ]
+      }
+    },
+    {
+      "name": "select-mime-ignored-without-auto",
+      "op": "selection",
+      "input": {
+        "dataTypes": [
+          "json"
+        ],
+        "responses": [
+          [
+            "text",
+            "raw"
+          ],
+          [
+            "json",
+            {
+              "parsed": true
+            }
+          ]
+        ],
+        "contents": [
+          {
+            "type": "xml",
+            "source": "\\bxml\\b",
+            "matched": false
+          },
+          {
+            "type": "html",
+            "source": "\\bhtml",
+            "matched": true
+          },
+          {
+            "type": "json",
+            "source": "\\bjson\\b",
+            "matched": false
+          }
+        ],
+        "contentType": "text/html"
+      },
+      "result": {
+        "response": {
+          "parsed": true
+        },
+        "dataTypes": [
+          "json"
+        ]
+      }
+    },
+    {
+      "name": "select-no-responses",
+      "op": "selection",
+      "input": {
+        "dataTypes": [
+          "json"
+        ],
+        "responses": [],
+        "contents": [
+          {
+            "type": "xml",
+            "source": "\\bxml\\b",
+            "matched": false
+          },
+          {
+            "type": "html",
+            "source": "\\bhtml",
+            "matched": false
+          },
+          {
+            "type": "json",
+            "source": "\\bjson\\b",
+            "matched": false
+          }
+        ]
+      },
+      "result": {
+        "response": {
+          "$undefined": true
+        },
+        "dataTypes": [
+          "json"
+        ]
+      }
+    },
+    {
+      "name": "select-empty-response-key",
+      "op": "selection",
+      "input": {
+        "dataTypes": [],
+        "responses": [
+          [
+            "",
+            "empty"
+          ],
+          [
+            "text",
+            "raw"
+          ]
+        ],
+        "contents": [
+          {
+            "type": "xml",
+            "source": "\\bxml\\b",
+            "matched": false
+          },
+          {
+            "type": "html",
+            "source": "\\bhtml",
+            "matched": false
+          },
+          {
+            "type": "json",
+            "source": "\\bjson\\b",
+            "matched": false
+          }
+        ]
+      },
+      "result": {
+        "response": {
+          "$undefined": true
+        },
+        "dataTypes": []
+      }
+    },
+    {
+      "name": "select-empty-key-fallback-skipped",
+      "op": "selection",
+      "input": {
+        "dataTypes": [
+          "json"
+        ],
+        "responses": [
+          [
+            "",
+            "empty"
+          ],
+          [
+            "text",
+            "raw"
+          ]
+        ],
+        "contents": [
+          {
+            "type": "xml",
+            "source": "\\bxml\\b",
+            "matched": false
+          },
+          {
+            "type": "html",
+            "source": "\\bhtml",
+            "matched": false
+          },
+          {
+            "type": "json",
+            "source": "\\bjson\\b",
+            "matched": false
+          }
+        ]
+      },
+      "result": {
+        "response": "raw",
+        "dataTypes": [
+          "text",
+          "json"
+        ]
+      }
+    },
+    {
+      "name": "select-converter-keys-not-normalized",
+      "op": "selection",
+      "input": {
+        "dataTypes": [
+          "json"
+        ],
+        "responses": [
+          [
+            "binary",
+            "bits"
+          ],
+          [
+            "text",
+            "raw"
+          ]
+        ],
+        "contents": [
+          {
+            "type": "xml",
+            "source": "\\bxml\\b",
+            "matched": false
+          },
+          {
+            "type": "html",
+            "source": "\\bhtml",
+            "matched": false
+          },
+          {
+            "type": "json",
+            "source": "\\bjson\\b",
+            "matched": false
+          }
+        ],
+        "converterKeys": [
+          "TEXT JSON"
+        ]
+      },
+      "result": {
+        "response": "bits",
+        "dataTypes": [
+          "binary",
+          "json"
+        ]
+      }
+    },
+    {
+      "name": "prefilter-order",
+      "op": "registry",
+      "input": {
+        "mode": "prefilter",
+        "hooks": [
+          {
+            "id": "a",
+            "expression": "text"
+          },
+          {
+            "id": "b",
+            "expression": "+TEXT"
+          },
+          {
+            "id": "star"
+          }
+        ],
+        "dataTypes": [
+          "text"
+        ]
+      },
+      "result": {
+        "trace": [
+          {
+            "id": "b",
+            "dataTypes": [
+              "text"
+            ]
+          },
+          {
+            "id": "a",
+            "dataTypes": [
+              "text"
+            ]
+          },
+          {
+            "id": "star",
+            "dataTypes": [
+              "text"
+            ]
+          }
+        ],
+        "dataTypes": [
+          "text"
+        ]
+      }
+    },
+    {
+      "name": "prefilter-redirect-chain",
+      "op": "registry",
+      "input": {
+        "mode": "prefilter",
+        "hooks": [
+          {
+            "id": "a",
+            "expression": "text",
+            "redirect": "json"
+          },
+          {
+            "id": "ignored",
+            "expression": "text"
+          },
+          {
+            "id": "b",
+            "expression": "json",
+            "redirect": "xml"
+          },
+          {
+            "id": "c",
+            "expression": "xml"
+          },
+          {
+            "id": "star"
+          }
+        ],
+        "dataTypes": [
+          "text"
+        ]
+      },
+      "result": {
+        "trace": [
+          {
+            "id": "a",
+            "dataTypes": [
+              "text"
+            ]
+          },
+          {
+            "id": "b",
+            "dataTypes": [
+              "json",
+              "text"
+            ]
+          },
+          {
+            "id": "c",
+            "dataTypes": [
+              "xml",
+              "json",
+              "text"
+            ]
+          },
+          {
+            "id": "star",
+            "dataTypes": [
+              "xml",
+              "json",
+              "text"
+            ]
+          }
+        ],
+        "dataTypes": [
+          "xml",
+          "json",
+          "text"
+        ]
+      }
+    },
+    {
+      "name": "prefilter-redirect-cycle-continues",
+      "op": "registry",
+      "input": {
+        "mode": "prefilter",
+        "hooks": [
+          {
+            "id": "a",
+            "expression": "text",
+            "redirect": "json"
+          },
+          {
+            "id": "b",
+            "expression": "json",
+            "redirect": "text"
+          },
+          {
+            "id": "c",
+            "expression": "json"
+          },
+          {
+            "id": "star"
+          }
+        ],
+        "dataTypes": [
+          "text"
+        ]
+      },
+      "result": {
+        "trace": [
+          {
+            "id": "a",
+            "dataTypes": [
+              "text"
+            ]
+          },
+          {
+            "id": "b",
+            "dataTypes": [
+              "json",
+              "text"
+            ]
+          },
+          {
+            "id": "c",
+            "dataTypes": [
+              "json",
+              "text"
+            ]
+          },
+          {
+            "id": "star",
+            "dataTypes": [
+              "json",
+              "text"
+            ]
+          }
+        ],
+        "dataTypes": [
+          "json",
+          "text"
+        ]
+      }
+    },
+    {
+      "name": "prefilter-redirect-star-only-once",
+      "op": "registry",
+      "input": {
+        "mode": "prefilter",
+        "hooks": [
+          {
+            "id": "a",
+            "expression": "text",
+            "redirect": "*"
+          },
+          {
+            "id": "star",
+            "expression": "*",
+            "redirect": "text"
+          }
+        ],
+        "dataTypes": [
+          "text"
+        ]
+      },
+      "result": {
+        "trace": [
+          {
+            "id": "a",
+            "dataTypes": [
+              "text"
+            ]
+          },
+          {
+            "id": "star",
+            "dataTypes": [
+              "*",
+              "text"
+            ]
+          }
+        ],
+        "dataTypes": [
+          "*",
+          "text"
+        ]
+      }
+    },
+    {
+      "name": "prefilter-multiple-types-and-append",
+      "op": "registry",
+      "input": {
+        "mode": "prefilter",
+        "hooks": [
+          {
+            "id": "a",
+            "expression": "TEXT\tjson",
+            "append": "tail"
+          },
+          {
+            "id": "b",
+            "expression": "+",
+            "redirect": "json"
+          }
+        ],
+        "dataTypes": [
+          "text"
+        ]
+      },
+      "result": {
+        "trace": [
+          {
+            "id": "a",
+            "dataTypes": [
+              "text"
+            ]
+          },
+          {
+            "id": "b",
+            "dataTypes": [
+              "text",
+              "tail"
+            ]
+          },
+          {
+            "id": "a",
+            "dataTypes": [
+              "json",
+              "text",
+              "tail"
+            ]
+          }
+        ],
+        "dataTypes": [
+          "json",
+          "text",
+          "tail",
+          "tail"
+        ]
+      }
+    },
+    {
+      "name": "prefilter-empty-expression-registers-none",
+      "op": "registry",
+      "input": {
+        "mode": "prefilter",
+        "hooks": [
+          {
+            "id": "ignored",
+            "expression": ""
+          },
+          {
+            "id": "ignored-space",
+            "expression": " \t"
+          },
+          {
+            "id": "star"
+          }
+        ],
+        "dataTypes": [
+          "text"
+        ]
+      },
+      "result": {
+        "trace": [
+          {
+            "id": "star",
+            "dataTypes": [
+              "text"
+            ]
+          }
+        ],
+        "dataTypes": [
+          "text"
+        ]
+      }
+    },
+    {
+      "name": "transport-fallback",
+      "op": "registry",
+      "input": {
+        "mode": "transport",
+        "hooks": [
+          {
+            "id": "a",
+            "expression": "text"
+          },
+          {
+            "id": "star",
+            "transport": true
+          }
+        ],
+        "dataTypes": [
+          "text"
+        ]
+      },
+      "result": {
+        "trace": [
+          {
+            "id": "a",
+            "dataTypes": [
+              "text"
+            ]
+          },
+          {
+            "id": "star",
+            "dataTypes": [
+              "text"
+            ]
+          }
+        ],
+        "dataTypes": [
+          "text"
+        ],
+        "selected": {
+          "transport": "star"
+        }
+      }
+    },
+    {
+      "name": "transport-first-truthy",
+      "op": "registry",
+      "input": {
+        "mode": "transport",
+        "hooks": [
+          {
+            "id": "a",
+            "expression": "text",
+            "transport": true
+          },
+          {
+            "id": "b",
+            "expression": "text",
+            "transport": true
+          },
+          {
+            "id": "star",
+            "transport": true
+          }
+        ],
+        "dataTypes": [
+          "text"
+        ]
+      },
+      "result": {
+        "trace": [
+          {
+            "id": "a",
+            "dataTypes": [
+              "text"
+            ]
+          }
+        ],
+        "dataTypes": [
+          "text"
+        ],
+        "selected": {
+          "transport": "a"
+        }
+      }
+    },
+    {
+      "name": "transport-prepend",
+      "op": "registry",
+      "input": {
+        "mode": "transport",
+        "hooks": [
+          {
+            "id": "a",
+            "expression": "text",
+            "transport": true
+          },
+          {
+            "id": "b",
+            "expression": "+TEXT",
+            "transport": true
+          }
+        ],
+        "dataTypes": [
+          "text"
+        ]
+      },
+      "result": {
+        "trace": [
+          {
+            "id": "b",
+            "dataTypes": [
+              "text"
+            ]
+          }
+        ],
+        "dataTypes": [
+          "text"
+        ],
+        "selected": {
+          "transport": "b"
+        }
+      }
+    },
+    {
+      "name": "transport-star-not-retried",
+      "op": "registry",
+      "input": {
+        "mode": "transport",
+        "hooks": [
+          {
+            "id": "a",
+            "expression": "*"
+          }
+        ],
+        "dataTypes": [
+          "*"
+        ]
+      },
+      "result": {
+        "trace": [
+          {
+            "id": "a",
+            "dataTypes": [
+              "*"
+            ]
+          }
+        ],
+        "dataTypes": [
+          "*"
+        ],
+        "selected": null
+      }
+    }
+  ]
+}

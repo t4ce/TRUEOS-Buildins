@@ -1,0 +1,6062 @@
+{
+  "description": "Expected event traces from original vendored jQuery source; see tools/event_oracle.mjs",
+  "cases": [
+    {
+      "name": "namespace-none-trigger",
+      "input": {
+        "handlers": [
+          {
+            "id": "plain"
+          },
+          {
+            "id": "a"
+          },
+          {
+            "id": "b"
+          },
+          {
+            "id": "ab"
+          },
+          {
+            "id": "bc"
+          }
+        ],
+        "steps": [
+          {
+            "op": "on",
+            "handler": "plain",
+            "types": "custom"
+          },
+          {
+            "op": "on",
+            "handler": "a",
+            "types": "custom.a"
+          },
+          {
+            "op": "on",
+            "handler": "b",
+            "types": "custom.b"
+          },
+          {
+            "op": "on",
+            "handler": "ab",
+            "types": "custom.b.a"
+          },
+          {
+            "op": "on",
+            "handler": "bc",
+            "types": "custom.b.c"
+          },
+          {
+            "op": "trigger",
+            "types": "custom",
+            "onlyHandlers": false
+          },
+          {
+            "op": "trigger",
+            "types": "custom",
+            "onlyHandlers": false
+          }
+        ]
+      },
+      "result": [
+        {
+          "kind": "handler",
+          "id": "plain",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "a",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "a",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "b",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "b",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "ab",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "a.b",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "bc",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "b.c",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 5
+        },
+        {
+          "kind": "handler",
+          "id": "plain",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "a",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "a",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "b",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "b",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "ab",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "a.b",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "bc",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "b.c",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 5
+        }
+      ]
+    },
+    {
+      "name": "namespace-none-handler",
+      "input": {
+        "handlers": [
+          {
+            "id": "plain"
+          },
+          {
+            "id": "a"
+          },
+          {
+            "id": "b"
+          },
+          {
+            "id": "ab"
+          },
+          {
+            "id": "bc"
+          }
+        ],
+        "steps": [
+          {
+            "op": "on",
+            "handler": "plain",
+            "types": "custom"
+          },
+          {
+            "op": "on",
+            "handler": "a",
+            "types": "custom.a"
+          },
+          {
+            "op": "on",
+            "handler": "b",
+            "types": "custom.b"
+          },
+          {
+            "op": "on",
+            "handler": "ab",
+            "types": "custom.b.a"
+          },
+          {
+            "op": "on",
+            "handler": "bc",
+            "types": "custom.b.c"
+          },
+          {
+            "op": "trigger",
+            "types": "custom",
+            "onlyHandlers": true
+          },
+          {
+            "op": "trigger",
+            "types": "custom",
+            "onlyHandlers": true
+          }
+        ]
+      },
+      "result": [
+        {
+          "kind": "handler",
+          "id": "plain",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 2,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "a",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "a",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 2,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "b",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "b",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 2,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "ab",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "a.b",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 2,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "bc",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "b.c",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 2,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom",
+          "onlyHandlers": true,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 5
+        },
+        {
+          "kind": "handler",
+          "id": "plain",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 2,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "a",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "a",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 2,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "b",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "b",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 2,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "ab",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "a.b",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 2,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "bc",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "b.c",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 2,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom",
+          "onlyHandlers": true,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 5
+        }
+      ]
+    },
+    {
+      "name": "namespace-a-trigger",
+      "input": {
+        "handlers": [
+          {
+            "id": "plain"
+          },
+          {
+            "id": "a"
+          },
+          {
+            "id": "b"
+          },
+          {
+            "id": "ab"
+          },
+          {
+            "id": "bc"
+          }
+        ],
+        "steps": [
+          {
+            "op": "on",
+            "handler": "plain",
+            "types": "custom"
+          },
+          {
+            "op": "on",
+            "handler": "a",
+            "types": "custom.a"
+          },
+          {
+            "op": "on",
+            "handler": "b",
+            "types": "custom.b"
+          },
+          {
+            "op": "on",
+            "handler": "ab",
+            "types": "custom.b.a"
+          },
+          {
+            "op": "on",
+            "handler": "bc",
+            "types": "custom.b.c"
+          },
+          {
+            "op": "trigger",
+            "types": "custom.a",
+            "onlyHandlers": false
+          },
+          {
+            "op": "trigger",
+            "types": "custom.a",
+            "onlyHandlers": false
+          }
+        ]
+      },
+      "result": [
+        {
+          "kind": "handler",
+          "id": "a",
+          "type": "custom",
+          "namespace": "a",
+          "bindingNamespace": "a",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "ab",
+          "type": "custom",
+          "namespace": "a",
+          "bindingNamespace": "a.b",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom.a",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 5
+        },
+        {
+          "kind": "handler",
+          "id": "a",
+          "type": "custom",
+          "namespace": "a",
+          "bindingNamespace": "a",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "ab",
+          "type": "custom",
+          "namespace": "a",
+          "bindingNamespace": "a.b",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom.a",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 5
+        }
+      ]
+    },
+    {
+      "name": "namespace-a-handler",
+      "input": {
+        "handlers": [
+          {
+            "id": "plain"
+          },
+          {
+            "id": "a"
+          },
+          {
+            "id": "b"
+          },
+          {
+            "id": "ab"
+          },
+          {
+            "id": "bc"
+          }
+        ],
+        "steps": [
+          {
+            "op": "on",
+            "handler": "plain",
+            "types": "custom"
+          },
+          {
+            "op": "on",
+            "handler": "a",
+            "types": "custom.a"
+          },
+          {
+            "op": "on",
+            "handler": "b",
+            "types": "custom.b"
+          },
+          {
+            "op": "on",
+            "handler": "ab",
+            "types": "custom.b.a"
+          },
+          {
+            "op": "on",
+            "handler": "bc",
+            "types": "custom.b.c"
+          },
+          {
+            "op": "trigger",
+            "types": "custom.a",
+            "onlyHandlers": true
+          },
+          {
+            "op": "trigger",
+            "types": "custom.a",
+            "onlyHandlers": true
+          }
+        ]
+      },
+      "result": [
+        {
+          "kind": "handler",
+          "id": "a",
+          "type": "custom",
+          "namespace": "a",
+          "bindingNamespace": "a",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 2,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "ab",
+          "type": "custom",
+          "namespace": "a",
+          "bindingNamespace": "a.b",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 2,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom.a",
+          "onlyHandlers": true,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 5
+        },
+        {
+          "kind": "handler",
+          "id": "a",
+          "type": "custom",
+          "namespace": "a",
+          "bindingNamespace": "a",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 2,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "ab",
+          "type": "custom",
+          "namespace": "a",
+          "bindingNamespace": "a.b",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 2,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom.a",
+          "onlyHandlers": true,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 5
+        }
+      ]
+    },
+    {
+      "name": "namespace-b-trigger",
+      "input": {
+        "handlers": [
+          {
+            "id": "plain"
+          },
+          {
+            "id": "a"
+          },
+          {
+            "id": "b"
+          },
+          {
+            "id": "ab"
+          },
+          {
+            "id": "bc"
+          }
+        ],
+        "steps": [
+          {
+            "op": "on",
+            "handler": "plain",
+            "types": "custom"
+          },
+          {
+            "op": "on",
+            "handler": "a",
+            "types": "custom.a"
+          },
+          {
+            "op": "on",
+            "handler": "b",
+            "types": "custom.b"
+          },
+          {
+            "op": "on",
+            "handler": "ab",
+            "types": "custom.b.a"
+          },
+          {
+            "op": "on",
+            "handler": "bc",
+            "types": "custom.b.c"
+          },
+          {
+            "op": "trigger",
+            "types": "custom.b",
+            "onlyHandlers": false
+          },
+          {
+            "op": "trigger",
+            "types": "custom.b",
+            "onlyHandlers": false
+          }
+        ]
+      },
+      "result": [
+        {
+          "kind": "handler",
+          "id": "b",
+          "type": "custom",
+          "namespace": "b",
+          "bindingNamespace": "b",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "ab",
+          "type": "custom",
+          "namespace": "b",
+          "bindingNamespace": "a.b",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "bc",
+          "type": "custom",
+          "namespace": "b",
+          "bindingNamespace": "b.c",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom.b",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 5
+        },
+        {
+          "kind": "handler",
+          "id": "b",
+          "type": "custom",
+          "namespace": "b",
+          "bindingNamespace": "b",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "ab",
+          "type": "custom",
+          "namespace": "b",
+          "bindingNamespace": "a.b",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "bc",
+          "type": "custom",
+          "namespace": "b",
+          "bindingNamespace": "b.c",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom.b",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 5
+        }
+      ]
+    },
+    {
+      "name": "namespace-b-handler",
+      "input": {
+        "handlers": [
+          {
+            "id": "plain"
+          },
+          {
+            "id": "a"
+          },
+          {
+            "id": "b"
+          },
+          {
+            "id": "ab"
+          },
+          {
+            "id": "bc"
+          }
+        ],
+        "steps": [
+          {
+            "op": "on",
+            "handler": "plain",
+            "types": "custom"
+          },
+          {
+            "op": "on",
+            "handler": "a",
+            "types": "custom.a"
+          },
+          {
+            "op": "on",
+            "handler": "b",
+            "types": "custom.b"
+          },
+          {
+            "op": "on",
+            "handler": "ab",
+            "types": "custom.b.a"
+          },
+          {
+            "op": "on",
+            "handler": "bc",
+            "types": "custom.b.c"
+          },
+          {
+            "op": "trigger",
+            "types": "custom.b",
+            "onlyHandlers": true
+          },
+          {
+            "op": "trigger",
+            "types": "custom.b",
+            "onlyHandlers": true
+          }
+        ]
+      },
+      "result": [
+        {
+          "kind": "handler",
+          "id": "b",
+          "type": "custom",
+          "namespace": "b",
+          "bindingNamespace": "b",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 2,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "ab",
+          "type": "custom",
+          "namespace": "b",
+          "bindingNamespace": "a.b",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 2,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "bc",
+          "type": "custom",
+          "namespace": "b",
+          "bindingNamespace": "b.c",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 2,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom.b",
+          "onlyHandlers": true,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 5
+        },
+        {
+          "kind": "handler",
+          "id": "b",
+          "type": "custom",
+          "namespace": "b",
+          "bindingNamespace": "b",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 2,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "ab",
+          "type": "custom",
+          "namespace": "b",
+          "bindingNamespace": "a.b",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 2,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "bc",
+          "type": "custom",
+          "namespace": "b",
+          "bindingNamespace": "b.c",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 2,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom.b",
+          "onlyHandlers": true,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 5
+        }
+      ]
+    },
+    {
+      "name": "namespace-c-trigger",
+      "input": {
+        "handlers": [
+          {
+            "id": "plain"
+          },
+          {
+            "id": "a"
+          },
+          {
+            "id": "b"
+          },
+          {
+            "id": "ab"
+          },
+          {
+            "id": "bc"
+          }
+        ],
+        "steps": [
+          {
+            "op": "on",
+            "handler": "plain",
+            "types": "custom"
+          },
+          {
+            "op": "on",
+            "handler": "a",
+            "types": "custom.a"
+          },
+          {
+            "op": "on",
+            "handler": "b",
+            "types": "custom.b"
+          },
+          {
+            "op": "on",
+            "handler": "ab",
+            "types": "custom.b.a"
+          },
+          {
+            "op": "on",
+            "handler": "bc",
+            "types": "custom.b.c"
+          },
+          {
+            "op": "trigger",
+            "types": "custom.c",
+            "onlyHandlers": false
+          },
+          {
+            "op": "trigger",
+            "types": "custom.c",
+            "onlyHandlers": false
+          }
+        ]
+      },
+      "result": [
+        {
+          "kind": "handler",
+          "id": "bc",
+          "type": "custom",
+          "namespace": "c",
+          "bindingNamespace": "b.c",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom.c",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 5
+        },
+        {
+          "kind": "handler",
+          "id": "bc",
+          "type": "custom",
+          "namespace": "c",
+          "bindingNamespace": "b.c",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom.c",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 5
+        }
+      ]
+    },
+    {
+      "name": "namespace-c-handler",
+      "input": {
+        "handlers": [
+          {
+            "id": "plain"
+          },
+          {
+            "id": "a"
+          },
+          {
+            "id": "b"
+          },
+          {
+            "id": "ab"
+          },
+          {
+            "id": "bc"
+          }
+        ],
+        "steps": [
+          {
+            "op": "on",
+            "handler": "plain",
+            "types": "custom"
+          },
+          {
+            "op": "on",
+            "handler": "a",
+            "types": "custom.a"
+          },
+          {
+            "op": "on",
+            "handler": "b",
+            "types": "custom.b"
+          },
+          {
+            "op": "on",
+            "handler": "ab",
+            "types": "custom.b.a"
+          },
+          {
+            "op": "on",
+            "handler": "bc",
+            "types": "custom.b.c"
+          },
+          {
+            "op": "trigger",
+            "types": "custom.c",
+            "onlyHandlers": true
+          },
+          {
+            "op": "trigger",
+            "types": "custom.c",
+            "onlyHandlers": true
+          }
+        ]
+      },
+      "result": [
+        {
+          "kind": "handler",
+          "id": "bc",
+          "type": "custom",
+          "namespace": "c",
+          "bindingNamespace": "b.c",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 2,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom.c",
+          "onlyHandlers": true,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 5
+        },
+        {
+          "kind": "handler",
+          "id": "bc",
+          "type": "custom",
+          "namespace": "c",
+          "bindingNamespace": "b.c",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 2,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom.c",
+          "onlyHandlers": true,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 5
+        }
+      ]
+    },
+    {
+      "name": "namespace-a.b-trigger",
+      "input": {
+        "handlers": [
+          {
+            "id": "plain"
+          },
+          {
+            "id": "a"
+          },
+          {
+            "id": "b"
+          },
+          {
+            "id": "ab"
+          },
+          {
+            "id": "bc"
+          }
+        ],
+        "steps": [
+          {
+            "op": "on",
+            "handler": "plain",
+            "types": "custom"
+          },
+          {
+            "op": "on",
+            "handler": "a",
+            "types": "custom.a"
+          },
+          {
+            "op": "on",
+            "handler": "b",
+            "types": "custom.b"
+          },
+          {
+            "op": "on",
+            "handler": "ab",
+            "types": "custom.b.a"
+          },
+          {
+            "op": "on",
+            "handler": "bc",
+            "types": "custom.b.c"
+          },
+          {
+            "op": "trigger",
+            "types": "custom.a.b",
+            "onlyHandlers": false
+          },
+          {
+            "op": "trigger",
+            "types": "custom.a.b",
+            "onlyHandlers": false
+          }
+        ]
+      },
+      "result": [
+        {
+          "kind": "handler",
+          "id": "ab",
+          "type": "custom",
+          "namespace": "a.b",
+          "bindingNamespace": "a.b",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom.a.b",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 5
+        },
+        {
+          "kind": "handler",
+          "id": "ab",
+          "type": "custom",
+          "namespace": "a.b",
+          "bindingNamespace": "a.b",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom.a.b",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 5
+        }
+      ]
+    },
+    {
+      "name": "namespace-a.b-handler",
+      "input": {
+        "handlers": [
+          {
+            "id": "plain"
+          },
+          {
+            "id": "a"
+          },
+          {
+            "id": "b"
+          },
+          {
+            "id": "ab"
+          },
+          {
+            "id": "bc"
+          }
+        ],
+        "steps": [
+          {
+            "op": "on",
+            "handler": "plain",
+            "types": "custom"
+          },
+          {
+            "op": "on",
+            "handler": "a",
+            "types": "custom.a"
+          },
+          {
+            "op": "on",
+            "handler": "b",
+            "types": "custom.b"
+          },
+          {
+            "op": "on",
+            "handler": "ab",
+            "types": "custom.b.a"
+          },
+          {
+            "op": "on",
+            "handler": "bc",
+            "types": "custom.b.c"
+          },
+          {
+            "op": "trigger",
+            "types": "custom.a.b",
+            "onlyHandlers": true
+          },
+          {
+            "op": "trigger",
+            "types": "custom.a.b",
+            "onlyHandlers": true
+          }
+        ]
+      },
+      "result": [
+        {
+          "kind": "handler",
+          "id": "ab",
+          "type": "custom",
+          "namespace": "a.b",
+          "bindingNamespace": "a.b",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 2,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom.a.b",
+          "onlyHandlers": true,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 5
+        },
+        {
+          "kind": "handler",
+          "id": "ab",
+          "type": "custom",
+          "namespace": "a.b",
+          "bindingNamespace": "a.b",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 2,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom.a.b",
+          "onlyHandlers": true,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 5
+        }
+      ]
+    },
+    {
+      "name": "namespace-b.a-trigger",
+      "input": {
+        "handlers": [
+          {
+            "id": "plain"
+          },
+          {
+            "id": "a"
+          },
+          {
+            "id": "b"
+          },
+          {
+            "id": "ab"
+          },
+          {
+            "id": "bc"
+          }
+        ],
+        "steps": [
+          {
+            "op": "on",
+            "handler": "plain",
+            "types": "custom"
+          },
+          {
+            "op": "on",
+            "handler": "a",
+            "types": "custom.a"
+          },
+          {
+            "op": "on",
+            "handler": "b",
+            "types": "custom.b"
+          },
+          {
+            "op": "on",
+            "handler": "ab",
+            "types": "custom.b.a"
+          },
+          {
+            "op": "on",
+            "handler": "bc",
+            "types": "custom.b.c"
+          },
+          {
+            "op": "trigger",
+            "types": "custom.b.a",
+            "onlyHandlers": false
+          },
+          {
+            "op": "trigger",
+            "types": "custom.b.a",
+            "onlyHandlers": false
+          }
+        ]
+      },
+      "result": [
+        {
+          "kind": "handler",
+          "id": "ab",
+          "type": "custom",
+          "namespace": "a.b",
+          "bindingNamespace": "a.b",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom.b.a",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 5
+        },
+        {
+          "kind": "handler",
+          "id": "ab",
+          "type": "custom",
+          "namespace": "a.b",
+          "bindingNamespace": "a.b",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom.b.a",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 5
+        }
+      ]
+    },
+    {
+      "name": "namespace-b.a-handler",
+      "input": {
+        "handlers": [
+          {
+            "id": "plain"
+          },
+          {
+            "id": "a"
+          },
+          {
+            "id": "b"
+          },
+          {
+            "id": "ab"
+          },
+          {
+            "id": "bc"
+          }
+        ],
+        "steps": [
+          {
+            "op": "on",
+            "handler": "plain",
+            "types": "custom"
+          },
+          {
+            "op": "on",
+            "handler": "a",
+            "types": "custom.a"
+          },
+          {
+            "op": "on",
+            "handler": "b",
+            "types": "custom.b"
+          },
+          {
+            "op": "on",
+            "handler": "ab",
+            "types": "custom.b.a"
+          },
+          {
+            "op": "on",
+            "handler": "bc",
+            "types": "custom.b.c"
+          },
+          {
+            "op": "trigger",
+            "types": "custom.b.a",
+            "onlyHandlers": true
+          },
+          {
+            "op": "trigger",
+            "types": "custom.b.a",
+            "onlyHandlers": true
+          }
+        ]
+      },
+      "result": [
+        {
+          "kind": "handler",
+          "id": "ab",
+          "type": "custom",
+          "namespace": "a.b",
+          "bindingNamespace": "a.b",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 2,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom.b.a",
+          "onlyHandlers": true,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 5
+        },
+        {
+          "kind": "handler",
+          "id": "ab",
+          "type": "custom",
+          "namespace": "a.b",
+          "bindingNamespace": "a.b",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 2,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom.b.a",
+          "onlyHandlers": true,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 5
+        }
+      ]
+    },
+    {
+      "name": "namespace-a.c-trigger",
+      "input": {
+        "handlers": [
+          {
+            "id": "plain"
+          },
+          {
+            "id": "a"
+          },
+          {
+            "id": "b"
+          },
+          {
+            "id": "ab"
+          },
+          {
+            "id": "bc"
+          }
+        ],
+        "steps": [
+          {
+            "op": "on",
+            "handler": "plain",
+            "types": "custom"
+          },
+          {
+            "op": "on",
+            "handler": "a",
+            "types": "custom.a"
+          },
+          {
+            "op": "on",
+            "handler": "b",
+            "types": "custom.b"
+          },
+          {
+            "op": "on",
+            "handler": "ab",
+            "types": "custom.b.a"
+          },
+          {
+            "op": "on",
+            "handler": "bc",
+            "types": "custom.b.c"
+          },
+          {
+            "op": "trigger",
+            "types": "custom.a.c",
+            "onlyHandlers": false
+          },
+          {
+            "op": "trigger",
+            "types": "custom.a.c",
+            "onlyHandlers": false
+          }
+        ]
+      },
+      "result": [
+        {
+          "kind": "trigger",
+          "type": "custom.a.c",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 5
+        },
+        {
+          "kind": "trigger",
+          "type": "custom.a.c",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 5
+        }
+      ]
+    },
+    {
+      "name": "namespace-a.c-handler",
+      "input": {
+        "handlers": [
+          {
+            "id": "plain"
+          },
+          {
+            "id": "a"
+          },
+          {
+            "id": "b"
+          },
+          {
+            "id": "ab"
+          },
+          {
+            "id": "bc"
+          }
+        ],
+        "steps": [
+          {
+            "op": "on",
+            "handler": "plain",
+            "types": "custom"
+          },
+          {
+            "op": "on",
+            "handler": "a",
+            "types": "custom.a"
+          },
+          {
+            "op": "on",
+            "handler": "b",
+            "types": "custom.b"
+          },
+          {
+            "op": "on",
+            "handler": "ab",
+            "types": "custom.b.a"
+          },
+          {
+            "op": "on",
+            "handler": "bc",
+            "types": "custom.b.c"
+          },
+          {
+            "op": "trigger",
+            "types": "custom.a.c",
+            "onlyHandlers": true
+          },
+          {
+            "op": "trigger",
+            "types": "custom.a.c",
+            "onlyHandlers": true
+          }
+        ]
+      },
+      "result": [
+        {
+          "kind": "trigger",
+          "type": "custom.a.c",
+          "onlyHandlers": true,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 5
+        },
+        {
+          "kind": "trigger",
+          "type": "custom.a.c",
+          "onlyHandlers": true,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 5
+        }
+      ]
+    },
+    {
+      "name": "namespace-a.b.c-trigger",
+      "input": {
+        "handlers": [
+          {
+            "id": "plain"
+          },
+          {
+            "id": "a"
+          },
+          {
+            "id": "b"
+          },
+          {
+            "id": "ab"
+          },
+          {
+            "id": "bc"
+          }
+        ],
+        "steps": [
+          {
+            "op": "on",
+            "handler": "plain",
+            "types": "custom"
+          },
+          {
+            "op": "on",
+            "handler": "a",
+            "types": "custom.a"
+          },
+          {
+            "op": "on",
+            "handler": "b",
+            "types": "custom.b"
+          },
+          {
+            "op": "on",
+            "handler": "ab",
+            "types": "custom.b.a"
+          },
+          {
+            "op": "on",
+            "handler": "bc",
+            "types": "custom.b.c"
+          },
+          {
+            "op": "trigger",
+            "types": "custom.a.b.c",
+            "onlyHandlers": false
+          },
+          {
+            "op": "trigger",
+            "types": "custom.a.b.c",
+            "onlyHandlers": false
+          }
+        ]
+      },
+      "result": [
+        {
+          "kind": "trigger",
+          "type": "custom.a.b.c",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 5
+        },
+        {
+          "kind": "trigger",
+          "type": "custom.a.b.c",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 5
+        }
+      ]
+    },
+    {
+      "name": "namespace-a.b.c-handler",
+      "input": {
+        "handlers": [
+          {
+            "id": "plain"
+          },
+          {
+            "id": "a"
+          },
+          {
+            "id": "b"
+          },
+          {
+            "id": "ab"
+          },
+          {
+            "id": "bc"
+          }
+        ],
+        "steps": [
+          {
+            "op": "on",
+            "handler": "plain",
+            "types": "custom"
+          },
+          {
+            "op": "on",
+            "handler": "a",
+            "types": "custom.a"
+          },
+          {
+            "op": "on",
+            "handler": "b",
+            "types": "custom.b"
+          },
+          {
+            "op": "on",
+            "handler": "ab",
+            "types": "custom.b.a"
+          },
+          {
+            "op": "on",
+            "handler": "bc",
+            "types": "custom.b.c"
+          },
+          {
+            "op": "trigger",
+            "types": "custom.a.b.c",
+            "onlyHandlers": true
+          },
+          {
+            "op": "trigger",
+            "types": "custom.a.b.c",
+            "onlyHandlers": true
+          }
+        ]
+      },
+      "result": [
+        {
+          "kind": "trigger",
+          "type": "custom.a.b.c",
+          "onlyHandlers": true,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 5
+        },
+        {
+          "kind": "trigger",
+          "type": "custom.a.b.c",
+          "onlyHandlers": true,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 5
+        }
+      ]
+    },
+    {
+      "name": "namespace-missing-trigger",
+      "input": {
+        "handlers": [
+          {
+            "id": "plain"
+          },
+          {
+            "id": "a"
+          },
+          {
+            "id": "b"
+          },
+          {
+            "id": "ab"
+          },
+          {
+            "id": "bc"
+          }
+        ],
+        "steps": [
+          {
+            "op": "on",
+            "handler": "plain",
+            "types": "custom"
+          },
+          {
+            "op": "on",
+            "handler": "a",
+            "types": "custom.a"
+          },
+          {
+            "op": "on",
+            "handler": "b",
+            "types": "custom.b"
+          },
+          {
+            "op": "on",
+            "handler": "ab",
+            "types": "custom.b.a"
+          },
+          {
+            "op": "on",
+            "handler": "bc",
+            "types": "custom.b.c"
+          },
+          {
+            "op": "trigger",
+            "types": "custom.missing",
+            "onlyHandlers": false
+          },
+          {
+            "op": "trigger",
+            "types": "custom.missing",
+            "onlyHandlers": false
+          }
+        ]
+      },
+      "result": [
+        {
+          "kind": "trigger",
+          "type": "custom.missing",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 5
+        },
+        {
+          "kind": "trigger",
+          "type": "custom.missing",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 5
+        }
+      ]
+    },
+    {
+      "name": "namespace-missing-handler",
+      "input": {
+        "handlers": [
+          {
+            "id": "plain"
+          },
+          {
+            "id": "a"
+          },
+          {
+            "id": "b"
+          },
+          {
+            "id": "ab"
+          },
+          {
+            "id": "bc"
+          }
+        ],
+        "steps": [
+          {
+            "op": "on",
+            "handler": "plain",
+            "types": "custom"
+          },
+          {
+            "op": "on",
+            "handler": "a",
+            "types": "custom.a"
+          },
+          {
+            "op": "on",
+            "handler": "b",
+            "types": "custom.b"
+          },
+          {
+            "op": "on",
+            "handler": "ab",
+            "types": "custom.b.a"
+          },
+          {
+            "op": "on",
+            "handler": "bc",
+            "types": "custom.b.c"
+          },
+          {
+            "op": "trigger",
+            "types": "custom.missing",
+            "onlyHandlers": true
+          },
+          {
+            "op": "trigger",
+            "types": "custom.missing",
+            "onlyHandlers": true
+          }
+        ]
+      },
+      "result": [
+        {
+          "kind": "trigger",
+          "type": "custom.missing",
+          "onlyHandlers": true,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 5
+        },
+        {
+          "kind": "trigger",
+          "type": "custom.missing",
+          "onlyHandlers": true,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 5
+        }
+      ]
+    },
+    {
+      "name": "remove-all",
+      "input": {
+        "handlers": [
+          {
+            "id": "plain"
+          },
+          {
+            "id": "a"
+          },
+          {
+            "id": "b"
+          },
+          {
+            "id": "ab"
+          },
+          {
+            "id": "bc"
+          }
+        ],
+        "steps": [
+          {
+            "op": "on",
+            "handler": "plain",
+            "types": "custom"
+          },
+          {
+            "op": "on",
+            "handler": "a",
+            "types": "custom.a"
+          },
+          {
+            "op": "on",
+            "handler": "b",
+            "types": "custom.b"
+          },
+          {
+            "op": "on",
+            "handler": "ab",
+            "types": "custom.b.a"
+          },
+          {
+            "op": "on",
+            "handler": "bc",
+            "types": "custom.b.c"
+          },
+          {
+            "op": "off",
+            "types": ""
+          },
+          {
+            "op": "snapshot"
+          },
+          {
+            "op": "trigger",
+            "types": "custom",
+            "onlyHandlers": false
+          }
+        ]
+      },
+      "result": [
+        {
+          "kind": "snapshot",
+          "remaining": 0
+        },
+        {
+          "kind": "trigger",
+          "type": "custom",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 0
+        }
+      ]
+    },
+    {
+      "name": "remove-.a",
+      "input": {
+        "handlers": [
+          {
+            "id": "plain"
+          },
+          {
+            "id": "a"
+          },
+          {
+            "id": "b"
+          },
+          {
+            "id": "ab"
+          },
+          {
+            "id": "bc"
+          }
+        ],
+        "steps": [
+          {
+            "op": "on",
+            "handler": "plain",
+            "types": "custom"
+          },
+          {
+            "op": "on",
+            "handler": "a",
+            "types": "custom.a"
+          },
+          {
+            "op": "on",
+            "handler": "b",
+            "types": "custom.b"
+          },
+          {
+            "op": "on",
+            "handler": "ab",
+            "types": "custom.b.a"
+          },
+          {
+            "op": "on",
+            "handler": "bc",
+            "types": "custom.b.c"
+          },
+          {
+            "op": "off",
+            "types": ".a"
+          },
+          {
+            "op": "snapshot"
+          },
+          {
+            "op": "trigger",
+            "types": "custom",
+            "onlyHandlers": false
+          }
+        ]
+      },
+      "result": [
+        {
+          "kind": "snapshot",
+          "remaining": 3
+        },
+        {
+          "kind": "handler",
+          "id": "plain",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "b",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "b",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "bc",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "b.c",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 3
+        }
+      ]
+    },
+    {
+      "name": "remove-.b",
+      "input": {
+        "handlers": [
+          {
+            "id": "plain"
+          },
+          {
+            "id": "a"
+          },
+          {
+            "id": "b"
+          },
+          {
+            "id": "ab"
+          },
+          {
+            "id": "bc"
+          }
+        ],
+        "steps": [
+          {
+            "op": "on",
+            "handler": "plain",
+            "types": "custom"
+          },
+          {
+            "op": "on",
+            "handler": "a",
+            "types": "custom.a"
+          },
+          {
+            "op": "on",
+            "handler": "b",
+            "types": "custom.b"
+          },
+          {
+            "op": "on",
+            "handler": "ab",
+            "types": "custom.b.a"
+          },
+          {
+            "op": "on",
+            "handler": "bc",
+            "types": "custom.b.c"
+          },
+          {
+            "op": "off",
+            "types": ".b"
+          },
+          {
+            "op": "snapshot"
+          },
+          {
+            "op": "trigger",
+            "types": "custom",
+            "onlyHandlers": false
+          }
+        ]
+      },
+      "result": [
+        {
+          "kind": "snapshot",
+          "remaining": 2
+        },
+        {
+          "kind": "handler",
+          "id": "plain",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "a",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "a",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 2
+        }
+      ]
+    },
+    {
+      "name": "remove-.a.b",
+      "input": {
+        "handlers": [
+          {
+            "id": "plain"
+          },
+          {
+            "id": "a"
+          },
+          {
+            "id": "b"
+          },
+          {
+            "id": "ab"
+          },
+          {
+            "id": "bc"
+          }
+        ],
+        "steps": [
+          {
+            "op": "on",
+            "handler": "plain",
+            "types": "custom"
+          },
+          {
+            "op": "on",
+            "handler": "a",
+            "types": "custom.a"
+          },
+          {
+            "op": "on",
+            "handler": "b",
+            "types": "custom.b"
+          },
+          {
+            "op": "on",
+            "handler": "ab",
+            "types": "custom.b.a"
+          },
+          {
+            "op": "on",
+            "handler": "bc",
+            "types": "custom.b.c"
+          },
+          {
+            "op": "off",
+            "types": ".a.b"
+          },
+          {
+            "op": "snapshot"
+          },
+          {
+            "op": "trigger",
+            "types": "custom",
+            "onlyHandlers": false
+          }
+        ]
+      },
+      "result": [
+        {
+          "kind": "snapshot",
+          "remaining": 4
+        },
+        {
+          "kind": "handler",
+          "id": "plain",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "a",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "a",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "b",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "b",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "bc",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "b.c",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 4
+        }
+      ]
+    },
+    {
+      "name": "remove-.b.a",
+      "input": {
+        "handlers": [
+          {
+            "id": "plain"
+          },
+          {
+            "id": "a"
+          },
+          {
+            "id": "b"
+          },
+          {
+            "id": "ab"
+          },
+          {
+            "id": "bc"
+          }
+        ],
+        "steps": [
+          {
+            "op": "on",
+            "handler": "plain",
+            "types": "custom"
+          },
+          {
+            "op": "on",
+            "handler": "a",
+            "types": "custom.a"
+          },
+          {
+            "op": "on",
+            "handler": "b",
+            "types": "custom.b"
+          },
+          {
+            "op": "on",
+            "handler": "ab",
+            "types": "custom.b.a"
+          },
+          {
+            "op": "on",
+            "handler": "bc",
+            "types": "custom.b.c"
+          },
+          {
+            "op": "off",
+            "types": ".b.a"
+          },
+          {
+            "op": "snapshot"
+          },
+          {
+            "op": "trigger",
+            "types": "custom",
+            "onlyHandlers": false
+          }
+        ]
+      },
+      "result": [
+        {
+          "kind": "snapshot",
+          "remaining": 4
+        },
+        {
+          "kind": "handler",
+          "id": "plain",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "a",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "a",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "b",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "b",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "bc",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "b.c",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 4
+        }
+      ]
+    },
+    {
+      "name": "remove-.missing",
+      "input": {
+        "handlers": [
+          {
+            "id": "plain"
+          },
+          {
+            "id": "a"
+          },
+          {
+            "id": "b"
+          },
+          {
+            "id": "ab"
+          },
+          {
+            "id": "bc"
+          }
+        ],
+        "steps": [
+          {
+            "op": "on",
+            "handler": "plain",
+            "types": "custom"
+          },
+          {
+            "op": "on",
+            "handler": "a",
+            "types": "custom.a"
+          },
+          {
+            "op": "on",
+            "handler": "b",
+            "types": "custom.b"
+          },
+          {
+            "op": "on",
+            "handler": "ab",
+            "types": "custom.b.a"
+          },
+          {
+            "op": "on",
+            "handler": "bc",
+            "types": "custom.b.c"
+          },
+          {
+            "op": "off",
+            "types": ".missing"
+          },
+          {
+            "op": "snapshot"
+          },
+          {
+            "op": "trigger",
+            "types": "custom",
+            "onlyHandlers": false
+          }
+        ]
+      },
+      "result": [
+        {
+          "kind": "snapshot",
+          "remaining": 5
+        },
+        {
+          "kind": "handler",
+          "id": "plain",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "a",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "a",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "b",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "b",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "ab",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "a.b",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "bc",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "b.c",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 5
+        }
+      ]
+    },
+    {
+      "name": "remove-custom.a",
+      "input": {
+        "handlers": [
+          {
+            "id": "plain"
+          },
+          {
+            "id": "a"
+          },
+          {
+            "id": "b"
+          },
+          {
+            "id": "ab"
+          },
+          {
+            "id": "bc"
+          }
+        ],
+        "steps": [
+          {
+            "op": "on",
+            "handler": "plain",
+            "types": "custom"
+          },
+          {
+            "op": "on",
+            "handler": "a",
+            "types": "custom.a"
+          },
+          {
+            "op": "on",
+            "handler": "b",
+            "types": "custom.b"
+          },
+          {
+            "op": "on",
+            "handler": "ab",
+            "types": "custom.b.a"
+          },
+          {
+            "op": "on",
+            "handler": "bc",
+            "types": "custom.b.c"
+          },
+          {
+            "op": "off",
+            "types": "custom.a"
+          },
+          {
+            "op": "snapshot"
+          },
+          {
+            "op": "trigger",
+            "types": "custom",
+            "onlyHandlers": false
+          }
+        ]
+      },
+      "result": [
+        {
+          "kind": "snapshot",
+          "remaining": 3
+        },
+        {
+          "kind": "handler",
+          "id": "plain",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "b",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "b",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "bc",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "b.c",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 3
+        }
+      ]
+    },
+    {
+      "name": "remove-other",
+      "input": {
+        "handlers": [
+          {
+            "id": "plain"
+          },
+          {
+            "id": "a"
+          },
+          {
+            "id": "b"
+          },
+          {
+            "id": "ab"
+          },
+          {
+            "id": "bc"
+          }
+        ],
+        "steps": [
+          {
+            "op": "on",
+            "handler": "plain",
+            "types": "custom"
+          },
+          {
+            "op": "on",
+            "handler": "a",
+            "types": "custom.a"
+          },
+          {
+            "op": "on",
+            "handler": "b",
+            "types": "custom.b"
+          },
+          {
+            "op": "on",
+            "handler": "ab",
+            "types": "custom.b.a"
+          },
+          {
+            "op": "on",
+            "handler": "bc",
+            "types": "custom.b.c"
+          },
+          {
+            "op": "off",
+            "types": "other"
+          },
+          {
+            "op": "snapshot"
+          },
+          {
+            "op": "trigger",
+            "types": "custom",
+            "onlyHandlers": false
+          }
+        ]
+      },
+      "result": [
+        {
+          "kind": "snapshot",
+          "remaining": 5
+        },
+        {
+          "kind": "handler",
+          "id": "plain",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "a",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "a",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "b",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "b",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "ab",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "a.b",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "bc",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "b.c",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 5
+        }
+      ]
+    },
+    {
+      "name": "remove-.a .b",
+      "input": {
+        "handlers": [
+          {
+            "id": "plain"
+          },
+          {
+            "id": "a"
+          },
+          {
+            "id": "b"
+          },
+          {
+            "id": "ab"
+          },
+          {
+            "id": "bc"
+          }
+        ],
+        "steps": [
+          {
+            "op": "on",
+            "handler": "plain",
+            "types": "custom"
+          },
+          {
+            "op": "on",
+            "handler": "a",
+            "types": "custom.a"
+          },
+          {
+            "op": "on",
+            "handler": "b",
+            "types": "custom.b"
+          },
+          {
+            "op": "on",
+            "handler": "ab",
+            "types": "custom.b.a"
+          },
+          {
+            "op": "on",
+            "handler": "bc",
+            "types": "custom.b.c"
+          },
+          {
+            "op": "off",
+            "types": ".a .b"
+          },
+          {
+            "op": "snapshot"
+          },
+          {
+            "op": "trigger",
+            "types": "custom",
+            "onlyHandlers": false
+          }
+        ]
+      },
+      "result": [
+        {
+          "kind": "snapshot",
+          "remaining": 1
+        },
+        {
+          "kind": "handler",
+          "id": "plain",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 1
+        }
+      ]
+    },
+    {
+      "name": "once-shared-on-first-different",
+      "input": {
+        "handlers": [
+          {
+            "id": "shared"
+          }
+        ],
+        "steps": [
+          {
+            "op": "on",
+            "handler": "shared",
+            "types": "custom.a"
+          },
+          {
+            "op": "one",
+            "handler": "shared",
+            "types": "custom.b"
+          },
+          {
+            "op": "trigger",
+            "types": "custom",
+            "onlyHandlers": false
+          },
+          {
+            "op": "trigger",
+            "types": "custom",
+            "onlyHandlers": false
+          },
+          {
+            "op": "trigger",
+            "types": "custom",
+            "onlyHandlers": false
+          }
+        ]
+      },
+      "result": [
+        {
+          "kind": "handler",
+          "id": "shared",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "a",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "shared",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "b",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 1
+        },
+        {
+          "kind": "handler",
+          "id": "shared",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "a",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 1
+        },
+        {
+          "kind": "handler",
+          "id": "shared",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "a",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 1
+        }
+      ]
+    },
+    {
+      "name": "once-shared-on-first-same",
+      "input": {
+        "handlers": [
+          {
+            "id": "shared"
+          }
+        ],
+        "steps": [
+          {
+            "op": "on",
+            "handler": "shared",
+            "types": "custom.a"
+          },
+          {
+            "op": "one",
+            "handler": "shared",
+            "types": "custom.a"
+          },
+          {
+            "op": "trigger",
+            "types": "custom",
+            "onlyHandlers": false
+          },
+          {
+            "op": "trigger",
+            "types": "custom",
+            "onlyHandlers": false
+          },
+          {
+            "op": "trigger",
+            "types": "custom",
+            "onlyHandlers": false
+          }
+        ]
+      },
+      "result": [
+        {
+          "kind": "handler",
+          "id": "shared",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "a",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "shared",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "a",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 0
+        },
+        {
+          "kind": "trigger",
+          "type": "custom",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 0
+        },
+        {
+          "kind": "trigger",
+          "type": "custom",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 0
+        }
+      ]
+    },
+    {
+      "name": "once-shared-one-first-different",
+      "input": {
+        "handlers": [
+          {
+            "id": "shared"
+          }
+        ],
+        "steps": [
+          {
+            "op": "one",
+            "handler": "shared",
+            "types": "custom.b"
+          },
+          {
+            "op": "on",
+            "handler": "shared",
+            "types": "custom.a"
+          },
+          {
+            "op": "trigger",
+            "types": "custom",
+            "onlyHandlers": false
+          },
+          {
+            "op": "trigger",
+            "types": "custom",
+            "onlyHandlers": false
+          },
+          {
+            "op": "trigger",
+            "types": "custom",
+            "onlyHandlers": false
+          }
+        ]
+      },
+      "result": [
+        {
+          "kind": "handler",
+          "id": "shared",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "b",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "shared",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "a",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 1
+        },
+        {
+          "kind": "handler",
+          "id": "shared",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "a",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 1
+        },
+        {
+          "kind": "handler",
+          "id": "shared",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "a",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 1
+        }
+      ]
+    },
+    {
+      "name": "once-shared-one-first-same",
+      "input": {
+        "handlers": [
+          {
+            "id": "shared"
+          }
+        ],
+        "steps": [
+          {
+            "op": "one",
+            "handler": "shared",
+            "types": "custom.a"
+          },
+          {
+            "op": "on",
+            "handler": "shared",
+            "types": "custom.a"
+          },
+          {
+            "op": "trigger",
+            "types": "custom",
+            "onlyHandlers": false
+          },
+          {
+            "op": "trigger",
+            "types": "custom",
+            "onlyHandlers": false
+          },
+          {
+            "op": "trigger",
+            "types": "custom",
+            "onlyHandlers": false
+          }
+        ]
+      },
+      "result": [
+        {
+          "kind": "handler",
+          "id": "shared",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "a",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "shared",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "a",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 0
+        },
+        {
+          "kind": "trigger",
+          "type": "custom",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 0
+        },
+        {
+          "kind": "trigger",
+          "type": "custom",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 0
+        }
+      ]
+    },
+    {
+      "name": "once-multiple-types",
+      "input": {
+        "handlers": [
+          {
+            "id": "a"
+          }
+        ],
+        "steps": [
+          {
+            "op": "one",
+            "handler": "a",
+            "types": "alpha.ns beta.ns"
+          },
+          {
+            "op": "trigger",
+            "types": "alpha",
+            "onlyHandlers": false
+          },
+          {
+            "op": "trigger",
+            "types": "alpha",
+            "onlyHandlers": false
+          },
+          {
+            "op": "trigger",
+            "types": "beta",
+            "onlyHandlers": false
+          },
+          {
+            "op": "trigger",
+            "types": "beta",
+            "onlyHandlers": false
+          }
+        ]
+      },
+      "result": [
+        {
+          "kind": "handler",
+          "id": "a",
+          "type": "alpha",
+          "namespace": "",
+          "bindingNamespace": "ns",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "alpha",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 1
+        },
+        {
+          "kind": "trigger",
+          "type": "alpha",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 1
+        },
+        {
+          "kind": "handler",
+          "id": "a",
+          "type": "beta",
+          "namespace": "",
+          "bindingNamespace": "ns",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "beta",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 0
+        },
+        {
+          "kind": "trigger",
+          "type": "beta",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 0
+        }
+      ]
+    },
+    {
+      "name": "once-namespaced-filter",
+      "input": {
+        "handlers": [
+          {
+            "id": "a"
+          },
+          {
+            "id": "b"
+          }
+        ],
+        "steps": [
+          {
+            "op": "one",
+            "handler": "a",
+            "types": "custom.a"
+          },
+          {
+            "op": "one",
+            "handler": "b",
+            "types": "custom.b"
+          },
+          {
+            "op": "trigger",
+            "types": "custom.a",
+            "onlyHandlers": false
+          },
+          {
+            "op": "trigger",
+            "types": "custom.a",
+            "onlyHandlers": false
+          },
+          {
+            "op": "trigger",
+            "types": "custom",
+            "onlyHandlers": false
+          },
+          {
+            "op": "trigger",
+            "types": "custom",
+            "onlyHandlers": false
+          }
+        ]
+      },
+      "result": [
+        {
+          "kind": "handler",
+          "id": "a",
+          "type": "custom",
+          "namespace": "a",
+          "bindingNamespace": "a",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom.a",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 1
+        },
+        {
+          "kind": "trigger",
+          "type": "custom.a",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 1
+        },
+        {
+          "kind": "handler",
+          "id": "b",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "b",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 0
+        },
+        {
+          "kind": "trigger",
+          "type": "custom",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 0
+        }
+      ]
+    },
+    {
+      "name": "once-duplicates-queued",
+      "input": {
+        "handlers": [
+          {
+            "id": "a"
+          }
+        ],
+        "steps": [
+          {
+            "op": "one",
+            "handler": "a",
+            "types": "custom.a"
+          },
+          {
+            "op": "one",
+            "handler": "a",
+            "types": "custom.a"
+          },
+          {
+            "op": "trigger",
+            "types": "custom",
+            "onlyHandlers": false
+          },
+          {
+            "op": "trigger",
+            "types": "custom",
+            "onlyHandlers": false
+          }
+        ]
+      },
+      "result": [
+        {
+          "kind": "handler",
+          "id": "a",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "a",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "a",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "a",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 0
+        },
+        {
+          "kind": "trigger",
+          "type": "custom",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 0
+        }
+      ]
+    },
+    {
+      "name": "same-function-remove-subset",
+      "input": {
+        "handlers": [
+          {
+            "id": "shared"
+          }
+        ],
+        "steps": [
+          {
+            "op": "on",
+            "handler": "shared",
+            "types": "custom.a"
+          },
+          {
+            "op": "on",
+            "handler": "shared",
+            "types": "custom.b"
+          },
+          {
+            "op": "on",
+            "handler": "shared",
+            "types": "other.a"
+          },
+          {
+            "op": "off",
+            "types": ".a",
+            "handler": "shared"
+          },
+          {
+            "op": "trigger",
+            "types": "custom",
+            "onlyHandlers": false
+          },
+          {
+            "op": "trigger",
+            "types": "other",
+            "onlyHandlers": false
+          }
+        ]
+      },
+      "result": [
+        {
+          "kind": "handler",
+          "id": "shared",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "b",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 1
+        },
+        {
+          "kind": "trigger",
+          "type": "other",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 1
+        }
+      ]
+    },
+    {
+      "name": "different-function-identity",
+      "input": {
+        "handlers": [
+          {
+            "id": "a"
+          },
+          {
+            "id": "b"
+          }
+        ],
+        "steps": [
+          {
+            "op": "on",
+            "handler": "a",
+            "types": "custom.a"
+          },
+          {
+            "op": "off",
+            "types": "custom",
+            "handler": "b"
+          },
+          {
+            "op": "trigger",
+            "types": "custom",
+            "onlyHandlers": false
+          },
+          {
+            "op": "off",
+            "types": "custom",
+            "handler": "a"
+          },
+          {
+            "op": "trigger",
+            "types": "custom",
+            "onlyHandlers": false
+          }
+        ]
+      },
+      "result": [
+        {
+          "kind": "handler",
+          "id": "a",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "a",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 1
+        },
+        {
+          "kind": "trigger",
+          "type": "custom",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 0
+        }
+      ]
+    },
+    {
+      "name": "false-keeps-same-group",
+      "input": {
+        "handlers": [
+          {
+            "id": "a",
+            "returns": false
+          },
+          {
+            "id": "b"
+          },
+          {
+            "id": "c",
+            "returns": 42
+          }
+        ],
+        "steps": [
+          {
+            "op": "on",
+            "handler": "a",
+            "types": "custom"
+          },
+          {
+            "op": "on",
+            "handler": "b",
+            "types": "custom"
+          },
+          {
+            "op": "on",
+            "handler": "c",
+            "types": "custom"
+          },
+          {
+            "op": "trigger",
+            "types": "custom",
+            "onlyHandlers": false
+          }
+        ]
+      },
+      "result": [
+        {
+          "kind": "handler",
+          "id": "a",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "b",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": true,
+          "propagationStopped": true,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "c",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": true,
+          "propagationStopped": true,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom",
+          "onlyHandlers": false,
+          "result": 42,
+          "defaultPrevented": true,
+          "propagationStopped": true,
+          "immediatePropagationStopped": false,
+          "remaining": 3
+        }
+      ]
+    },
+    {
+      "name": "last-defined-return-value",
+      "input": {
+        "handlers": [
+          {
+            "id": "a",
+            "returns": 42
+          },
+          {
+            "id": "b"
+          },
+          {
+            "id": "c",
+            "returns": null
+          },
+          {
+            "id": "d",
+            "returns": "last"
+          }
+        ],
+        "steps": [
+          {
+            "op": "on",
+            "handler": "a",
+            "types": "custom"
+          },
+          {
+            "op": "on",
+            "handler": "b",
+            "types": "custom"
+          },
+          {
+            "op": "trigger",
+            "types": "custom",
+            "onlyHandlers": true
+          },
+          {
+            "op": "on",
+            "handler": "c",
+            "types": "custom"
+          },
+          {
+            "op": "trigger",
+            "types": "custom",
+            "onlyHandlers": true
+          },
+          {
+            "op": "on",
+            "handler": "d",
+            "types": "custom"
+          },
+          {
+            "op": "trigger",
+            "types": "custom",
+            "onlyHandlers": true
+          }
+        ]
+      },
+      "result": [
+        {
+          "kind": "handler",
+          "id": "a",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 2,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "b",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 2,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom",
+          "onlyHandlers": true,
+          "result": 42,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 2
+        },
+        {
+          "kind": "handler",
+          "id": "a",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 2,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "b",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 2,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "c",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 2,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom",
+          "onlyHandlers": true,
+          "result": null,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 3
+        },
+        {
+          "kind": "handler",
+          "id": "a",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 2,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "b",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 2,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "c",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 2,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "d",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 2,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom",
+          "onlyHandlers": true,
+          "result": "last",
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 4
+        }
+      ]
+    },
+    {
+      "name": "control-prevent",
+      "input": {
+        "handlers": [
+          {
+            "id": "a",
+            "control": "prevent"
+          },
+          {
+            "id": "b",
+            "returns": "b"
+          }
+        ],
+        "steps": [
+          {
+            "op": "on",
+            "handler": "a",
+            "types": "custom"
+          },
+          {
+            "op": "on",
+            "handler": "b",
+            "types": "custom"
+          },
+          {
+            "op": "trigger",
+            "types": "custom",
+            "onlyHandlers": false
+          }
+        ]
+      },
+      "result": [
+        {
+          "kind": "handler",
+          "id": "a",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "b",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": true,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom",
+          "onlyHandlers": false,
+          "result": "b",
+          "defaultPrevented": true,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 2
+        }
+      ]
+    },
+    {
+      "name": "control-propagation",
+      "input": {
+        "handlers": [
+          {
+            "id": "a",
+            "control": "propagation"
+          },
+          {
+            "id": "b",
+            "returns": "b"
+          }
+        ],
+        "steps": [
+          {
+            "op": "on",
+            "handler": "a",
+            "types": "custom"
+          },
+          {
+            "op": "on",
+            "handler": "b",
+            "types": "custom"
+          },
+          {
+            "op": "trigger",
+            "types": "custom",
+            "onlyHandlers": false
+          }
+        ]
+      },
+      "result": [
+        {
+          "kind": "handler",
+          "id": "a",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "b",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": true,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom",
+          "onlyHandlers": false,
+          "result": "b",
+          "defaultPrevented": false,
+          "propagationStopped": true,
+          "immediatePropagationStopped": false,
+          "remaining": 2
+        }
+      ]
+    },
+    {
+      "name": "control-immediate",
+      "input": {
+        "handlers": [
+          {
+            "id": "a",
+            "control": "immediate"
+          },
+          {
+            "id": "b",
+            "returns": "b"
+          }
+        ],
+        "steps": [
+          {
+            "op": "on",
+            "handler": "a",
+            "types": "custom"
+          },
+          {
+            "op": "on",
+            "handler": "b",
+            "types": "custom"
+          },
+          {
+            "op": "trigger",
+            "types": "custom",
+            "onlyHandlers": false
+          }
+        ]
+      },
+      "result": [
+        {
+          "kind": "handler",
+          "id": "a",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": true,
+          "immediatePropagationStopped": true,
+          "remaining": 2
+        }
+      ]
+    },
+    {
+      "name": "remove-queued-next",
+      "input": {
+        "handlers": [
+          {
+            "id": "a",
+            "actions": [
+              {
+                "op": "off",
+                "types": "custom",
+                "handler": "b"
+              }
+            ]
+          },
+          {
+            "id": "b"
+          }
+        ],
+        "steps": [
+          {
+            "op": "on",
+            "handler": "a",
+            "types": "custom"
+          },
+          {
+            "op": "on",
+            "handler": "b",
+            "types": "custom"
+          },
+          {
+            "op": "trigger",
+            "types": "custom",
+            "onlyHandlers": false
+          },
+          {
+            "op": "trigger",
+            "types": "custom",
+            "onlyHandlers": false
+          }
+        ]
+      },
+      "result": [
+        {
+          "kind": "handler",
+          "id": "a",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "b",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 1
+        },
+        {
+          "kind": "handler",
+          "id": "a",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 1
+        }
+      ]
+    },
+    {
+      "name": "add-next-dispatch",
+      "input": {
+        "handlers": [
+          {
+            "id": "a",
+            "actionsFirstOnly": true,
+            "actions": [
+              {
+                "op": "on",
+                "handler": "c",
+                "types": "custom"
+              }
+            ]
+          },
+          {
+            "id": "b"
+          },
+          {
+            "id": "c"
+          }
+        ],
+        "steps": [
+          {
+            "op": "on",
+            "handler": "a",
+            "types": "custom"
+          },
+          {
+            "op": "on",
+            "handler": "b",
+            "types": "custom"
+          },
+          {
+            "op": "trigger",
+            "types": "custom",
+            "onlyHandlers": false
+          },
+          {
+            "op": "trigger",
+            "types": "custom",
+            "onlyHandlers": false
+          }
+        ]
+      },
+      "result": [
+        {
+          "kind": "handler",
+          "id": "a",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "b",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 3
+        },
+        {
+          "kind": "handler",
+          "id": "a",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "b",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "c",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 3
+        }
+      ]
+    },
+    {
+      "name": "off-event-shared-identity",
+      "input": {
+        "handlers": [
+          {
+            "id": "a",
+            "offEvent": true
+          }
+        ],
+        "steps": [
+          {
+            "op": "on",
+            "handler": "a",
+            "types": "custom.a"
+          },
+          {
+            "op": "on",
+            "handler": "a",
+            "types": "custom.a.b"
+          },
+          {
+            "op": "on",
+            "handler": "a",
+            "types": "custom.c"
+          },
+          {
+            "op": "trigger",
+            "types": "custom.a",
+            "onlyHandlers": false
+          },
+          {
+            "op": "trigger",
+            "types": "custom",
+            "onlyHandlers": false
+          }
+        ]
+      },
+      "result": [
+        {
+          "kind": "handler",
+          "id": "a",
+          "type": "custom",
+          "namespace": "a",
+          "bindingNamespace": "a",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "a",
+          "type": "custom",
+          "namespace": "a",
+          "bindingNamespace": "a.b",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom.a",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 1
+        },
+        {
+          "kind": "handler",
+          "id": "a",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "c",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 0
+        }
+      ]
+    },
+    {
+      "name": "once-removes-before-nested-trigger",
+      "input": {
+        "handlers": [
+          {
+            "id": "a",
+            "actionsFirstOnly": true,
+            "actions": [
+              {
+                "op": "trigger",
+                "types": "custom",
+                "onlyHandlers": false
+              }
+            ]
+          },
+          {
+            "id": "b"
+          }
+        ],
+        "steps": [
+          {
+            "op": "one",
+            "handler": "a",
+            "types": "custom"
+          },
+          {
+            "op": "on",
+            "handler": "b",
+            "types": "custom"
+          },
+          {
+            "op": "trigger",
+            "types": "custom",
+            "onlyHandlers": false
+          },
+          {
+            "op": "trigger",
+            "types": "custom",
+            "onlyHandlers": false
+          }
+        ]
+      },
+      "result": [
+        {
+          "kind": "handler",
+          "id": "a",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "b",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 1
+        },
+        {
+          "kind": "handler",
+          "id": "b",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 1
+        },
+        {
+          "kind": "handler",
+          "id": "b",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 1
+        }
+      ]
+    },
+    {
+      "name": "nested-trigger-namespace",
+      "input": {
+        "handlers": [
+          {
+            "id": "a",
+            "actionsFirstOnly": true,
+            "actions": [
+              {
+                "op": "trigger",
+                "types": "custom.b",
+                "onlyHandlers": true
+              }
+            ]
+          },
+          {
+            "id": "b"
+          }
+        ],
+        "steps": [
+          {
+            "op": "on",
+            "handler": "a",
+            "types": "custom.a"
+          },
+          {
+            "op": "on",
+            "handler": "b",
+            "types": "custom.b"
+          },
+          {
+            "op": "trigger",
+            "types": "custom.a",
+            "onlyHandlers": false
+          }
+        ]
+      },
+      "result": [
+        {
+          "kind": "handler",
+          "id": "a",
+          "type": "custom",
+          "namespace": "a",
+          "bindingNamespace": "a",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "b",
+          "type": "custom",
+          "namespace": "b",
+          "bindingNamespace": "b",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 2,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom.b",
+          "onlyHandlers": true,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 2
+        },
+        {
+          "kind": "trigger",
+          "type": "custom.a",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 2
+        }
+      ]
+    },
+    {
+      "name": "multiple-tokens-reverse-order",
+      "input": {
+        "handlers": [
+          {
+            "id": "shared"
+          }
+        ],
+        "steps": [
+          {
+            "op": "on",
+            "handler": "shared",
+            "types": "custom.a\tcustom.b\nother.c"
+          },
+          {
+            "op": "trigger",
+            "types": "custom",
+            "onlyHandlers": false
+          },
+          {
+            "op": "trigger",
+            "types": "other",
+            "onlyHandlers": false
+          },
+          {
+            "op": "off",
+            "types": ".a\t.c"
+          },
+          {
+            "op": "trigger",
+            "types": "custom",
+            "onlyHandlers": false
+          }
+        ]
+      },
+      "result": [
+        {
+          "kind": "handler",
+          "id": "shared",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "b",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "shared",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "a",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 3
+        },
+        {
+          "kind": "handler",
+          "id": "shared",
+          "type": "other",
+          "namespace": "",
+          "bindingNamespace": "c",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "other",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 3
+        },
+        {
+          "kind": "handler",
+          "id": "shared",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "b",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 1
+        }
+      ]
+    },
+    {
+      "name": "trailing-empty-namespace",
+      "input": {
+        "handlers": [
+          {
+            "id": "a"
+          }
+        ],
+        "steps": [
+          {
+            "op": "on",
+            "handler": "a",
+            "types": ".namespace"
+          },
+          {
+            "op": "on",
+            "handler": "a",
+            "types": "custom."
+          },
+          {
+            "op": "trigger",
+            "types": "custom.",
+            "onlyHandlers": false
+          },
+          {
+            "op": "off",
+            "types": "custom."
+          },
+          {
+            "op": "trigger",
+            "types": "custom",
+            "onlyHandlers": false
+          }
+        ]
+      },
+      "result": [
+        {
+          "kind": "handler",
+          "id": "a",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom.",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 1
+        },
+        {
+          "kind": "trigger",
+          "type": "custom",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 0
+        }
+      ]
+    },
+    {
+      "name": "event-data-and-extra-arguments",
+      "input": {
+        "handlers": [
+          {
+            "id": "a"
+          },
+          {
+            "id": "b"
+          }
+        ],
+        "steps": [
+          {
+            "op": "on",
+            "handler": "a",
+            "types": "custom.a",
+            "data": {
+              "name": "é",
+              "nested": [
+                2,
+                false
+              ]
+            }
+          },
+          {
+            "op": "on",
+            "handler": "b",
+            "types": "custom",
+            "data": null
+          },
+          {
+            "op": "trigger",
+            "types": "custom",
+            "onlyHandlers": false,
+            "args": [
+              1,
+              "extra",
+              null,
+              {
+                "x": true
+              }
+            ]
+          },
+          {
+            "op": "trigger",
+            "types": "custom.a",
+            "onlyHandlers": true,
+            "args": []
+          }
+        ]
+      },
+      "result": [
+        {
+          "kind": "handler",
+          "id": "a",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "a",
+          "data": {
+            "name": "é",
+            "nested": [
+              2,
+              false
+            ]
+          },
+          "args": [
+            1,
+            "extra",
+            null,
+            {
+              "x": true
+            }
+          ],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "handler",
+          "id": "b",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "",
+          "data": null,
+          "args": [
+            1,
+            "extra",
+            null,
+            {
+              "x": true
+            }
+          ],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 2
+        },
+        {
+          "kind": "handler",
+          "id": "a",
+          "type": "custom",
+          "namespace": "a",
+          "bindingNamespace": "a",
+          "data": {
+            "name": "é",
+            "nested": [
+              2,
+              false
+            ]
+          },
+          "args": [],
+          "isTrigger": 2,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom.a",
+          "onlyHandlers": true,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 2
+        }
+      ]
+    },
+    {
+      "name": "repeated-namespace-tokens",
+      "input": {
+        "handlers": [
+          {
+            "id": "a"
+          },
+          {
+            "id": "b"
+          }
+        ],
+        "steps": [
+          {
+            "op": "on",
+            "handler": "a",
+            "types": "custom.a"
+          },
+          {
+            "op": "on",
+            "handler": "b",
+            "types": "custom.a.a"
+          },
+          {
+            "op": "trigger",
+            "types": "custom.a.a",
+            "onlyHandlers": false
+          },
+          {
+            "op": "off",
+            "types": ".a.a"
+          },
+          {
+            "op": "trigger",
+            "types": "custom",
+            "onlyHandlers": false
+          }
+        ]
+      },
+      "result": [
+        {
+          "kind": "handler",
+          "id": "b",
+          "type": "custom",
+          "namespace": "a.a",
+          "bindingNamespace": "a.a",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom.a.a",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 2
+        },
+        {
+          "kind": "handler",
+          "id": "a",
+          "type": "custom",
+          "namespace": "",
+          "bindingNamespace": "a",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "custom",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 1
+        }
+      ]
+    },
+    {
+      "name": "colon-custom-events",
+      "input": {
+        "handlers": [
+          {
+            "id": "a"
+          }
+        ],
+        "steps": [
+          {
+            "op": "on",
+            "handler": "a",
+            "types": "widget:update.a"
+          },
+          {
+            "op": "trigger",
+            "types": "widget:update",
+            "onlyHandlers": false
+          },
+          {
+            "op": "off",
+            "types": ".a"
+          },
+          {
+            "op": "trigger",
+            "types": "widget:update",
+            "onlyHandlers": false
+          }
+        ]
+      },
+      "result": [
+        {
+          "kind": "handler",
+          "id": "a",
+          "type": "widget:update",
+          "namespace": "",
+          "bindingNamespace": "a",
+          "data": {
+            "$undefined": true
+          },
+          "args": [],
+          "isTrigger": 3,
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false
+        },
+        {
+          "kind": "trigger",
+          "type": "widget:update",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 1
+        },
+        {
+          "kind": "trigger",
+          "type": "widget:update",
+          "onlyHandlers": false,
+          "result": {
+            "$undefined": true
+          },
+          "defaultPrevented": false,
+          "propagationStopped": false,
+          "immediatePropagationStopped": false,
+          "remaining": 0
+        }
+      ]
+    }
+  ]
+}
