@@ -1,0 +1,50 @@
+//! Download a file with authentication example.
+//!
+//! Setup for this example:
+//!
+//! From the root of the project:
+//! ```not_rust
+//! mkdir -p examples/miniserve
+//! cd examples/miniserve
+//! curl -sLO https://cdimage.debian.org/debian-cd/current/arm64/iso-cd/debian-11.7.0-arm64-netinst.iso
+//! miniserve --auth trauma:test .
+//! ```
+//!
+//! Then from another terminal:
+//!
+//! ```not_rust
+//! cargo run -q --example simple
+//! ```
+//!
+//! The value for the authentication header can be generated from the command line:
+//! ```not_rust
+//! echo -n "trauma:test"|base64
+//! ```
+//! Or from a website like https://www.debugbear.com/basic-auth-header-generator.
+//!
+//! Miniserve is a utility written in rust to serve files over HTTP:
+//! https://github.com/svenstaro/miniserve
+//!
+
+extern crate alloc;
+
+use alloc::vec;
+use reqwest::header::{self, HeaderMap, HeaderValue};
+use trauma::path::PathBuf;
+use trauma::{download::Download, downloader::Downloader, Error};
+
+#[tokio::main(flavor = "current_thread")]
+async fn main() -> Result<(), Error> {
+    let url = "http://localhost:8080/debian-11.7.0-arm64-netinst.iso";
+    let downloads = vec![Download::builder().url(url)?.build()];
+    let auth = HeaderValue::from_str("Basic dHJhdW1hOnRlc3Q=").expect("Invalid auth");
+    let headermap = HeaderMap::from_iter([(header::AUTHORIZATION, auth)]);
+    let downloader = Downloader::builder()
+        .directory(PathBuf::from("output"))
+        .headers(headermap)
+        .build();
+    let summaries = downloader.download(&downloads).await;
+    let summary = summaries.first().unwrap();
+    println!("{:?}", summary.status());
+    Ok(())
+}

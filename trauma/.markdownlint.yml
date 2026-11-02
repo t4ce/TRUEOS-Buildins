@@ -1,0 +1,7 @@
+# Disable some built-in rules.
+headings:
+  siblings_only: true
+line-length:
+  tables: false
+  code_blocks: false
+single-h1: false

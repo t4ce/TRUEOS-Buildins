@@ -1,0 +1,60 @@
+[package]
+name = "trauma"
+version = "3.0.0"
+edition = "2021"
+license = "MIT"
+description = "Simplify and prettify HTTP downloads"
+homepage = "https://github.com/rgreinho/trauma"
+repository = "https://github.com/rgreinho/trauma"
+readme = "README.md"
+categories = ["concurrency"]
+keywords = ["http", "download", "async", "tokio"]
+
+[dependencies]
+futures-util = { version = "=0.3.32", default-features = false, features = ["std"] }
+indicatif = { version = "=0.18.0", optional = true }
+reqwest-middleware = "=0.5.2"
+reqwest-retry = { version = "=0.9.1", default-features = false }
+tokio = { path = "../TRUEOS-Buildins/vendor/tokio-1.54.1", version = "=1.54.1", default-features = false, features = ["rt", "fs", "io-util", "net", "time"] }
+tracing = { path = "../TRUEOS-Buildins/vendor/tracing-0.1.44", version = "=0.1.44", default-features = false, features = ["std"] }
+bon = { version = "=3.9.3", default-features = false, features = ["alloc"] }
+
+[dependencies.reqwest]
+path = "../TRUEOS-Buildins/vendor/reqwest-0.13.3"
+version = "=0.13.3"
+default-features = false
+features = [
+  "http2",
+  "stream",
+]
+
+[dev-dependencies]
+# Only examples use the Tokio entrypoint macro.
+tokio = { path = "../TRUEOS-Buildins/vendor/tokio-1.54.1", version = "=1.54.1", features = ["macros"] }
+
+[features]
+default = ["rustls"]
+rustls = ["reqwest/rustls"]
+default-tls = ["reqwest/default-tls"]
+# Presentation and optional proxy integration stay outside the lean default build.
+terminal-progress = ["dep:indicatif"]
+retry-tracing = ["reqwest-retry/tracing"]
+socks = ["reqwest/socks"]
+system-proxy = ["reqwest/system-proxy"]
+
+# The packer stages ordinary main() into the Blueprint entrypoint.
+[[bin]]
+name = "trauma"
+path = "src/main.rs"
+test = false
+bench = false
+
+[target.'cfg(any(target_os = "trueos", target_os = "zkvm"))'.dependencies]
+trueos = { path = "../TRUEOS-Buildins/vendor/trueos", features = ["tokio-runtime"] }
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("trueos", "zkvm"))'] }
+
+[[example]]
+name = "with-style"
+required-features = ["terminal-progress"]
