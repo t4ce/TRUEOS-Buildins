@@ -3,6 +3,8 @@
 
 extern crate alloc;
 
+#[cfg(any(target_os = "trueos", target_os = "zkvm", test))]
+mod association;
 mod body;
 mod checkpoint;
 mod checkpoint_rename;

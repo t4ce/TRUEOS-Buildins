@@ -237,3 +237,19 @@ As a result, I decided to write `trauma`.
 [rustls]: https://rustls.dev/
 [tokio]: https://tokio.rs/
 [zou]: https://github.com/k0pernicus/zou
+
+Completed TRUEOS downloads make one best-effort local type-association attempt.
+The existing `infer` catalogue must recognize the saved bytes and agree with the
+filename extension before guarded Blob promotion. Unknown/conflicting results
+stay Blob; partial transfers are not classified. A remotely verified saved file
+can be associated without downloading it again; already typed files need only
+the metadata check. This uses
+local bytes, never another HTTP fetch. The existing snapshot/rewrite API is
+bounded to 16 MiB here; larger files remain Blob. A fresh validated representation
+replaces an earlier typed output with a new Blob before writing, then gets its own
+completion-time association attempt.
+
+If Hull already received an executable/archive body, it submits those bytes as a
+received-body job instead of fetching the URL again. These bodies are bounded to
+Hull's 4 MiB page budget and the broker retains at most 16 MiB of total queued and
+active payloads. A worker crash requeues the same retained bytes for local save.

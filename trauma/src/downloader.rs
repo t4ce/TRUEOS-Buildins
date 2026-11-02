@@ -79,6 +79,35 @@ impl Downloader {
         self.download_inner(downloads, None).await
     }
 
+    #[cfg(any(target_os = "trueos", target_os = "zkvm", test))]
+    pub(crate) async fn save_received(&self, download: &Download, bytes: &[u8]) -> Status {
+        let Some(name) = download.filename_override() else {
+            return Status::Fail("received download has no destination".into());
+        };
+        let output = self.directory.join(name);
+        let result = async {
+            tokio::fs::create_dir_all(output.parent().unwrap_or(&output))
+                .await
+                .map_err(|e| e.to_string())?;
+            checkpoint::invalidate(&output)
+                .await
+                .map_err(|e| e.to_string())?;
+            #[cfg(any(target_os = "trueos", target_os = "zkvm"))]
+            crate::association::prepare_restart(&output).await?;
+            tokio::fs::write(&output, bytes)
+                .await
+                .map_err(|e| e.to_string())?;
+            #[cfg(any(target_os = "trueos", target_os = "zkvm"))]
+            crate::association::completed(&output).await;
+            Ok::<(), String>(())
+        }
+        .await;
+        match result {
+            Ok(()) => Status::Success,
+            Err(error) => Status::Fail(error),
+        }
+    }
+
     /// Starts the downloads with proxy.
     pub async fn download_with_proxy(
         &self,
@@ -205,6 +234,12 @@ impl Downloader {
             Ok(status) => status,
             Err(error) => Status::Fail(error),
         };
+        #[cfg(any(target_os = "trueos", target_os = "zkvm"))]
+        if matches!(status, Status::Success | Status::Skipped(_)) {
+            if let Some(output) = &state.output {
+                crate::association::completed(output).await;
+            }
+        }
         // One terminal point reconciles summary lengths for every early return.
         if let Some(output) = &state.output {
             if let Ok(metadata) = tokio::fs::metadata(output).await {
@@ -339,6 +374,8 @@ impl Downloader {
             checkpoint::invalidate(output)
                 .await
                 .map_err(|e| e.to_string())?;
+            #[cfg(any(target_os = "trueos", target_os = "zkvm"))]
+            crate::association::prepare_restart(output).await?;
         }
         debug!("Opening destination {:?} at offset {}", output, plan.offset);
         let mut file = OpenOptions::new()

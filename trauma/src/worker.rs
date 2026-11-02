@@ -65,6 +65,7 @@ mod executor {
     struct Job {
         id: u64,
         payload: Vec<u8>,
+        received: bool,
     }
     enum Message {
         Drained,
@@ -75,7 +76,7 @@ mod executor {
         match bytes.as_slice() {
             b"D" => Ok(Message::Drained),
             b"W" => Ok(Message::Wait),
-            [b'J', rest @ ..] if rest.len() >= 8 => {
+            [kind @ (b'J' | b'P'), rest @ ..] if rest.len() >= 8 => {
                 let id = u64::from_le_bytes(rest[..8].try_into().expect("job id length"));
                 if id == 0 {
                     return Err("invalid broker job id".to_string());
@@ -83,6 +84,7 @@ mod executor {
                 Ok(Message::Job(Job {
                     id,
                     payload: rest[8..].to_vec(),
+                    received: *kind == b'P',
                 }))
             }
             _ => Err("invalid download broker response".to_string()),
@@ -95,7 +97,21 @@ mod executor {
             .iter()
             .position(|byte| *byte == 0)
             .ok_or_else(|| "missing filename separator".to_string())?;
-        let (url, hint) = (&job.payload[..separator], &job.payload[separator + 1..]);
+        let (url, mut hint) = (&job.payload[..separator], &job.payload[separator + 1..]);
+        let received = if job.received {
+            let split = hint
+                .iter()
+                .position(|byte| *byte == 0)
+                .ok_or_else(|| "missing received-body separator".to_string())?;
+            let body = hint[split + 1..].to_vec();
+            if body.len() > 4 * 1024 * 1024 {
+                return Err("received body too large".to_string());
+            }
+            hint = &hint[..split];
+            Some(body)
+        } else {
+            None
+        };
         let text = core::str::from_utf8(url).map_err(|_| "job URL is not UTF-8".to_string())?;
         let hint =
             core::str::from_utf8(hint).map_err(|_| "filename hint is not UTF-8".to_string())?;
@@ -121,6 +137,7 @@ mod executor {
             id: job.id,
             name,
             download,
+            received,
         })
     }
 
@@ -159,6 +176,7 @@ mod executor {
         id: u64,
         name: String,
         download: Download,
+        received: Option<Vec<u8>>,
     }
     struct Completion {
         id: u64,
@@ -202,7 +220,7 @@ mod executor {
     async fn execute<B, A, F>(broker: &mut B, mut action: A) -> Result<(), String>
     where
         B: Broker,
-        A: FnMut(Download) -> F,
+        A: FnMut(Download, Option<Vec<u8>>) -> F,
         F: Future<Output = Status>,
     {
         let mut running = FuturesUnordered::new();
@@ -235,7 +253,7 @@ mod executor {
             for _ in 0..pending.len() {
                 let job = pending.pop_front().expect("pending length");
                 if names.insert(job.name.clone()) {
-                    let future = action(job.download);
+                    let future = action(job.download, job.received);
                     running.push(async move {
                         let outcome = future.await;
                         Completion {
@@ -329,9 +347,19 @@ mod executor {
             next: format!("vFile:hulldownloads/next/{generation}"),
             done: format!("vFile:hulldownloads/done/{generation}"),
         };
-        execute(&mut broker, |download| {
+        execute(&mut broker, |download, received| {
             let prepared = &prepared;
-            async move { prepared.download_one(&download).await.status().clone() }
+            async move {
+                if let Some(bytes) = received {
+                    crate::downloader::Downloader::builder()
+                        .directory(DOWNLOAD_DIRECTORY)
+                        .build()
+                        .save_received(&download, &bytes)
+                        .await
+                } else {
+                    prepared.download_one(&download).await.status().clone()
+                }
+            }
         })
         .await
     }
@@ -339,6 +367,40 @@ mod executor {
     #[cfg(test)]
     mod tests {
         use super::*;
+        #[test]
+        fn received_body_is_saved_without_any_http_request() {
+            use crate::{
+                downloader::Downloader,
+                test_support::{Directory, Server},
+            };
+            let server = Server::new(vec![]);
+            let directory = Directory::new();
+            let mut message = frame(1, &server.url, "archive.zip");
+            message[0] = b'P';
+            message.push(0);
+            message.extend_from_slice(b"PK\x03\x04saved body");
+            let Message::Job(job) = decode(message).unwrap() else {
+                panic!()
+            };
+            let job = planned(job).unwrap();
+            runtime().block_on(async {
+                let downloader = Downloader::builder().directory(directory.path()).build();
+                assert!(matches!(
+                    downloader
+                        .save_received(&job.download, job.received.as_ref().unwrap())
+                        .await,
+                    Status::Success
+                ));
+                assert_eq!(
+                    tokio::fs::read(directory.path().join(&job.name))
+                        .await
+                        .unwrap(),
+                    b"PK\x03\x04saved body"
+                );
+            });
+            assert!(server.requests().is_empty());
+        }
+
         use alloc::{rc::Rc, vec};
         use core::cell::RefCell;
         fn runtime() -> tokio::runtime::Runtime {
@@ -460,7 +522,8 @@ mod executor {
                     fail_done: false,
                     delay: true,
                 };
-                execute(&mut broker, |download| {
+                execute(&mut broker, |download, received| {
+                    assert!(received.is_none());
                     let state = state.clone();
                     async move {
                         let name = download.filename_override().unwrap().clone();
@@ -523,7 +586,8 @@ mod executor {
                     fail_done: false,
                     delay: false,
                 };
-                execute(&mut broker, |_| {
+                execute(&mut broker, |_, received| {
+                    assert!(received.is_none());
                     state.borrow_mut().starts += 1;
                     async { Status::Success }
                 })
@@ -536,7 +600,7 @@ mod executor {
                     .queue
                     .push_back(frame(5, "http://fixture.test/ok", "ok"));
                 broker.fail_done = true;
-                assert!(execute(&mut broker, |_| async { Status::Success })
+                assert!(execute(&mut broker, |_, _| async { Status::Success })
                     .await
                     .is_err());
                 assert!(state.borrow().leased.contains(&5)); // observer can requeue
@@ -594,11 +658,13 @@ mod executor {
             let a = planned(Job {
                 id: 1,
                 payload: b"https://fixture.test/a#one\0same.bin".to_vec(),
+                received: false,
             })
             .unwrap();
             let b = planned(Job {
                 id: 2,
                 payload: b"https://fixture.test/a#two\0same.bin".to_vec(),
+                received: false,
             })
             .unwrap();
             assert_eq!(a.name, b.name);

@@ -111,7 +111,24 @@ impl Hull {
             Poll::Ready(result) => result,
         };
         let probe = self.navigation_probe.take().unwrap();
-        let is_download = result.is_ok_and(|decision| decision.as_slice() == b"D");
+        let decision = match result {
+            Ok(decision) if matches!(decision.as_slice(), b"D" | b"N") => decision,
+            Ok(_) => {
+                shellio::linef(format_args!(
+                    "hull: invalid download probe response: {}",
+                    probe.url
+                ));
+                return;
+            }
+            Err(code) => {
+                shellio::linef(format_args!(
+                    "hull: link probe failed ({code}): {}; link left unopened",
+                    probe.url
+                ));
+                return;
+            }
+        };
+        let is_download = decision.as_slice() == b"D";
         if is_download {
             self.submit_download(probe.url, None);
         } else if probe.new_shell {
@@ -143,12 +160,21 @@ impl Hull {
     }
 
     fn submit_download(&mut self, url: String, filename_hint: Option<String>) {
+        self.submit_received(url, filename_hint, None);
+    }
+
+    fn submit_received(
+        &mut self,
+        url: String,
+        filename_hint: Option<String>,
+        body: Option<Vec<u8>>,
+    ) {
         if self.pending_submissions.len() >= 32 {
             shellio::line("hull: Trauma submission queue is full");
             return;
         }
         let action = links::LinkAction::Download { url, filename_hint };
-        let request = match links::download_request(&action) {
+        let mut request = match links::download_request(&action) {
             Ok(request) => request,
             Err(error) => {
                 shellio::linef(format_args!("hull: {error}"));
@@ -158,9 +184,15 @@ impl Hull {
         let links::LinkAction::Download { url, filename_hint } = action else {
             unreachable!();
         };
-        let future = Box::pin(async move {
-            trueos::async_fs::write_file(b"vFile:hulldownloads/submit", &request).await
-        });
+        let endpoint: &[u8] = if let Some(body) = body {
+            request.push(0);
+            request.extend_from_slice(&body);
+            b"vFile:hulldownloads/received"
+        } else {
+            b"vFile:hulldownloads/submit"
+        };
+        let future =
+            Box::pin(async move { trueos::async_fs::write_file(endpoint, &request).await });
         self.pending_submissions.push_back(DownloadSubmission {
             url,
             filename_hint,
@@ -409,6 +441,14 @@ impl Hull {
                         logl::level::INFO,
                         format_args!("hull: downloaded {} bytes={}", self.page_url, bytes.len()),
                     );
+                    if links::binary_download(&bytes) {
+                        // A server may give HEAD different headers from GET.
+                        // Never feed executable/archive payloads to the HTML parser.
+                        let _ = netfs::fetch_bytes_discard(operation);
+                        self.download = None;
+                        self.submit_received(self.page_url.clone(), None, Some(bytes));
+                        return;
+                    }
                     let document = rp5::parse(&String::from_utf8_lossy(&bytes));
                     logl::log(
                         logl::level::INFO,

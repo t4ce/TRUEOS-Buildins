@@ -364,3 +364,34 @@ mod tests {
         assert!(launch_script(&format!("https://a.test/{}", "x".repeat(4096))).is_err());
     }
 }
+
+/// Last-line protection when GET disagrees with the navigation header probe.
+pub(super) fn binary_download(bytes: &[u8]) -> bool {
+    bytes.starts_with(b"MZ")
+        || bytes.starts_with(b"\x7fELF")
+        || bytes.starts_with(b"PK\x03\x04")
+        || bytes.starts_with(b"PK\x05\x06")
+        || bytes.starts_with(b"7z\xbc\xaf\x27\x1c")
+        || bytes.starts_with(b"\x1f\x8b")
+}
+
+#[cfg(test)]
+mod binary_tests {
+    use super::binary_download;
+    #[test]
+    fn executables_and_archives_never_enter_the_html_parser() {
+        for bytes in [
+            &b"MZ\x90\0installer"[..],
+            b"\x7fELFbinary",
+            b"PK\x03\x04archive",
+            b"7z\xbc\xaf\x27\x1carchive",
+            b"\x1f\x8bcompressed",
+        ] {
+            assert!(binary_download(bytes));
+        }
+        assert!(!binary_download(
+            b"<!doctype html><a href='installer.exe'>Download</a>"
+        ));
+        assert!(!binary_download(b""));
+    }
+}
