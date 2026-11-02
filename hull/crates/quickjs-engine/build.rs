@@ -7,6 +7,16 @@ const ADAPTER: &str = r#"
 #include <stdlib.h>
 #include <string.h>
 
+#if defined(JS_PTR64) && defined(JS_NAN_BOXING)
+#error Hull requires full-width pointers: TRUEOS heaps use high-half addresses
+#endif
+
+// Representation-only regression probe. Never dereference the synthetic pointer.
+uintptr_t hull_quickjs_pointer_round_trip(uintptr_t bits) {
+    JSValue value = JS_MKPTR(JS_TAG_OBJECT, (void *)bits);
+    return (uintptr_t)JS_VALUE_GET_PTR(value);
+}
+
 #define CONSOLE_CAPACITY 64
 #define CONSOLE_BYTES 4096
 #define HOST_JSON_BYTES (1024 * 1024)
@@ -346,6 +356,9 @@ fn main() {
     build
         .include(&source)
         .file(&adapter)
+        // Use the same full-pointer representation in host fixtures and TRUEOS.
+        // The upstream 47-bit NaN box destroys canonical high-half heap pointers.
+        .define("HULL_QUICKJS_FULL_POINTERS", None)
         .define(
             "CONFIG_VERSION",
             Some("\"2833510432045f72915919cef680ba59e5153b16\""),

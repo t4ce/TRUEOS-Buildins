@@ -3,6 +3,10 @@
 Hull starts one idle Tokio local task with its event loop. It shares Hull's
 thread; there is no additional OS worker. The standalone QuickJS crate has an
 opaque native value boundary and no dependency on the old workbench/experiments.
+Its C sources and adapter use QuickJS's full-pointer value representation in
+both host tests and TRUEOS. The upstream 47-bit NaN box cannot retain TRUEOS's
+canonical high-half heap pointers; a native pointer round-trip regression checks
+this without dereferencing synthetic addresses.
 
 After rp5 completes an HTML parse, Hull admits its collected inline JavaScript
 for a finite initialization pass. External script references remain unfetched;

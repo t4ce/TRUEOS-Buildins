@@ -63,7 +63,8 @@ typedef uint32_t JSAtom;
 #if !defined(JS_PTR64)
 #define JS_NAN_BOXING
 #define JS_NAN_BOX_TAG_SHIFT 32
-#elif defined(__x86_64__) || defined(__aarch64__) || defined(__riscv)
+#elif (defined(__x86_64__) || defined(__aarch64__) || defined(__riscv)) && \
+      !defined(HULL_QUICKJS_FULL_POINTERS)
 /* we assume pointers fit on 47 bits */
 #define JS_NAN_BOXING
 #define JS_NAN_BOX_TAG_SHIFT 47

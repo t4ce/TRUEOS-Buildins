@@ -2,4 +2,8 @@ QuickJS Javascript Engine
 Upstream: https://github.com/bellard/quickjs
 Commit: 2833510432045f72915919cef680ba59e5153b16
 License: MIT; see LICENSE.
-These files are pristine upstream source extracted from that commit.
+Extracted from that commit, with one local quickjs.h guard:
+HULL_QUICKJS_FULL_POINTERS disables the 64-bit 47-bit NaN-boxing branch.
+Hull enables it for both TRUEOS and host fixtures so JSValue retains full-width
+native pointers. TRUEOS guest heaps use canonical high-half virtual addresses.
+The existing upstream full-pointer JSValue implementation is otherwise unchanged.

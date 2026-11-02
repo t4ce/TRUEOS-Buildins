@@ -91,7 +91,7 @@ impl Scripts {
         logl::log(
             logl::level::INFO,
             format_args!(
-                "hull: scripts collected={} (dormant; explicit run required; external sources are not fetched)",
+                "hull: scripts collected={} (external sources are not fetched)",
                 self.sources.len(),
             ),
         );

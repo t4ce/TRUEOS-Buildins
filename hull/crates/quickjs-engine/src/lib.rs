@@ -463,6 +463,23 @@ impl Drop for Engine {
 mod tests {
     use super::*;
 
+    #[cfg(target_pointer_width = "64")]
+    #[test]
+    fn native_values_preserve_high_half_heap_pointers() {
+        unsafe extern "C" {
+            fn hull_quickjs_pointer_round_trip(bits: usize) -> usize;
+        }
+        // Includes the actual corrupted object address from the baremetal crash.
+        for pointer in [
+            0xffff_8001_0d88_2dc0,
+            0xffff_8001_0d83_9710,
+            0x0000_7fff_1234_5678,
+        ] {
+            // SAFETY: the adapter packs/unpacks this bit pattern without access.
+            assert_eq!(unsafe { hull_quickjs_pointer_round_trip(pointer) }, pointer);
+        }
+    }
+
     #[test]
     fn dispatched_json_is_data_and_completion_is_not_coerced() {
         let mut engine = Engine::new().unwrap();
