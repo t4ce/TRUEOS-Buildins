@@ -88,6 +88,13 @@ pub(crate) async fn prepare_restart(path: &crate::path::Path) -> Result<(), allo
     };
     match async_fs::typed_metadata(text.as_bytes()).await {
         Ok(info) if info.content_type != async_fs::ContentTypeId::BLOB => {
+            // Recreating an ordinary download must not discard a user-assigned key.
+            let key = async_fs::record_key(text.as_bytes())
+                .await
+                .map_err(|code| format!("restart download key: {code}"))?;
+            if !matches!(key, async_fs::RecordKey::Ffa) {
+                return Err("cannot restart a protected typed download in place".into());
+            }
             async_fs::remove(text.as_bytes())
                 .await
                 .map_err(|code| format!("restart typed download: {code}"))?;
