@@ -40,7 +40,7 @@
     }
     function jQuery(value, context) {
         if (!value) return new Collection([]);
-        if (typeof value === 'function') unsupported('jQuery ready callbacks require a DOM-ready scheduler');
+        if (typeof value === 'function') return jQuery(document).ready(value);
         if (value === page) return new Collection([], undefined, [page]);
         if (typeof value === 'string') {
             if (/^\s*</.test(value)) unsupported('jQuery HTML construction is not admitted');
@@ -64,6 +64,17 @@
     const fn = Collection.prototype;
     fn.constructor = jQuery;
     fn.jquery = '4.0.0-hull-native';
+    const readyPromise = new Promise(resolve => {
+        if (document.readyState !== 'loading') resolve();
+        else document.addEventListener('DOMContentLoaded', resolve, {once:true});
+    });
+    fn.ready = function(callback) {
+        if (typeof callback === 'function') readyPromise.then(() => {
+            try { apply(callback, document, [jQuery]); }
+            catch (error) { globalThis.console?.error(String(error)); }
+        });
+        return this;
+    };
     fn.toArray = function() { return apply(slice, this, []); };
     fn.get = function(index) { return index == null ? this.toArray() : this[index < 0 ? index + this.length : index]; };
     fn.pushStack = function(nodes) { return new Collection(idsFrom(nodes), this); };

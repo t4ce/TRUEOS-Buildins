@@ -83,7 +83,7 @@ fn native_utilities_preserve_undefined_numbers_and_encoding_without_to_json() {
     try{$.param(cyclic);throw Error('accepted cycle')}catch(e){if(!(e instanceof TypeError))throw e}
     try{$.param({f:()=>1});throw Error('accepted callback')}catch(e){if(e.name!=='NotSupportedError')throw e}
     try{$('<p>');throw Error('accepted HTML')}catch(e){if(e.name!=='NotSupportedError')throw e}
-    try{$(()=>{});throw Error('accepted ready')}catch(e){if(e.name!=='NotSupportedError')throw e}
+    if($(()=>{})[0]!==document)throw Error('ready shorthand collection');
     try{$('p').children('a');throw Error('accepted filtered traversal')}catch(e){if(e.name!=='NotSupportedError')throw e}
     try{$('[');throw Error('accepted invalid selector')}catch(e){if(e.name!=='SyntaxError')throw e}
 "#,

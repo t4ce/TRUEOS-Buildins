@@ -207,12 +207,16 @@ impl Runtime {
                     .build()
                     .expect("JavaScript lane runtime");
                 let local = LocalSet::new();
+                // Notify waiters are embedded in this future. The VMX UI
+                // signals them through shared channels, so they must live in
+                // the guest allocation realm, not the native carrier stack
+                // (which is intentionally absent from the guest page tables).
                 local.block_on(
                     &runtime,
-                    worker(
+                    Box::pin(worker(
                         page_rx, reports_tx, input_rx, loss_rx, pasted, initial, exhausted, wake,
                         stopped, published, window,
-                    ),
+                    )),
                 );
             })
             .map_err(|error| error.to_string())?

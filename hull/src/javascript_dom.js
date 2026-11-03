@@ -57,7 +57,7 @@
             super();
             if (key !== token) throw new TypeError('Illegal constructor');
             states.set(this, {id, ...description});
-            eventTarget(this).parent=()=>description.type===9 ? eventWindow : wrap(get(this,'parentNode'));
+            eventTarget(this).parent=()=>description.type===9 ? (id===request('root') ? eventWindow : null) : wrap(get(this,'parentNode'));
         }
         get nodeType() { return state(this).type; }
         get nodeName() { return state(this).name; }
@@ -140,7 +140,35 @@
             return element;
         }
     }
+    const implementations = new WeakMap();
+    let documentCapLogged = false;
+    class DOMImplementation {
+        constructor(key, document) {
+            if(key!==token)throw new TypeError('Illegal constructor');
+            implementations.set(this, document);
+        }
+        createHTMLDocument(title) {
+            const document = implementations.get(this);
+            if(!document)throw new TypeError('Illegal invocation');
+            const id = request('createHTMLDocument', state(document).id, arguments.length ? string(title) : null);
+            if(id===null) {
+                if(!documentCapLogged) {
+                    documentCapLogged=true;
+                    globalThis.console?.warn('hull: document soft cap exceeded (10 total); further document creation blocked');
+                }
+                throw new DOMException('Document soft cap exceeded (10 total)', 'QuotaExceededError');
+            }
+            return wrap(id);
+        }
+    }
+    const documentImplementations = new WeakMap();
     class Document extends Node {
+        get implementation() {
+            if(state(this).type!==9)throw new TypeError('Expected a Document');
+            if(!documentImplementations.has(this))documentImplementations.set(this,new DOMImplementation(token,this));
+            return documentImplementations.get(this);
+        }
+        get defaultView() { return state(this).id===request('root') ? eventWindow : null; }
         get URL() { return get(this,'URL'); }
         get documentURI() { return get(this,'documentURI'); }
         createElement(name,options) {
@@ -154,7 +182,7 @@
         createDocumentFragment() { const s=state(this);if(s.type!==9)throw new TypeError('Expected a Document');return wrap(request('create',s.id,'fragment')); }
         get readyState() {
             if(state(this).type!==9)throw new TypeError('Expected a Document');
-            return documentReadyState;
+            return state(this).id===request("root") ? documentReadyState : "complete";
         }
         get currentScript() { return wrap(get(this, 'currentScript')); }
         get documentElement() { return wrap(get(this, 'documentElement')); }
@@ -328,7 +356,7 @@
         wrappers.set(id, node);
         return node;
     }
-    for (const Constructor of [EventTarget, Event, CustomEvent, Node, CharacterData, Text, Comment, Element, HTMLElement, HTMLMediaElement, HTMLVideoElement, HTMLLinkElement, HTMLTemplateElement, DocumentFragment, Document, NodeList, HTMLCollection, DOMException]) {
+    for (const Constructor of [EventTarget, Event, CustomEvent, Node, CharacterData, Text, Comment, Element, HTMLElement, HTMLMediaElement, HTMLVideoElement, HTMLLinkElement, HTMLTemplateElement, DocumentFragment, Document, DOMImplementation, NodeList, HTMLCollection, DOMException]) {
         Object.defineProperty(Constructor.prototype, Symbol.toStringTag, {value:Constructor.name, configurable:true});
         Object.defineProperty(globalThis, Constructor.name, {value:Constructor, writable:true, configurable:true});
     }

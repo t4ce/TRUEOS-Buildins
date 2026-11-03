@@ -162,3 +162,70 @@ fn jquery_consumes_html_collection_as_identity_preserving_snapshot() {
     );
     assert!(engine.take_console().messages.is_empty());
 }
+
+#[test]
+fn jquery_ready_shorthand_and_method_share_async_ready_signal() {
+    let mut engine = fixture();
+    run(&mut engine, r#"
+        let trace=[];
+        const collection=$(function(jq){
+            if(this!==document||jq!==jQuery)throw Error('ready arguments');
+            document.querySelector('button').textContent='ready';trace.push('early');
+        });
+        if(collection[0]!==document||collection.length!==1)throw Error('ready return');
+        $(document).ready(()=>{throw Error('ready isolated failure')});
+        $(document).ready(()=>trace.push('second'));
+        if(trace.length)throw Error('ready ran before signal');
+    "#);
+    engine.dispatch_json(br#"{"kind":"__hull_dom_ready"}"#).unwrap();
+    run(&mut engine, "if(trace.length)throw Error('ready must be async')");
+    while engine.execute_pending_job().unwrap() {}
+    run(&mut engine, r#"
+        if(trace.join(',')!=='early,second'||document.querySelector('button').textContent!=='ready')throw Error('ready delivery');
+        $(()=>trace.push('late'));
+        if(trace.length!==2)throw Error('late ready must be async');
+    "#);
+    engine.dispatch_json(br#"{"kind":"__hull_dom_ready"}"#).unwrap();
+    while engine.execute_pending_job().unwrap() {}
+    run(&mut engine, "if(trace.join(',')!=='early,second,late')throw Error('ready duplicate or lost')");
+    let output=engine.take_console();
+    assert_eq!(output.messages.len(),1);
+    assert!(output.messages[0].text.contains("ready isolated failure"));
+}
+
+#[test]
+fn detached_html_documents_have_own_roots_and_ten_document_cap() {
+    let mut engine = fixture();
+    run(&mut engine, r#"
+        const second=document.implementation.createHTMLDocument('a <title> & text');
+        const third=second.implementation.createHTMLDocument();
+        if(!(second instanceof Document)||!(second.implementation instanceof DOMImplementation))throw Error('document brand');
+        if(second.implementation!==second.implementation||second.ownerDocument!==null||second.parentNode!==null)throw Error('document identity');
+        if(second.defaultView!==null||second.currentScript!==null||second.readyState!=='complete'||second.URL!=='about:blank')throw Error('inert document');
+        if(second.documentElement.ownerDocument!==second||second.body.parentNode!==second.documentElement||second.head.ownerDocument!==second)throw Error('tree ownership');
+        if(second.querySelector('title').textContent!=='a <title> & text'||third.querySelector('title')!==null)throw Error('title text');
+        const node=second.createElement('aside');node.setAttribute('id','inert-only');second.body.appendChild(node);
+        if(second.getElementById('inert-only')!==node||document.getElementById('inert-only')!==null)throw Error('document query isolation');
+        const child=second.createTextNode('text');node.appendChild(child);
+        const copy=node.cloneNode(true);
+        if(copy.ownerDocument!==second||copy.firstChild.ownerDocument!==second)throw Error('clone ownership');
+        document.body.appendChild(node);
+        if(node.ownerDocument!==document||child.ownerDocument!==document||second.getElementById('inert-only')!==null)throw Error('adoption');
+        second.body.textContent='new';
+        if(second.body.firstChild.ownerDocument!==second)throw Error('text owner');
+        const fragment=third.createDocumentFragment();fragment.appendChild(copy);document.body.appendChild(fragment);
+        if(copy.ownerDocument!==document||copy.firstChild.ownerDocument!==document||fragment.ownerDocument!==third)throw Error('fragment adoption');
+        let windowEvents=0;window.addEventListener('inert-event',()=>windowEvents++);
+        second.dispatchEvent(new Event('inert-event',{bubbles:true}));
+        if(windowEvents)throw Error('inert events reached window');
+        for(let i=3;i<10;i++) third.implementation.createHTMLDocument();
+        for(let i=0;i<5;i++) {
+            try{third.implementation.createHTMLDocument();throw Error('cap bypass')}
+            catch(e){if(e.name!=='QuotaExceededError')throw e}
+        }
+        if(document.querySelector('main')===null||third.body.ownerDocument!==third)throw Error('cap corrupted existing document');
+    "#);
+    let output=engine.take_console();
+    assert_eq!(output.messages.len(),1);
+    assert!(output.messages[0].text.contains("document soft cap exceeded"));
+}

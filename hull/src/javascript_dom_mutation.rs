@@ -32,7 +32,7 @@ fn valid_name(name: &str) -> bool {
             c.is_ascii_alphanumeric() || matches!(c, '-' | '.' | ':' | '_') || c as u32 >= 128
         })
 }
-pub(super) fn base_uri(doc: &Document, page_url: &str) -> DomResult<String> {
+pub(super) fn base_uri(doc: &Document, page_url: &str, root: usize) -> DomResult<String> {
     if doc.nodes.len() > 100_000 {
         return Err(failure(
             "QuotaExceededError",
@@ -40,7 +40,8 @@ pub(super) fn base_uri(doc: &Document, page_url: &str) -> DomResult<String> {
         ));
     }
     let until = Instant::now() + Duration::from_millis(20);
-    let mut pending = vec![doc.root];
+    let page_url = if root == doc.root { page_url } else { "about:blank" };
+    let mut pending = vec![root];
     let mut visited = 0;
     while let Some(id) = pending.pop() {
         visited += 1;

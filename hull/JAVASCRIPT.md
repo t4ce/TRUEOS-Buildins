@@ -107,7 +107,7 @@ constitute full web-platform conformance.
   `CharacterData.data` and UTF-16 `length`. `Node.cloneNode(deep)` copies detached
   nodes, attributes, descendants and template contents within those same quotas;
   it does not copy listeners or JavaScript expando properties. Cloning a Document
-  is explicitly unsupported by the single-document gateway. Element
+  remains explicitly unsupported. Element
   `insertAdjacentElement` uses the existing validated insertion operations for
   its four standard positions; these are DOM APIs rather than jQuery aliases.
 - HTML link `href`, `rel`, `as` and `crossOrigin` reflection. Document URL and
@@ -116,7 +116,24 @@ constitute full web-platform conformance.
   the frozen initial document. Insertion alone does not synthesize resource
   load/error events or execute inserted script elements; module imports retain
   their existing host-managed loader. HTML parsing/innerHTML, custom element
-  registries and a complete template/inert-document model are not admitted.
+  registries and a complete template model are not admitted.
+
+`document.implementation.createHTMLDocument(title)` creates an inert document
+with its own doctype, html, head and body in the existing rp5 arena. An optional
+title is text, never markup. The page counts as document one: at most nine more
+can be created per navigation. Further attempts throw `QuotaExceededError` and
+emit one console warning for the page. Detached documents have no window,
+current script, resource loading or execution context; queries stay within their
+own tree. Native node creation, cloning and cross-document insertion retain or
+adopt `ownerDocument` as appropriate. They do not enter the rendered page unless
+nodes are explicitly moved into its tree. HTML parsing through `innerHTML` is
+still unsupported.
+
+Native jQuery accepts `$(function ($) { ... })` and `$(document).ready(fn)`.
+Callbacks use the existing DOM-ready signal, run asynchronously in Promise jobs,
+receive jQuery and use the page document as `this`. Late registrations also run;
+each callback runs once, within the same page execution budget. A failing
+callback is reported to the console without suppressing the other callbacks.
 
 When Hull attaches its native window producer, `window` and `self` expose the
 existing page global, with the same `document`, console and script globals.

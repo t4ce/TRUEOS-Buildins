@@ -108,7 +108,10 @@ fn install_gateway(
     media:Option<media::SharedMedia>,
 ) -> Result<(), String> {
     let initial_nodes = document.borrow().nodes.len();
+    let root = document.borrow().root;
     let mut gateway = Gateway {
+        documents: Rc::new(RefCell::new(vec![root])),
+        owners: Rc::new(RefCell::new(vec![root; initial_nodes])),
         document,
         window,
         current_script,
@@ -166,6 +169,8 @@ fn input<'a>(request: &'a [Value], index: usize) -> DomResult<&'a str> {
 }
 
 struct Gateway {
+    documents: Rc<RefCell<Vec<usize>>>,
+    owners: Rc<RefCell<Vec<usize>>>,
     style_locks:style::Locks,
     timers:Option<timers::SharedTimers>,
     media:Option<media::SharedMedia>,
@@ -203,7 +208,42 @@ impl Gateway {
         Ok(())
     }
 
+    fn owner(&self, id: usize) -> usize {
+        let doc = self.document.borrow();
+        if matches!(doc.nodes[id].kind, NodeKind::Document) { id }
+        else { self.owners.borrow()[id] }
+    }
+    // All trees share stable arena handles, but detached documents have separate
+    // roots and ownership. No additional JS runtime or resource loader is made.
     fn call(&mut self, request: &Value) -> DomResult<Value> {
+        let before = self.document.borrow().nodes.len();
+        let id = request.get(1).and_then(Value::as_u64).map(|v| v as usize).filter(|&v| v < before);
+        let owner = id.map(|id| self.owner(id)).unwrap_or(self.document.borrow().root);
+        let adopting = if matches!(request.get(0).and_then(Value::as_str), Some("appendChild" | "insertBefore")) {
+            let doc = self.document.borrow();
+            request.get(2).and_then(Value::as_u64).map(|n| n as usize).filter(|&n| n < before)
+                .map(|n| if matches!(doc.nodes[n].kind, NodeKind::Fragment) { doc.nodes[n].children.clone() } else { vec![n] })
+                .unwrap_or_default()
+        } else { vec![] };
+        let result = self.call_inner(request);
+        let after = self.document.borrow().nodes.len();
+        self.owners.borrow_mut().resize(after, owner);
+        if result.is_ok() && matches!(request.get(0).and_then(Value::as_str), Some("appendChild" | "insertBefore")) {
+            // Insertion adopts the subtree, including template contents.
+            let doc = self.document.borrow();
+            let mut pending = adopting;
+            let mut owners = self.owners.borrow_mut();
+            while let Some(node) = pending.pop() {
+                owners[node] = owner;
+                pending.extend(doc.nodes[node].children.iter().copied());
+                if let NodeKind::Element { template_content: Some(content), .. } = doc.nodes[node].kind {
+                    pending.push(content);
+                }
+            }
+        }
+        result
+    }
+    fn call_inner(&mut self, request: &Value) -> DomResult<Value> {
         let args = request
             .as_array()
             .ok_or_else(|| failure("TypeError", "Expected a DOM request"))?;
@@ -258,6 +298,36 @@ impl Gateway {
             .and_then(|id| usize::try_from(id).ok())
             .filter(|&id| id < self.document.borrow().nodes.len())
             .ok_or_else(|| failure("TypeError", "Invalid node handle"))?;
+        if operation == "createHTMLDocument" {
+            if !matches!(self.document.borrow().nodes[id].kind, NodeKind::Document) {
+                return Err(failure("TypeError", "Expected a Document"));
+            }
+            if self.documents.borrow().len() >= 10 { return Ok(Value::Null); }
+            let title = args.get(2).and_then(Value::as_str);
+            let parsed = rp5::parse("<!doctype html><html><head></head><body></body></html>");
+            self.charge_nodes(title.map_or(0, str::len), parsed.nodes.len() + if title.is_some() {2} else {0})?;
+            let mut doc = self.document.borrow_mut();
+            let offset = doc.nodes.len();
+            for node in &parsed.nodes {
+                let mut kind = node.kind.clone();
+                if let NodeKind::Element { template_content: Some(content), .. } = &mut kind { *content += offset; }
+                doc.add(kind);
+            }
+            for (index, node) in parsed.nodes.iter().enumerate() {
+                doc.nodes[offset + index].parent = node.parent.map(|p| p + offset);
+                doc.nodes[offset + index].children = node.children.iter().map(|c| c + offset).collect();
+            }
+            let root = offset + parsed.root;
+            if let Some(title) = title {
+                let head = (offset..doc.nodes.len()).find(|&n| doc.name(n) == "head").unwrap();
+                let element = doc.add(NodeKind::Element { name: "title".into(), namespace: Namespace::Html, attrs: vec![], template_content: None });
+                let text = doc.add(NodeKind::Text(title.into()));
+                doc.append(head, element); doc.append(element, text);
+            }
+            self.owners.borrow_mut().resize(doc.nodes.len(), root);
+            self.documents.borrow_mut().push(root);
+            return Ok(json!(root));
+        }
         if matches!(
             operation,
             "create" | "appendChild" | "insertBefore" | "removeChild" | "clone"
@@ -294,12 +364,12 @@ impl Gateway {
                 let doc = self.document.borrow();
                 let node = &doc.nodes[id];
                 Ok(match property {
-                    "baseURI" => json!(mutation::base_uri(&doc, &self.page_url)?),
+                    "baseURI" => json!(mutation::base_uri(&doc, &self.page_url, self.owner(id))?),
                     "URL" | "documentURI" => {
                         if !matches!(node.kind, NodeKind::Document) {
                             return Err(failure("TypeError", "Expected a Document"));
                         }
-                        json!(self.page_url)
+                        json!(if id == doc.root { self.page_url.as_str() } else { "about:blank" })
                     }
                     "linkHref" => {
                         if !doc
@@ -318,7 +388,7 @@ impl Gateway {
                         json!(match value {
                             None => String::new(),
                             Some(value) =>
-                                url::Url::parse(&mutation::base_uri(&doc, &self.page_url)?)
+                                url::Url::parse(&mutation::base_uri(&doc, &self.page_url, self.owner(id))?)
                                     .and_then(|base| base.join(value))
                                     .map_or_else(|_| value.to_owned(), |u| u.to_string()),
                         })
@@ -342,7 +412,7 @@ impl Gateway {
                         if !matches!(node.kind, NodeKind::Document) {
                             return Err(failure("TypeError", "Expected a Document"));
                         }
-                        json!(self.current_script.get())
+                        json!(if id == doc.root { self.current_script.get() } else { None })
                     }
                     "textContent" => match &node.kind {
                         NodeKind::Document | NodeKind::Doctype { .. } => Value::Null,
@@ -362,7 +432,7 @@ impl Gateway {
                         if matches!(node.kind, NodeKind::Document) {
                             Value::Null
                         } else {
-                            json!(doc.root)
+                            json!(self.owners.borrow()[id])
                         }
                     }
                     "firstChild" => json!(node.children.first()),
@@ -394,7 +464,7 @@ impl Gateway {
                         .element(id)
                         .map_or(Value::Null, |(_, namespace, _)| json!(namespace.uri())),
                     "documentElement" => json!(
-                        doc.nodes[doc.root]
+                        doc.nodes[id]
                             .children
                             .iter()
                             .copied()
@@ -404,7 +474,7 @@ impl Gateway {
                             ))
                     ),
                     "head" | "body" => {
-                        let html = doc.nodes[doc.root].children.iter().copied().find(|&child| {
+                        let html = doc.nodes[id].children.iter().copied().find(|&child| {
                             doc.name(child) == "html" && doc.namespace(child) == Namespace::Html
                         });
                         json!(
