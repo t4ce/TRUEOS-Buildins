@@ -15,6 +15,8 @@ pub mod window {
 }
 
 pub use tokio;
+#[path="resource_netfs.rs"]
+pub mod netfs;
 pub mod runtime {
     pub use tokio::runtime::{Builder, Handle, Runtime};
     pub fn current_thread() -> Builder {
@@ -47,6 +49,10 @@ mod console_tests;
 mod dom_tests;
 #[cfg(test)]
 mod jquery_tests;
+#[cfg(test)]
+mod resource_tests;
+#[cfg(test)]
+mod resource_failure_tests;
 #[cfg(test)]
 mod helpers_tests;
 #[cfg(test)]

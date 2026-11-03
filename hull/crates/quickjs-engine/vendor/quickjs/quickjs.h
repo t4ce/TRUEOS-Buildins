@@ -994,6 +994,15 @@ typedef char *JSModuleNormalizeFunc(JSContext *ctx,
                                     const char *module_name, void *opaque);
 typedef JSModuleDef *JSModuleLoaderFunc(JSContext *ctx,
                                         const char *module_name, void *opaque);
+/* Hull: parser-owned dependency discovery and deferred host import admission.
+   The waiter duplicates resolving functions if it retains them. */
+typedef int JSHullImportWaiter(JSContext *ctx, const char *base, const char *name,
+                              JSValueConst resolve, JSValueConst reject,
+                              JSValueConst attributes, void *opaque);
+void JS_HullSetImportWaiter(JSRuntime *rt, JSHullImportWaiter *waiter, void *opaque);
+JSValue JS_HullModuleRequests(JSContext *ctx, const char *source, size_t length,
+                             const char *origin);
+#define JS_EVAL_FLAG_HULL_NO_RESOLVE (1 << 8)
 typedef JSModuleDef *JSModuleLoaderFunc2(JSContext *ctx,
                                          const char *module_name, void *opaque,
                                          JSValueConst attributes);

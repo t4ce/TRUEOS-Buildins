@@ -464,6 +464,16 @@ impl ApplicationHandler for Hull {
         if let Some(javascript) = &mut self.javascript {
             for report in javascript.poll() {
                 match report {
+                    javascript::Report::Resource {
+                        generation,
+                        url,
+                        status,
+                        detail,
+                    } => {
+                        if generation == self.generation {
+                            shellio::linef(format_args!("hull: resource {status} {url} {detail}"));
+                        }
+                    }
                     javascript::Report::Online => logl::log(
                         logl::level::INFO,
                         format_args!("hull: QuickJS task online; initial page budget=250ms"),
@@ -1085,7 +1095,7 @@ impl ApplicationHandler for Hull {
 }
 
 fn main() {
-    let javascript = match javascript::Runtime::start() {
+    let mut javascript = match javascript::Runtime::start() {
         Ok(runtime) => runtime,
         Err(error) => {
             logl::log(
@@ -1095,6 +1105,7 @@ fn main() {
             return;
         }
     };
+    javascript.enable_resource_loading();
     let mut app = Hull::default();
     app.javascript = Some(javascript);
     if let Ok(bytes) = trueos::async_fs::block_on(trueos::async_fs::read_file(b"vFile:launch")) {

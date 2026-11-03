@@ -378,6 +378,8 @@ struct JSRuntime {
     } u;
     JSModuleCheckSupportedImportAttributes *module_check_attrs;
     void *module_loader_opaque;
+    JSHullImportWaiter *hull_import_waiter;
+    void *hull_import_opaque;
     /* timestamp for internal use in module evaluation */
     int64_t module_async_evaluation_next_timestamp;
 
@@ -1357,6 +1359,7 @@ static void js_mark_module_def(JSRuntime *rt, JSModuleDef *m,
                                JS_MarkFunc *mark_func);
 static JSValue js_import_meta(JSContext *ctx);
 static JSValue js_dynamic_import(JSContext *ctx, JSValueConst specifier, JSValueConst options);
+static void js_hull_module_promise_handled(JSContext *ctx, JSValueConst promise);
 static void free_var_ref(JSRuntime *rt, JSVarRef *var_ref);
 static JSValue js_new_promise_capability(JSContext *ctx,
                                          JSValue *resolving_funcs,
@@ -32016,8 +32019,17 @@ static JSValue js_dynamic_import_job(JSContext *ctx,
     if (!filename)
         goto exception;
 
-    JS_LoadModuleInternal(ctx, basename, filename,
-                          resolving_funcs, attributes);
+    if (ctx->rt->hull_import_waiter) {
+        if (ctx->rt->hull_import_waiter(ctx, basename, filename,
+                                      resolving_funcs[0], resolving_funcs[1], attributes,
+                                      ctx->rt->hull_import_opaque) < 0) {
+            JS_FreeCString(ctx, filename);
+            goto exception;
+        }
+    } else {
+        JS_LoadModuleInternal(ctx, basename, filename,
+                              resolving_funcs, attributes);
+    }
     JS_FreeCString(ctx, filename);
     JS_FreeCString(ctx, basename);
     return JS_UNDEFINED;
@@ -32364,6 +32376,9 @@ static int js_execute_sync_module(JSContext *ctx, JSModuleDef *m,
         if (state == JS_PROMISE_FULFILLED) {
             JS_FreeValue(ctx, promise);
         } else if (state == JS_PROMISE_REJECTED) {
+            /* Hull: this internal async-function promise is consumed below.
+               Only the public module/import promise is an unhandled candidate. */
+            js_hull_module_promise_handled(ctx, promise);
             *pvalue = JS_PromiseResult(ctx, promise);
             JS_FreeValue(ctx, promise);
             return -1;
@@ -38313,7 +38328,7 @@ static JSValue __JS_EvalInternal(JSContext *ctx, JSValueConst this_obj,
     /* Could add a flag to avoid resolution if necessary */
     if (m) {
         m->func_obj = fun_obj;
-        if (js_resolve_module(ctx, m) < 0)
+        if (!(flags & JS_EVAL_FLAG_HULL_NO_RESOLVE) && js_resolve_module(ctx, m) < 0)
             goto fail1;
         fun_obj = JS_NewModuleValue(ctx, m);
     }
@@ -56690,6 +56705,16 @@ JSValue JS_PromiseResult(JSContext *ctx, JSValue promise)
     return JS_DupValue(ctx, s->promise_result);
 }
 
+static void js_hull_module_promise_handled(JSContext *ctx, JSValueConst promise)
+{
+    JSPromiseData *s = JS_GetOpaque(promise, JS_CLASS_PROMISE);
+    if (!s || s->is_handled) return;
+    s->is_handled = TRUE;
+    if (s->promise_state == JS_PROMISE_REJECTED && ctx->rt->host_promise_rejection_tracker)
+        ctx->rt->host_promise_rejection_tracker(ctx, promise, s->promise_result, TRUE,
+                                               ctx->rt->host_promise_rejection_tracker_opaque);
+}
+
 static int js_create_resolving_functions(JSContext *ctx, JSValue *args,
                                          JSValueConst promise);
 
@@ -65422,4 +65447,38 @@ int JS_AddIntrinsicWeakRef(JSContext *ctx)
         return -1;
     JS_FreeValue(ctx, obj);
     return 0;
+}
+
+/* Hull extensions: discovery uses the real parser in an ephemeral context;
+   deferred import admission does not replace JavaScript syntax or linking. */
+void JS_HullSetImportWaiter(JSRuntime *rt, JSHullImportWaiter *waiter, void *opaque)
+{
+    rt->hull_import_waiter = waiter;
+    rt->hull_import_opaque = opaque;
+}
+
+JSValue JS_HullModuleRequests(JSContext *ctx, const char *source, size_t length,
+                             const char *origin)
+{
+    JSContext *probe = JS_NewContext(ctx->rt);
+    if (!probe) return JS_EXCEPTION;
+    JSValue module = JS_Eval(probe, source, length, origin,
+        JS_EVAL_TYPE_MODULE | JS_EVAL_FLAG_COMPILE_ONLY | JS_EVAL_FLAG_HULL_NO_RESOLVE);
+    if (JS_IsException(module)) {
+        JSValue exception = JS_GetException(probe);
+        JS_FreeContext(probe);
+        return JS_Throw(ctx, exception);
+    }
+    JSModuleDef *m = JS_VALUE_GET_PTR(module);
+    JSValue result = JS_NewArray(ctx);
+    for (int i = 0; i < m->req_module_entries_count && !JS_IsException(result); i++) {
+        JSValue name = JS_AtomToValue(ctx, m->req_module_entries[i].module_name);
+        if (JS_DefinePropertyValueUint32(ctx, result, i, name, JS_PROP_C_W_E) < 0) {
+            JS_FreeValue(ctx, result);
+            result = JS_EXCEPTION;
+        }
+    }
+    JS_FreeValue(probe, module);
+    JS_FreeContext(probe);
+    return result;
 }

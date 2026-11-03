@@ -130,12 +130,70 @@ def capture_page(args, executable: Path) -> None:
         for source in report["scripts"]:
             if source["file"] is None:
                 resource(source["origin"], "js")
+    # Optional module graph capture uses QuickJS's parser and the production URL
+    # policy. No regex import scanner and no downloaded JavaScript execution.
+    def module_tool(mode, value, base):
+        process = subprocess.run([str(executable), mode, str(value), base, str(capture)],
+                                 cwd=tempfile.gettempdir(), capture_output=True,
+                                 text=True, check=True, timeout=10)
+        return json.loads(process.stdout)
+
+    seen_modules = set()
+
+    def module_graph(candidates, depth=0):
+        if depth > 32:
+            return False
+        for url in candidates:
+            if url in seen_modules:
+                if manifest["resources"].get(url, {}).get("module_status") in {"ready", "visiting"}:
+                    return True
+                continue
+            seen_modules.add(url)
+            resource(url, "module")
+            entry = manifest["resources"].get(url, {})
+            if entry.get("status") != "ok":
+                continue
+            entry["module_status"] = "visiting"
+            try:
+                inspected = module_tool("--module-inspect", capture / entry["path"], url)
+                dependencies = [module_graph(dep["candidates"], depth + 1)
+                                for dep in inspected["dependencies"]]
+                if all(dependencies):
+                    entry["module_status"] = "ready"
+                    store(capture / "capture.json", manifest)
+                    return True
+            except (ValueError, OSError, subprocess.SubprocessError) as error:
+                entry["module_error"] = str(error)
+                store(capture / "capture.json", manifest)
+                print(f"module capture failed: {url}: {error}", file=sys.stderr)
+            entry["module_status"] = "failed"
+            store(capture / "capture.json", manifest)
+        return False
+
+    for specifier in args.module:
+        plan = module_tool("--module-resolve", specifier, args.url)
+        module_graph(plan["candidates"])
+    if args.module:
+        # Include static imports from inline module entries and captured external
+        # modules; computed/dynamic roots can be added with another --module.
+        for source in report["scripts"]:
+            if source["type"].split(";")[0].strip().lower() == "module":
+                if source["file"] is None:
+                    plan = module_tool("--module-resolve", source["origin"], args.url)
+                    module_graph(plan["candidates"])
+                else:
+                    try:
+                        inspected = module_tool("--module-inspect", capture / "inspection" / source["file"], source["origin"])
+                        for dep in inspected["dependencies"]:
+                            module_graph(dep["candidates"])
+                    except (ValueError, OSError, subprocess.SubprocessError) as error:
+                        print(f"inline module capture failed: {error}", file=sys.stderr)
     print(f"Capture ready: {capture}; replay is offline. No JavaScript ran during capture.")
 
 
 def replay_arguments(args) -> list[str]:
     result = ["--width", str(args.width), "--height", str(args.height), "--turn-ms", str(args.turn_ms)]
-    for name in ("no_js", "no_svg", "external", "no_window"):
+    for name in ("no_js", "no_svg", "external", "no_window", "modules"):
         if getattr(args, name):
             result.append("--" + name.replace("_", "-"))
     if args.only_node is not None:
@@ -233,6 +291,7 @@ def parser() -> argparse.ArgumentParser:
     capture.add_argument("directory", type=Path)
     capture.add_argument("--html", type=Path, help="import exact saved HTML instead of fetching it")
     capture.add_argument("--scripts", action="store_true", help="also save external JS; does not enable execution")
+    capture.add_argument("--module", action="append", default=[], metavar="SPECIFIER", help="capture an ESM entry and static dependency graph; repeat for dynamic roots")
     capture.add_argument("--no-css", action="store_true", help="do not fetch stylesheet references")
     capture.add_argument("--refresh", action="store_true")
     for name in ("replay", "watch"):
@@ -243,6 +302,7 @@ def parser() -> argparse.ArgumentParser:
         replay.add_argument("--no-svg", action="store_true", help="script diagnostics only")
         replay.add_argument("--external", action="store_true", help="experiment: admit captured external sources")
         replay.add_argument("--no-window", action="store_true", help="experiment: omit window globals")
+        replay.add_argument("--modules", action="store_true", help="enable production source loading from captured resources only")
         replay.add_argument("--only-node", type=int)
         replay.add_argument("--replace", action="append", default=[], metavar="NODE=FILE")
         replay.add_argument("--prelude", type=Path, help="experiment: local JS source before page scripts")

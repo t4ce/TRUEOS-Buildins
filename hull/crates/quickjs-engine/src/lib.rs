@@ -44,6 +44,66 @@ struct HostState {
     handler: RefCell<Box<HostHandler>>,
     response: RefCell<Vec<u8>>,
 }
+type ModuleNormalizer = dyn FnMut(&str, &str) -> Result<String, String>;
+struct ModuleState {
+    normalize: RefCell<Box<ModuleNormalizer>>,
+    output: RefCell<Vec<u8>>,
+}
+unsafe extern "C" fn normalize_module(
+    opaque: *mut c_void,
+    base: *const c_char,
+    name: *const c_char,
+    output: *mut *const c_char,
+    length: *mut usize,
+) -> c_int {
+    // SAFETY: C passes terminated strings and the installed stable state.
+    let state = unsafe { &*opaque.cast::<ModuleState>() };
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        let base = unsafe { CStr::from_ptr(base) }
+            .to_str()
+            .map_err(|_| "Invalid module base UTF-8".to_owned())?;
+        let name = unsafe { CStr::from_ptr(name) }
+            .to_str()
+            .map_err(|_| "Invalid module specifier UTF-8".to_owned())?;
+        state
+            .normalize
+            .try_borrow_mut()
+            .map_err(|_| "Module resolver reentry".to_owned())?(base, name)
+    }))
+    .unwrap_or_else(|_| Err("Module resolver panicked".into()));
+    let (status, text) = match result {
+        Ok(s) => (0, s),
+        Err(e) => (-1, e),
+    };
+    let mut buffer = state.output.borrow_mut();
+    *buffer = text.into_bytes();
+    buffer.push(0);
+    unsafe {
+        *output = buffer.as_ptr().cast();
+        *length = buffer.len() - 1;
+    }
+    status
+}
+/// An import Promise waiting for host-side source preparation. No native value
+/// or resolver function escapes the owned engine.
+#[derive(Clone, Debug)]
+pub struct ImportRequest {
+    pub id: u64,
+    pub base: String,
+    pub specifier: String,
+}
+struct DependencyList {
+    names: Vec<String>,
+    invalid: bool,
+}
+unsafe extern "C" fn dependency_item(opaque: *mut c_void, text: *const c_char, length: usize) {
+    let list = unsafe { &mut *opaque.cast::<DependencyList>() };
+    let bytes = unsafe { std::slice::from_raw_parts(text.cast::<u8>(), length) };
+    match std::str::from_utf8(bytes) {
+        Ok(value) if value.len() <= 4096 && list.names.len() < 256 => list.names.push(value.into()),
+        _ => list.invalid = true,
+    }
+}
 
 unsafe extern "C" fn host_call(
     opaque: *mut c_void,
@@ -128,6 +188,39 @@ unsafe extern "C" fn interrupt(_runtime: *mut c_void, opaque: *mut c_void) -> c_
 }
 
 unsafe extern "C" {
+    fn hull_quickjs_rejection_pop(engine: *mut c_void) -> c_int;
+    fn hull_quickjs_install_modules(
+        engine: *mut c_void,
+        normalize: unsafe extern "C" fn(
+            *mut c_void,
+            *const c_char,
+            *const c_char,
+            *mut *const c_char,
+            *mut usize,
+        ) -> c_int,
+        opaque: *mut c_void,
+    ) -> c_int;
+    fn hull_quickjs_add_module(
+        engine: *mut c_void,
+        name: *const c_char,
+        source: *const c_char,
+        length: usize,
+    ) -> c_int;
+    fn hull_quickjs_module_dependencies(
+        engine: *mut c_void,
+        source: *const c_char,
+        length: usize,
+        origin: *const c_char,
+        item: unsafe extern "C" fn(*mut c_void, *const c_char, usize),
+        opaque: *mut c_void,
+    ) -> c_int;
+    fn hull_quickjs_import_pop(
+        engine: *mut c_void,
+        id: *mut u64,
+        base: *mut c_char,
+        name: *mut c_char,
+    ) -> c_int;
+    fn hull_quickjs_import_complete(engine: *mut c_void, id: u64, error: *const c_char) -> c_int;
     fn hull_quickjs_new(
         heap: usize,
         stack: usize,
@@ -182,6 +275,7 @@ pub struct Engine {
     limits: Limits,
     budget_remaining: Cell<Option<Duration>>,
     host: Option<Box<HostState>>,
+    modules: Option<Box<ModuleState>>,
     _local_owner: PhantomData<Rc<()>>,
 }
 impl Engine {
@@ -214,6 +308,7 @@ impl Engine {
             limits,
             budget_remaining: Cell::new(None),
             host: None,
+            modules: None,
             _local_owner: PhantomData,
         })
     }
@@ -282,6 +377,156 @@ impl Engine {
     /// Only the host can set this allowance; guest sources cannot renew it.
     pub fn set_execution_budget(&mut self, budget: Duration) {
         self.budget_remaining.set(Some(budget));
+    }
+
+    /// Install a pure URL resolver. Network/filesystem operations must happen
+    /// before cache admission, never inside this callback. Dynamic imports wait
+    /// for explicit host completion instead of retrying or reexecuting code.
+    pub fn install_modules(
+        &mut self,
+        normalize: impl FnMut(&str, &str) -> Result<String, String> + 'static,
+    ) -> Result<(), String> {
+        if self.modules.is_some() {
+            return Err("Module loader already installed".into());
+        }
+        let mut state = Box::new(ModuleState {
+            normalize: RefCell::new(Box::new(normalize)),
+            output: RefCell::new(Vec::new()),
+        });
+        let status = unsafe {
+            hull_quickjs_install_modules(
+                self.native.as_ptr(),
+                normalize_module,
+                (&mut *state as *mut ModuleState).cast(),
+            )
+        };
+        if status < 0 {
+            return Err("Module loader installation failed".into());
+        }
+        self.modules = Some(state);
+        Ok(())
+    }
+    /// Store source without parsing or executing it. The host bounds aggregate
+    /// bytes/count; individual module bodies are limited to 1 MiB here.
+    pub fn add_module(&mut self, url: &str, source: &[u8]) -> Result<(), String> {
+        if self.modules.is_none() {
+            return Err("Module loader is not installed".into());
+        }
+        if source.len() > 1024 * 1024 || url.len() > 4096 {
+            return Err("Module source/URL exceeds budget".into());
+        }
+        let name = CString::new(url).map_err(|_| "Module URL contains NUL")?;
+        let status = unsafe {
+            hull_quickjs_add_module(
+                self.native.as_ptr(),
+                name.as_ptr(),
+                source.as_ptr().cast(),
+                source.len(),
+            )
+        };
+        if status < 0 {
+            Err("Module source allocation failed".into())
+        } else {
+            Ok(())
+        }
+    }
+    /// The upstream parser discovers static import/export-from requests, with
+    /// no module execution or import resolution and no text rewriting.
+    pub fn module_dependencies(
+        &mut self,
+        source: &[u8],
+        origin: &str,
+    ) -> Result<Vec<String>, String> {
+        if source.len() > 1024 * 1024 {
+            return Err("Module source exceeds 1 MiB".into());
+        }
+        let origin = CString::new(origin).map_err(|_| "Module origin contains NUL")?;
+        let mut terminated = source.to_vec();
+        terminated.push(0);
+        let mut list = DependencyList {
+            names: Vec::new(),
+            invalid: false,
+        };
+        let started = self.begin_call()?;
+        let status = unsafe {
+            hull_quickjs_module_dependencies(
+                self.native.as_ptr(),
+                terminated.as_ptr().cast(),
+                source.len(),
+                origin.as_ptr(),
+                dependency_item,
+                (&mut list as *mut DependencyList).cast(),
+            )
+        };
+        self.finish_call(started, status)?;
+        if list.invalid {
+            return Err("Module dependency list exceeds URL/count/UTF-8 bounds".into());
+        }
+        Ok(list.names)
+    }
+    pub fn take_import_requests(&mut self) -> Vec<ImportRequest> {
+        let mut result = Vec::new();
+        for _ in 0..32 {
+            let mut base = [0u8; 4097];
+            let mut name = [0u8; 4097];
+            let mut id = 0;
+            let status = unsafe {
+                hull_quickjs_import_pop(
+                    self.native.as_ptr(),
+                    &mut id,
+                    base.as_mut_ptr().cast(),
+                    name.as_mut_ptr().cast(),
+                )
+            };
+            if status != 1 {
+                break;
+            }
+            let base = unsafe { CStr::from_ptr(base.as_ptr().cast()) }
+                .to_string_lossy()
+                .into_owned();
+            let specifier = unsafe { CStr::from_ptr(name.as_ptr().cast()) }
+                .to_string_lossy()
+                .into_owned();
+            result.push(ImportRequest {
+                id,
+                base,
+                specifier,
+            });
+        }
+        result
+    }
+    /// Drain at a Promise checkpoint, after queued catch handlers had a turn.
+    /// Diagnostic string conversion stays under the existing engine allowance.
+    pub fn take_unhandled_rejections(&mut self) -> Vec<String> {
+        let mut result = Vec::new();
+        for _ in 0..32 {
+            let Ok(started) = self.begin_call() else {
+                break;
+            };
+            let status = unsafe { hull_quickjs_rejection_pop(self.native.as_ptr()) };
+            if status == 0 {
+                break;
+            }
+            if let Err(error) = self.finish_call(started, -1) {
+                result.push(error);
+            }
+        }
+        result
+    }
+    pub fn complete_import(&mut self, id: u64, error: Option<&str>) -> Result<(), String> {
+        let error = error
+            .map(CString::new)
+            .transpose()
+            .map_err(|_| "Module error contains NUL")?;
+        let started = self.begin_call()?;
+        let status = unsafe {
+            hull_quickjs_import_complete(
+                self.native.as_ptr(),
+                id,
+                error.as_ref().map_or(std::ptr::null(), |s| s.as_ptr()),
+            )
+        };
+        self.finish_call(started, status)
     }
 
     pub fn execution_budget_remaining(&self) -> Option<Duration> {

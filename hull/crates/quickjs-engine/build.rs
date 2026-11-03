@@ -25,6 +25,19 @@ typedef struct ConsoleRecord {
     size_t length;
     char text[CONSOLE_BYTES];
 } ConsoleRecord;
+typedef struct HullModule {
+    char *name, *source;
+    size_t length;
+    struct HullModule *next;
+} HullModule;
+typedef struct HullImport {
+    uint64_t id;
+    char *base, *name;
+    JSValue resolve, reject;
+    int delivered;
+    struct HullImport *next;
+} HullImport;
+typedef struct HullRejection { JSValue promise, reason; int used; } HullRejection;
 
 typedef struct HullQuickJs {
     JSRuntime *runtime;
@@ -37,6 +50,12 @@ typedef struct HullQuickJs {
     void *clock_opaque;
     int (*host)(void *, const char *, size_t, const char **, size_t *);
     void *host_opaque;
+    HullModule *modules;
+    HullImport *imports;
+    uint64_t import_sequence;
+    int (*normalize)(void *, const char *, const char *, const char **, size_t *);
+    void *normalize_opaque;
+    HullRejection rejections[32];
     JSInterruptHandler *interrupt;
     void *interrupt_opaque;
     char error[8192];
@@ -63,6 +82,21 @@ void *hull_quickjs_new(size_t heap_limit, size_t stack_limit,
 
 void hull_quickjs_free(void *pointer) {
     HullQuickJs *engine = pointer;
+    JS_SetHostPromiseRejectionTracker(engine->runtime, NULL, NULL);
+    for (int i = 0; i < 32; i++) if (engine->rejections[i].used) {
+        JS_FreeValue(engine->context, engine->rejections[i].promise);
+        JS_FreeValue(engine->context, engine->rejections[i].reason);
+    }
+    while (engine->imports) {
+        HullImport *entry = engine->imports; engine->imports = entry->next;
+        JS_FreeValue(engine->context, entry->resolve);
+        JS_FreeValue(engine->context, entry->reject);
+        free(entry->base); free(entry->name); free(entry);
+    }
+    while (engine->modules) {
+        HullModule *entry = engine->modules; engine->modules = entry->next;
+        free(entry->name); free(entry->source); free(entry);
+    }
     JS_FreeValue(engine->context, engine->receiver);
     JS_FreeContext(engine->context);
     JS_FreeRuntime(engine->runtime);
@@ -192,13 +226,163 @@ int hull_quickjs_install_clock(void *pointer, double (*now)(void *), void *opaqu
     return status;
 }
 
+static char *hull_copy(const char *text, size_t length) {
+    char *copy = malloc(length + 1);
+    if (copy) { memcpy(copy, text, length); copy[length] = 0; }
+    return copy;
+}
+static int hull_import_attributes(JSContext *ctx, void *opaque, JSValueConst attrs) {
+    if (JS_IsUndefined(attrs)) return 0;
+    JSPropertyEnum *names = NULL; uint32_t count = 0;
+    if (JS_GetOwnPropertyNames(ctx, &names, &count, attrs, JS_GPN_STRING_MASK) < 0) return -1;
+    JS_FreePropertyEnum(ctx, names, count);
+    if (!count) return 0;
+    JS_ThrowTypeError(ctx, "Hull module loader supports JavaScript without import attributes");
+    return -1;
+}
+static char *hull_module_normalize(JSContext *ctx, const char *base, const char *name, void *opaque) {
+    HullQuickJs *engine = opaque;
+    const char *result = NULL; size_t length = 0;
+    int status = engine->normalize(engine->normalize_opaque, base, name, &result, &length);
+    if (status || !result || length > 4096) {
+        JS_ThrowTypeError(ctx, "module resolution: %.*s", (int)(length > 4096 ? 4096 : length), result ? result : "failed");
+        return NULL;
+    }
+    return js_strndup(ctx, result, length);
+}
+static JSModuleDef *hull_module_load(JSContext *ctx, const char *name, void *opaque, JSValueConst attrs) {
+    HullQuickJs *engine = opaque;
+    if (hull_import_attributes(ctx, opaque, attrs) < 0) return NULL;
+    HullModule *entry;
+    for (entry = engine->modules; entry; entry = entry->next) if (!strcmp(entry->name, name)) break;
+    if (!entry) { JS_ThrowReferenceError(ctx, "module is not prepared: %s", name); return NULL; }
+    JSValue compiled = JS_Eval(ctx, entry->source, entry->length, name,
+                              JS_EVAL_TYPE_MODULE | JS_EVAL_FLAG_COMPILE_ONLY);
+    if (JS_IsException(compiled)) return NULL;
+    JSModuleDef *module = JS_VALUE_GET_PTR(compiled);
+    JSValue meta = JS_GetImportMeta(ctx, module);
+    if (JS_IsException(meta) || JS_DefinePropertyValueStr(ctx, meta, "url", JS_NewString(ctx, name), JS_PROP_C_W_E) < 0) {
+        JS_FreeValue(ctx, meta); JS_FreeValue(ctx, compiled); return NULL;
+    }
+    JS_FreeValue(ctx, meta);
+    JS_FreeValue(ctx, compiled); /* context loaded_modules owns its reference */
+    return module;
+}
+static int hull_import_wait(JSContext *ctx, const char *base, const char *name,
+                            JSValueConst resolve, JSValueConst reject, JSValueConst attrs, void *opaque) {
+    HullQuickJs *engine = opaque;
+    if (hull_import_attributes(ctx, opaque, attrs) < 0) return -1;
+    int count = 0; for (HullImport *p = engine->imports; p; p = p->next) count++;
+    if (count >= 32 || strlen(base) > 4096 || strlen(name) > 4096) {
+        JS_ThrowRangeError(ctx, "module import queue/URL budget exceeded"); return -1;
+    }
+    HullImport *entry = calloc(1, sizeof(*entry));
+    if (!entry) { JS_ThrowOutOfMemory(ctx); return -1; }
+    entry->base = hull_copy(base, strlen(base)); entry->name = hull_copy(name, strlen(name));
+    if (!entry->base || !entry->name) { free(entry->base); free(entry->name); free(entry); JS_ThrowOutOfMemory(ctx); return -1; }
+    entry->id = ++engine->import_sequence;
+    entry->resolve = JS_DupValue(ctx, resolve); entry->reject = JS_DupValue(ctx, reject);
+    HullImport **tail = &engine->imports; while (*tail) tail = &(*tail)->next; *tail = entry;
+    return 0;
+}
+static void hull_rejection(JSContext *ctx, JSValueConst promise, JSValueConst reason, JS_BOOL handled, void *opaque) {
+    HullQuickJs *engine = opaque; int free_index = -1;
+    for (int i = 0; i < 32; i++) {
+        HullRejection *r = &engine->rejections[i];
+        if (!r->used) { if (free_index < 0) free_index = i; continue; }
+        if (JS_VALUE_GET_PTR(r->promise) == JS_VALUE_GET_PTR(promise)) {
+            if (handled) { r->used = 0; JS_FreeValue(ctx, r->promise); JS_FreeValue(ctx, r->reason); }
+            return;
+        }
+    }
+    if (!handled && free_index >= 0) {
+        HullRejection *r = &engine->rejections[free_index]; r->used = 1;
+        r->promise = JS_DupValue(ctx, promise); r->reason = JS_DupValue(ctx, reason);
+    }
+}
+int hull_quickjs_rejection_pop(void *pointer) {
+    HullQuickJs *engine = pointer;
+    for (int i = 0; i < 32; i++) if (engine->rejections[i].used) {
+        HullRejection *r = &engine->rejections[i]; r->used = 0;
+        JSValue reason = r->reason; JS_FreeValue(engine->context, r->promise);
+        JS_Throw(engine->context, reason); return 1;
+    }
+    return 0;
+}
+int hull_quickjs_install_modules(void *pointer,
+        int (*normalize)(void *, const char *, const char *, const char **, size_t *), void *opaque) {
+    HullQuickJs *engine = pointer; engine->normalize = normalize; engine->normalize_opaque = opaque;
+    JS_SetModuleLoaderFunc2(engine->runtime, hull_module_normalize, hull_module_load, hull_import_attributes, engine);
+    JS_HullSetImportWaiter(engine->runtime, hull_import_wait, engine);
+    JS_SetHostPromiseRejectionTracker(engine->runtime, hull_rejection, engine);
+    return 0;
+}
+int hull_quickjs_add_module(void *pointer, const char *name, const char *source, size_t length) {
+    HullQuickJs *engine = pointer;
+    for (HullModule *p = engine->modules; p; p = p->next) if (!strcmp(p->name, name)) return 0;
+    HullModule *entry = calloc(1, sizeof(*entry)); if (!entry) return -1;
+    entry->name = hull_copy(name, strlen(name)); entry->source = hull_copy(source, length); entry->length = length;
+    if (!entry->name || !entry->source) { free(entry->name); free(entry->source); free(entry); return -1; }
+    entry->next = engine->modules; engine->modules = entry; return 0;
+}
+int hull_quickjs_module_dependencies(void *pointer, const char *source, size_t length, const char *origin,
+                                    void (*item)(void *, const char *, size_t), void *opaque) {
+    HullQuickJs *engine = pointer; JSContext *ctx = engine->context;
+    JS_UpdateStackTop(engine->runtime);
+    JSValue names = JS_HullModuleRequests(ctx, source, length, origin);
+    if (JS_IsException(names)) return -1;
+    JSValue length_value = JS_GetPropertyStr(ctx, names, "length"); uint32_t count = 0;
+    JS_ToUint32(ctx, &count, length_value); JS_FreeValue(ctx, length_value);
+    for (uint32_t i = 0; i < count; i++) {
+        JSValue value = JS_GetPropertyUint32(ctx, names, i); size_t size;
+        const char *text = JS_ToCStringLen(ctx, &size, value);
+        if (!text) { JS_FreeValue(ctx, value); JS_FreeValue(ctx, names); return -1; }
+        item(opaque, text, size); JS_FreeCString(ctx, text); JS_FreeValue(ctx, value);
+    }
+    JS_FreeValue(ctx, names); return 0;
+}
+int hull_quickjs_import_pop(void *pointer, uint64_t *id, char *base, char *name) {
+    HullQuickJs *engine = pointer;
+    for (HullImport *entry = engine->imports; entry; entry = entry->next) if (!entry->delivered) {
+        *id = entry->id; memcpy(base, entry->base, strlen(entry->base) + 1); memcpy(name, entry->name, strlen(entry->name) + 1);
+        entry->delivered = 1; return 1;
+    }
+    return 0;
+}
+int hull_quickjs_import_complete(void *pointer, uint64_t id, const char *error) {
+    HullQuickJs *engine = pointer; JSContext *ctx = engine->context;
+    JS_UpdateStackTop(engine->runtime);
+    HullImport **link = &engine->imports; while (*link && (*link)->id != id) link = &(*link)->next;
+    if (!*link) { JS_ThrowReferenceError(ctx, "module import request expired"); return -1; }
+    HullImport *entry = *link; *link = entry->next;
+    JSValue value;
+    if (error) { JS_ThrowReferenceError(ctx, "%s", error); value = JS_GetException(ctx); }
+    else value = JS_LoadModule(ctx, entry->base, entry->name);
+    int reject = error != NULL || JS_IsException(value);
+    if (JS_IsException(value)) value = JS_GetException(ctx);
+    JSValue result = JS_Call(ctx, reject ? entry->reject : entry->resolve, JS_UNDEFINED, 1, (JSValueConst *)&value);
+    JS_FreeValue(ctx, value); JS_FreeValue(ctx, entry->resolve); JS_FreeValue(ctx, entry->reject);
+    free(entry->base); free(entry->name); free(entry);
+    int status = JS_IsException(result) ? -1 : 0; JS_FreeValue(ctx, result); return status;
+}
+
 int hull_quickjs_eval(void *pointer, const char *source, size_t length,
                       const char *origin, int module) {
     HullQuickJs *engine = pointer;
     JS_UpdateStackTop(engine->runtime);
     JSValue value = JS_Eval(engine->context, source, length, origin,
-                           module ? JS_EVAL_TYPE_MODULE : JS_EVAL_TYPE_GLOBAL);
+                           module ? JS_EVAL_TYPE_MODULE | JS_EVAL_FLAG_COMPILE_ONLY : JS_EVAL_TYPE_GLOBAL);
     if (JS_IsException(value)) return -1;
+    if (module) {
+        JSValue meta = JS_GetImportMeta(engine->context, JS_VALUE_GET_PTR(value));
+        if (JS_IsException(meta) || JS_DefinePropertyValueStr(engine->context, meta, "url",
+                JS_NewString(engine->context, origin), JS_PROP_C_W_E) < 0) {
+            JS_FreeValue(engine->context, meta); JS_FreeValue(engine->context, value); return -1;
+        }
+        JS_FreeValue(engine->context, meta);
+        value = JS_EvalFunction(engine->context, value);
+        if (JS_IsException(value)) return -1;
+    }
     // Discard the completion value without invoking user-defined coercion.
     JS_FreeValue(engine->context, value);
     return 0;

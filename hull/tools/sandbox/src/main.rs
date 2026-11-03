@@ -82,6 +82,9 @@ pub mod netfs {
             Ok(id)
         })
     }
+    pub fn fetch_bytes_happy_eyeballs(url: &[u8]) -> Result<u32, i32> {
+        fetch_bytes(url)
+    }
     pub fn fetch_bytes_result_len(id: u32) -> Result<usize, i32> {
         NET.with(|net| {
             let net = net.borrow();
@@ -121,6 +124,7 @@ struct Options {
     no_js: bool,
     no_svg: bool,
     external: bool,
+    modules: bool,
     no_window: bool,
     width: u32,
     height: u32,
@@ -138,6 +142,7 @@ impl Options {
             no_js: false,
             no_svg: false,
             external: false,
+            modules: false,
             no_window: false,
             width: 1280,
             height: 720,
@@ -153,6 +158,7 @@ impl Options {
                 "--no-js" => result.no_js = true,
                 "--no-svg" => result.no_svg = true,
                 "--external" => result.external = true,
+                "--modules" => result.modules = true,
                 "--no-window" => result.no_window = true,
                 _ => {
                     let value = args
@@ -259,6 +265,12 @@ fn source_inventory(sources: &[scripts::ScriptSource], out: &Path) -> Result<Vec
 fn record(report: javascript::Report) -> Value {
     use javascript::Report;
     match report {
+        Report::Resource {
+            url,
+            status,
+            detail,
+            ..
+        } => json!({"event":"resource","url":url,"status":status,"detail":detail}),
         Report::Online => json!({"event":"online"}),
         Report::Page {
             generation,
@@ -403,6 +415,9 @@ fn run(options: Options) -> Result<(), String> {
         // Dump the actual selected/replaced source bytes too, preserving raw originals.
         let mut selected = source_inventory(&sources, &options.out.join("admitted"))?;
         let mut runtime = javascript::Runtime::start()?;
+        if options.modules {
+            runtime.enable_resource_loading();
+        }
         if !options.no_window {
             runtime.update_viewport(options.width, options.height);
         }
@@ -421,7 +436,7 @@ fn run(options: Options) -> Result<(), String> {
             if let Some(frozen) = runtime.take_initial_document(1) {
                 break frozen;
             }
-            if turns >= 4096 || started.elapsed() > Duration::from_secs(3) {
+            if turns >= 16384 || started.elapsed() > Duration::from_secs(7) {
                 return Err("initialization did not produce a render snapshot".into());
             }
             if options.turn_ms != 0 {
@@ -464,6 +479,7 @@ fn run(options: Options) -> Result<(), String> {
         (frozen, experiments)
     };
     let javascript_wall_ms = started.elapsed().as_secs_f64() * 1000.0;
+    let resource_request_count = netfs::requested().len();
     let mut css = css::Css::default();
     css.parse_document(&frozen, page_url);
     for _ in 0..32 {
@@ -473,7 +489,10 @@ fn run(options: Options) -> Result<(), String> {
         css.poll_downloads();
     }
     css.freeze();
-    let css_requests = netfs::requested();
+    let css_requests = netfs::requested()
+        .into_iter()
+        .skip(resource_request_count)
+        .collect::<Vec<_>>();
     let mut layout_stats = Value::Null;
     if !options.inspect && !options.no_svg {
         let start = Instant::now();
@@ -504,6 +523,14 @@ fn run(options: Options) -> Result<(), String> {
                 event["origin"].as_str().unwrap_or("")
             ));
         }
+        if event["event"] == "resource" {
+            console.push_str(&format!(
+                "[resource] {} {} {}\n",
+                event["status"].as_str().unwrap_or(""),
+                event["url"].as_str().unwrap_or(""),
+                event["detail"].as_str().unwrap_or("")
+            ));
+        }
     }
     fs::write(options.out.join("console.log"), console).map_err(|e| e.to_string())?;
     fs::write(
@@ -524,7 +551,7 @@ fn run(options: Options) -> Result<(), String> {
         "viewport":[options.width,options.height],"turn_ms":options.turn_ms,"window":!options.no_window,
         "active_budget_ms":250,"initial_wall_window_ms":250,"javascript_wall_ms":javascript_wall_ms,"turns":turns,
         "parse":{"nodes":parse_nodes,"errors":parse_errors},"initialization":initialized,"experiments":experiments,
-        "scripts":inventory,"css_requests":css_requests,"layout":layout_stats,"diagnostics":logl::take(),
+        "scripts":inventory,"css_requests":css_requests,"resources":trace.iter().filter(|e|e["event"]=="resource").collect::<Vec<_>>(),"layout":layout_stats,"diagnostics":logl::take(),
         "notes":["Replay has no live network, kernel, GPU, media or image decoding.","SVG is Hull's diagnostic text/box export, not a browser screenshot.","host_turn_ms includes actor and snapshot work; it is not an exact QuickJS CPU counter."]});
     write_json(&options.out.join("report.json"), &report)?;
     println!(
@@ -535,7 +562,54 @@ fn run(options: Options) -> Result<(), String> {
     );
     Ok(())
 }
+// Capture-side parser/resolver utilities. They never evaluate module bodies or
+// make network requests; Python's capture command owns all resource downloads.
+fn module_tool(arguments: &[String]) -> Result<(), String> {
+    let mode = arguments.get(1).ok_or("missing module command")?;
+    let base = arguments.get(3).ok_or("missing module base URL")?;
+    let mut policy = javascript::module_loader::Policy::default();
+    if let Some(capture) = arguments.get(4) {
+        let capture = Path::new(capture);
+        let manifest: Value =
+            serde_json::from_slice(&read_bounded(&capture.join("capture.json"), 512 * 1024)?)
+                .map_err(|e| e.to_string())?;
+        let page = manifest["url"].as_str().ok_or("Capture has no URL")?;
+        let html = read_bounded(&capture.join("page.html"), 4 * 1024 * 1024)?;
+        policy.document_maps(&rp5::parse(&String::from_utf8_lossy(&html)), page)?;
+    }
+    if mode == "--module-resolve" {
+        // Positional order is command, specifier, base URL.
+        let urls = policy.candidates(base, arguments.get(2).ok_or("missing specifier")?)?;
+        println!("{}", json!({"candidates":urls}));
+        return Ok(());
+    }
+    let path = Path::new(arguments.get(2).ok_or("missing module source path")?);
+    let source = read_bounded(path, 1024 * 1024)?;
+    let mut engine = hull_quickjs::Engine::new()?;
+    let names = engine.module_dependencies(&source, base)?;
+    let deps = names
+        .into_iter()
+        .map(|name| {
+            policy
+                .candidates(base, &name)
+                .map(|urls| json!({"specifier":name,"candidates":urls}))
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+    println!("{}", json!({"dependencies":deps}));
+    Ok(())
+}
 fn main() {
+    let arguments = std::env::args().collect::<Vec<_>>();
+    if arguments
+        .get(1)
+        .is_some_and(|arg| matches!(arg.as_str(), "--module-inspect" | "--module-resolve"))
+    {
+        if let Err(error) = module_tool(&arguments) {
+            eprintln!("hull-sandbox: {error}");
+            std::process::exit(1);
+        }
+        return;
+    }
     if let Err(error) = Options::parse().and_then(run) {
         eprintln!("hull-sandbox: {error}");
         std::process::exit(1);

@@ -19,6 +19,9 @@ use crate::javascript_dom::{
     self, SharedCurrentScript, SharedDocument, SharedWindowMetrics, WindowMetrics,
 };
 use crate::scripts::ScriptSource;
+#[path = "module_loader.rs"]
+pub(super) mod module_loader;
+use module_loader::{Loader, Prepared};
 
 const PAGE_EXECUTION_BUDGET: Duration = Duration::from_millis(250);
 const INITIAL_RENDER_WAIT: Duration = Duration::from_millis(250);
@@ -26,6 +29,12 @@ const INITIAL_RENDER_WAIT: Duration = Duration::from_millis(250);
 #[derive(Debug)]
 pub(super) enum Report {
     Online,
+    Resource {
+        generation: u64,
+        url: String,
+        status: &'static str,
+        detail: String,
+    },
     Page {
         generation: u64,
         sources: usize,
@@ -109,6 +118,7 @@ struct Page {
     active: bool,
     document: Option<SharedDocument>,
     current_script: SharedCurrentScript,
+    load_resources: bool,
     window: Option<SharedWindowMetrics>,
     initial_started: Option<Instant>,
 }
@@ -121,6 +131,7 @@ struct InitialRender {
 }
 
 pub(super) struct Runtime {
+    load_resources: bool,
     local: LocalSet,
     runtime: runtime::Runtime,
     task: JoinHandle<()>,
@@ -163,6 +174,7 @@ impl Runtime {
             exhausted.clone(),
         ));
         let mut service = Self {
+            load_resources: false,
             local,
             runtime,
             task,
@@ -181,6 +193,13 @@ impl Runtime {
         };
         service.drive();
         Ok(service)
+    }
+
+    /// Store an inert page batch. Replacing a page also drops its VM immediately.
+    /// Applies to subsequent pages. Production enables this; offline callers
+    /// opt in only after installing their captured-resource ticket backend.
+    pub fn enable_resource_loading(&mut self) {
+        self.load_resources = true;
     }
 
     /// Store an inert page batch. Replacing a page also drops its VM immediately.
@@ -235,6 +254,7 @@ impl Runtime {
             active: automatic,
             document,
             current_script: Rc::new(Cell::new(None)),
+            load_resources: self.load_resources,
             window: if automatic { self.window.clone() } else { None },
             initial_started: automatic.then(Instant::now),
         }));
@@ -424,6 +444,7 @@ async fn worker(
     let _ = reports.try_send(Report::Online);
     let mut page: Option<Page> = None;
     let mut engine: Option<Engine> = None;
+    let mut resources: Option<Loader> = None;
     let mut started = false;
     let mut next = 0;
     let mut seen_loss = 0;
@@ -432,6 +453,7 @@ async fn worker(
         if pages.has_changed().unwrap_or(false) {
             let incoming = pages.borrow_and_update().clone();
             if incoming.as_ref().map(|p| p.revision) != page.as_ref().map(|p| p.revision) {
+                resources = None; // Cancels tickets before replacing the realm.
                 engine = None; // Context, globals, pending promises and limits all go together.
                 next = 0;
                 started = false;
@@ -503,7 +525,23 @@ async fn worker(
                         }
                     });
                     match initialized {
-                        Ok(()) => engine = Some(value),
+                        Ok(()) => {
+                            if page.load_resources {
+                                let document = page.document.as_ref().map(|d| d.borrow());
+                                match Loader::new(&mut value, &page.url, document.as_deref()) {
+                                    Ok(loader) => resources = Some(loader),
+                                    Err(error) => {
+                                        let _ = reports.try_send(Report::Resource {
+                                            generation: page.generation,
+                                            url: page.url.clone(),
+                                            status: "configuration-failed",
+                                            detail: error,
+                                        });
+                                    }
+                                }
+                            }
+                            engine = Some(value)
+                        }
                         Err(error) => {
                             let _ = reports.try_send(Report::JobError {
                                 generation: page.generation,
@@ -530,6 +568,9 @@ async fn worker(
             continue;
         };
         if engine.execution_budget_exhausted() || exhausted.get() {
+            if let Some(loader) = &mut resources {
+                loader.close();
+            }
             if !exhausted.replace(true) {
                 let _ = reports.try_send(Report::BudgetExhausted {
                     generation: page.generation,
@@ -540,10 +581,23 @@ async fn worker(
             pasted.borrow_mut().clear();
             continue;
         }
+        if let Some(loader) = &mut resources {
+            loader.poll(engine);
+            for event in loader.events.drain(..) {
+                let _ = reports.try_send(Report::Resource {
+                    generation: page.generation,
+                    url: event.url,
+                    status: event.status,
+                    detail: event.detail,
+                });
+            }
+        }
         if initial.borrow().pending
-            && page
-                .initial_started
-                .is_some_and(|started| started.elapsed() >= INITIAL_RENDER_WAIT)
+            && page.initial_started.is_some_and(|started| {
+                let waited = resources.as_ref().map_or(Duration::ZERO, Loader::waited);
+                started.elapsed().saturating_sub(waited) >= INITIAL_RENDER_WAIT
+                    || started.elapsed() >= INITIAL_RENDER_WAIT + module_loader::MAX_WAIT
+            })
         {
             finish_initial(page, &initial, &reports, true, next);
             next = page.sources.len();
@@ -575,6 +629,17 @@ async fn worker(
             None
         };
         let Some(source) = source else {
+            if resources.as_ref().is_some_and(Loader::pending) {
+                continue;
+            }
+            if resources.is_some() {
+                for error in engine.take_unhandled_rejections() {
+                    let _ = reports.try_send(Report::JobError {
+                        generation: page.generation,
+                        error,
+                    });
+                }
+            }
             if initial.borrow().pending {
                 finish_initial(page, &initial, &reports, false, next);
                 continue;
@@ -680,7 +745,58 @@ async fn worker(
             });
             continue;
         }
-        let Some(bytes) = &source.bytes else {
+        let node = source.nodes.first().copied().unwrap_or(0);
+        let external = source.bytes.is_none()
+            || page.document.as_ref().is_some_and(|doc| {
+                doc.borrow().element(node).is_some_and(|(_, _, attrs)| {
+                    attrs
+                        .iter()
+                        .any(|a| matches!(a.name.as_str(), "src" | "href"))
+                })
+            });
+        let mut origin = if external {
+            source.origin.clone()
+        } else {
+            format!("{}#script-{node}", source.origin)
+        };
+        let downloaded;
+        let mut prepared_module = false;
+        let bytes = if let Some(bytes) = &source.bytes {
+            bytes.as_slice()
+        } else if let Some(loader) = &mut resources {
+            let state = if module {
+                match loader.module_source(engine, &source.origin) {
+                    Prepared::Ready((url, bytes)) => {
+                        origin = url;
+                        prepared_module = true;
+                        Prepared::Ready(bytes)
+                    }
+                    Prepared::Pending => Prepared::Pending,
+                    Prepared::Failed(e) => Prepared::Failed(e),
+                }
+            } else {
+                loader.source(&source.origin)
+            };
+            match state {
+                Prepared::Pending => {
+                    next -= 1;
+                    continue;
+                }
+                Prepared::Ready(bytes) => {
+                    downloaded = bytes;
+                    downloaded.as_ref()
+                }
+                Prepared::Failed(error) => {
+                    let _ = reports.try_send(Report::Evaluated {
+                        generation: page.generation,
+                        origin,
+                        node,
+                        result: Err(error),
+                    });
+                    continue;
+                }
+            }
+        } else {
             let _ = reports.try_send(Report::Skipped {
                 generation: page.generation,
                 origin: source.origin.clone(),
@@ -688,12 +804,26 @@ async fn worker(
             });
             continue;
         };
-        let node = source.nodes.first().copied().unwrap_or(0);
-        let origin = if module {
-            source.origin.clone()
-        } else {
-            format!("{}#script-{node}", page.url)
-        };
+        if module && !prepared_module {
+            if let Some(loader) = &mut resources {
+                match loader.inline(engine, &origin, bytes) {
+                    Prepared::Pending => {
+                        next -= 1;
+                        continue;
+                    }
+                    Prepared::Failed(error) => {
+                        let _ = reports.try_send(Report::Evaluated {
+                            generation: page.generation,
+                            origin,
+                            node,
+                            result: Err(error),
+                        });
+                        continue;
+                    }
+                    Prepared::Ready(()) => {}
+                }
+            }
+        }
         let current_script = if module {
             None
         } else {

@@ -1,0 +1,77 @@
+//! Deterministic local download tickets. Never opens a socket.
+use std::{cell::RefCell, collections::HashMap};
+#[derive(Default)]
+struct Network {
+    resources: HashMap<String, Vec<u8>>,
+    delays: HashMap<String, usize>,
+    tickets: HashMap<u32, String>,
+    requested: Vec<String>,
+    discarded: Vec<String>,
+    next: u32,
+}
+thread_local! {static NET:RefCell<Network>=RefCell::new(Network::default());}
+pub fn install(resources: impl IntoIterator<Item = (String, Vec<u8>)>) {
+    NET.with(|n| {
+        *n.borrow_mut() = Network {
+            resources: resources.into_iter().collect(),
+            ..Default::default()
+        }
+    });
+}
+pub fn delay(url: &str, polls: usize) {
+    NET.with(|n| {
+        n.borrow_mut().delays.insert(url.into(), polls);
+    });
+}
+pub fn requested() -> Vec<String> {
+    NET.with(|n| n.borrow().requested.clone())
+}
+pub fn active() -> usize {
+    NET.with(|n| n.borrow().tickets.len())
+}
+pub fn discarded() -> Vec<String> {
+    NET.with(|n| n.borrow().discarded.clone())
+}
+pub fn fetch_bytes_happy_eyeballs(url: &[u8]) -> Result<u32, i32> {
+    let url = std::str::from_utf8(url).map_err(|_| -1)?.to_owned();
+    NET.with(|n| {
+        let mut n = n.borrow_mut();
+        n.next += 1;
+        let id = n.next;
+        n.requested.push(url.clone());
+        n.tickets.insert(id, url);
+        Ok(id)
+    })
+}
+pub fn fetch_bytes_result_len(id: u32) -> Result<usize, i32> {
+    NET.with(|n| {
+        let mut n = n.borrow_mut();
+        let url = n.tickets.get(&id).cloned().ok_or(-1)?;
+        if let Some(delay) = n.delays.get_mut(&url) {
+            if *delay > 0 {
+                *delay -= 1;
+                return Err(-8);
+            }
+        }
+        n.resources.get(&url).map(Vec::len).ok_or(-404)
+    })
+}
+pub fn fetch_bytes_read(id: u32) -> Result<Vec<u8>, i32> {
+    NET.with(|n| {
+        let n = n.borrow();
+        n.tickets
+            .get(&id)
+            .and_then(|u| n.resources.get(u))
+            .cloned()
+            .ok_or(-404)
+    })
+}
+pub fn fetch_bytes_discard(id: u32) -> i32 {
+    NET.with(|n| {
+        let mut n = n.borrow_mut();
+        if let Some(url) = n.tickets.remove(&id) {
+            n.discarded.push(url);
+        }
+    });
+    0
+}
