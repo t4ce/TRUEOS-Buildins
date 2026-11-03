@@ -72,6 +72,8 @@ mod actual_bg_quad;
 mod border_geometry;
 #[path = "../../../src/chrome.rs"]
 mod chrome;
+#[path = "../../../src/resource_url.rs"]
+mod resource_url;
 #[path = "../../../src/css.rs"]
 mod css;
 #[path = "../../../src/favicon.rs"]

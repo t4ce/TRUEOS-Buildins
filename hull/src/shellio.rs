@@ -166,12 +166,12 @@ pub(super) fn page_url(line: &str) -> Result<String, &'static str> {
         return Err("URL is too long");
     }
     if line.chars().any(char::is_whitespace) {
-        return Err("enter one HTTPS URL per line");
+        return Err("enter one HTTPS or loopback preview URL per line");
     }
     let mut url = url::Url::parse(line)
-        .map_err(|_| "enter an HTTPS URL, for example https://example.com/")?;
-    if url.scheme() != "https" || url.host_str().is_none() {
-        return Err("enter an HTTPS URL, for example https://example.com/");
+        .map_err(|_| "enter an HTTPS or loopback preview URL")?;
+    if !crate::resource_url::allowed(&url) {
+        return Err("enter an HTTPS or loopback preview URL");
     }
     url.set_fragment(None);
     Ok(url.to_string())

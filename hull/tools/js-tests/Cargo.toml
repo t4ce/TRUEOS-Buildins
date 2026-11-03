@@ -5,6 +5,7 @@ edition = "2024"
 publish = false
 
 [dependencies]
+trueos-ide = { path = "../../../../TRUEOS-Blueprints/crates/trueos-ide", default-features = false }
 rp5 = { path = "../../rp5" }
 rjqry = { path = "../../rjqry" }
 hull-quickjs = { path = "../../crates/quickjs-engine" }

@@ -17,25 +17,35 @@ use crate::ide_store::SourceDatabase;
 use trueos_ide::protocol;
 #[cfg(any(target_os = "trueos", test))]
 use trueos_ide::protocol::BuildState;
-use trueos_ide::protocol::{CompilerBackend, FileContents, IdeRequest, IdeResponse, WorkspaceContext};
+use trueos_ide::protocol::{ProjectKind, CompilerBackend, FileContents, IdeRequest, IdeResponse, WorkspaceContext};
 use trueos_ide::workspace::BuildTracker;
 use crate::documents::DocumentManager;
+
+#[cfg(target_os = "trueos")]
+#[path = "ide_preview.rs"]
+mod preview;
 
 pub type ProjectHandle = Rc<RefCell<IdeProject>>;
 
 pub enum ProjectOpen {
+    /// Reopen saved settings, or create the default native project.
+    Open,
     Existing,
     New,
+    NewHtml,
     Configured(ProjectBuildConfig),
 }
 
 pub struct IdeSession {
     pub project: ProjectHandle,
     tracker: BuildTracker,
-    backend: CompilerBackend,
+    backend: Option<CompilerBackend>,
+    kind: ProjectKind,
     entry: String,
     #[cfg(target_os = "trueos")]
     compiler: Option<CompilerJob>,
+    #[cfg(target_os = "trueos")]
+    preview: Option<preview::Preview>,
     #[cfg(target_os = "trueos")]
     codex_download: Option<(OwnedChild, String)>,
     #[cfg(target_os = "trueos")]
@@ -47,6 +57,7 @@ pub struct IdeSession {
 pub struct IdeProject {
     database: SourceDatabase,
     pub source: LoadedSource,
+    preview_root: Option<std::path::PathBuf>,
     // The project lease outlives document-held handles. The kernel owns redb.
     #[cfg(target_os = "trueos")]
     _registration: OwnerRegistration,
@@ -59,7 +70,7 @@ impl IdeSession {
 
     pub fn open_config(database: &Path, project: &str, backend: CompilerBackend, entry: &str) -> io::Result<Self> {
         Self::open_project(database, project, ProjectOpen::Configured(ProjectBuildConfig {
-            compiler: backend, entry: entry.to_owned(),
+            kind: ProjectKind::Native, compiler: Some(backend), entry: entry.to_owned(),
         }))
     }
 
@@ -79,15 +90,18 @@ impl IdeSession {
         let (source, config) = select_project(&mut database, project, mode)?;
         Ok(Self {
             project: Rc::new(RefCell::new(IdeProject {
-                database, source,
+                database, source, preview_root: None,
                 #[cfg(target_os = "trueos")]
                 _registration: registration,
             })),
             tracker,
             backend: config.compiler,
+            kind: config.kind,
             entry: config.entry,
             #[cfg(target_os = "trueos")]
             compiler: None,
+            #[cfg(target_os = "trueos")]
+            preview: None,
             #[cfg(target_os = "trueos")]
             codex_download: None,
             #[cfg(target_os = "trueos")]
@@ -95,6 +109,16 @@ impl IdeSession {
             #[cfg(target_os = "trueos")]
             poll_error_reported: false,
         })
+    }
+
+    pub fn is_html(&self) -> bool { self.kind == ProjectKind::Html }
+
+    pub fn preview(&mut self) -> io::Result<Option<String>> {
+        if !self.is_html() { return Err(io::Error::other("Preview requires an HTML project")); }
+        #[cfg(target_os = "trueos")]
+        return self.start_preview();
+        #[cfg(not(target_os = "trueos"))]
+        Err(io::Error::new(io::ErrorKind::Unsupported, "Preview Blueprints require TRUEOS"))
     }
 
     pub fn name(&self) -> String { self.project.borrow().source.revision.project.clone() }
@@ -148,8 +172,12 @@ impl IdeSession {
         { self.tracker = BuildTracker::new_owned(workspace_epoch(), self.project.borrow()._registration.endpoint); }
         #[cfg(not(target_os = "trueos"))]
         { self.tracker = BuildTracker::new(workspace_epoch()); }
+        #[cfg(target_os = "trueos")]
+        self.preview.take();
+        self.project.borrow_mut().preview_root = None;
         self.project.borrow_mut().source = source;
         self.backend = config.compiler;
+        self.kind = config.kind;
         self.entry = config.entry;
         documents.replace_project(prepared);
         self.focus_entry(documents);
@@ -201,13 +229,14 @@ impl IdeSession {
     }
 
     pub fn compile(&mut self) -> io::Result<u64> {
+        if self.is_html() { return Err(io::Error::other("HTML projects use Preview; no compiler is needed")); }
         #[cfg(not(target_os = "trueos"))]
         return Err(io::Error::new(io::ErrorKind::Unsupported, "Compiler VMs require TRUEOS"));
         #[cfg(target_os = "trueos")]
         {
             let prepared = self.tracker.prepare(Path::new(trueos_ide::workspace::BUILD_ROOT),
-                &self.project.borrow().source, self.backend, &self.entry)?;
-            let program = match self.backend {
+                &self.project.borrow().source, self.backend.ok_or_else(|| io::Error::other("Project compiler is missing"))?, &self.entry)?;
+            let program = match self.backend.ok_or_else(|| io::Error::other("Project compiler is missing"))? {
                 CompilerBackend::OdinSon => "odin-son.bp",
                 CompilerBackend::RustcMin => "rustc-min.bp",
             };
@@ -266,7 +295,12 @@ impl IdeSession {
                 IdeResponse::Context { context: WorkspaceContext {
                     project: project.source.revision.project.clone(),
                     database: project.database.path().to_string_lossy().into_owned(),
+                    kind: self.kind,
                     compiler: self.backend,
+                    preview_url: {
+                        #[cfg(target_os = "trueos")] { self.preview.as_ref().and_then(|p| p.url.clone()) }
+                        #[cfg(not(target_os = "trueos"))] { None }
+                    },
                     entry: self.entry.clone(),
                     revision_id,
                     active_file: documents.active_project_path(),
@@ -311,6 +345,15 @@ impl IdeSession {
                 Ok(()) => IdeResponse::Cancelled {},
                 Err(error) => IdeResponse::error("cancel_failed", error.to_string()),
             },
+            IdeRequest::Run {} if self.is_html() => {
+                if let Err(error) = documents.save_project_documents() {
+                    return IdeResponse::error("save_failed", format!("{}", crate::state::FormatApperr::from(error)));
+                }
+                match self.preview() {
+                    Ok(url) => IdeResponse::Preview { url },
+                    Err(error) => IdeResponse::error("preview_failed", error.to_string()),
+                }
+            }
             IdeRequest::Run {} => match self.run(documents) {
                 Ok(archive) => IdeResponse::LaunchQueued { archive },
                 Err(error) => IdeResponse::error("run_failed", error.to_string()),
@@ -320,13 +363,14 @@ impl IdeSession {
 
     #[cfg(target_os = "trueos")]
     pub fn poll(&mut self, documents: &mut DocumentManager) -> io::Result<bool> {
+        let preview_changed = self.poll_preview()?;
         let codex_changed = self.poll_codex_download()?;
         let changed = self.poll_children()? || codex_changed;
         let result = self.poll_requests(documents);
         match result {
             Ok(requests) => {
                 self.poll_error_reported = false;
-                Ok(changed || requests)
+                Ok(changed || requests || preview_changed)
             }
             Err(error) if !self.poll_error_reported => {
                 self.poll_error_reported = true;
@@ -450,13 +494,15 @@ fn select_project(database: &mut SourceDatabase, name: &str, mode: ProjectOpen) 
     let existing = database.get(name, None).map_err(io::Error::other)?;
     match (&mode, &existing) {
         (ProjectOpen::Existing, None) => return Err(io::Error::new(io::ErrorKind::NotFound, "Project no longer exists")),
-        (ProjectOpen::New, Some(_)) => return Err(io::Error::new(io::ErrorKind::AlreadyExists, "A project with that name already exists")),
+        (ProjectOpen::New | ProjectOpen::NewHtml, Some(_)) => return Err(io::Error::new(io::ErrorKind::AlreadyExists, "A project with that name already exists")),
         _ => {},
     }
     let config = match mode {
         ProjectOpen::Configured(config) => config,
-        ProjectOpen::New => ProjectBuildConfig { compiler: CompilerBackend::OdinSon, entry: "main.odin".into() },
-        ProjectOpen::Existing => match database.project_build_config(name).map_err(io::Error::other)? {
+        ProjectOpen::Open if existing.is_none() => ProjectBuildConfig { kind: ProjectKind::Native, compiler: Some(CompilerBackend::OdinSon), entry: "main.odin".into() },
+        ProjectOpen::New => ProjectBuildConfig { kind: ProjectKind::Native, compiler: Some(CompilerBackend::OdinSon), entry: "main.odin".into() },
+        ProjectOpen::NewHtml => ProjectBuildConfig { kind: ProjectKind::Html, compiler: None, entry: "index.html".into() },
+        ProjectOpen::Open | ProjectOpen::Existing => match database.project_build_config(name).map_err(io::Error::other)? {
             Some(config) => config,
             None => {
                 let source = existing.as_ref().expect("existing project checked above");
@@ -470,14 +516,23 @@ fn select_project(database: &mut SourceDatabase, name: &str, mode: ProjectOpen) 
                     })
                     .ok_or_else(|| io::Error::other("This project has no saved compiler entry point"))?;
                 ProjectBuildConfig {
-                    compiler: if entry.path.ends_with(".rs") { CompilerBackend::RustcMin } else { CompilerBackend::OdinSon },
+                    kind: ProjectKind::Native,
+                    compiler: Some(if entry.path.ends_with(".rs") { CompilerBackend::RustcMin } else { CompilerBackend::OdinSon }),
                     entry: entry.path.clone(),
                 }
             }
         },
     };
+    if (config.kind == ProjectKind::Native) != config.compiler.is_some() {
+        return Err(io::Error::other("Native projects require a compiler; HTML projects use preview"));
+    }
     if existing.is_none() {
-        database.import_local(name, None, vec![SourceFileInput::new(&config.entry, Vec::new())])
+        let files = if config.kind == ProjectKind::Html {
+            use trueos_ide::html_preview::{HTML, JS, CSS};
+            let parent = Path::new(&config.entry).parent().unwrap_or(Path::new(""));
+            vec![SourceFileInput::new(&config.entry, HTML.as_bytes()), SourceFileInput::new(parent.join("main.js").to_string_lossy(), JS.as_bytes()), SourceFileInput::new(parent.join("style.css").to_string_lossy(), CSS.as_bytes())]
+        } else { vec![SourceFileInput::new(&config.entry, Vec::new())] };
+        database.import_local(name, None, files)
             .map_err(io::Error::other)?;
     }
     let source = database.get(name, None).map_err(io::Error::other)?
@@ -724,6 +779,7 @@ impl IdeProject {
                 path: file.path, bytes: file.bytes, mode: file.mode,
             }).collect(),
         };
+        if let Some(root) = &self.preview_root { trueos_ide::workspace::publish_html(root, &self.source)?; }
         Ok(())
     }
 }
@@ -748,6 +804,32 @@ mod tests {
     }
     impl Drop for TestDatabase {
         fn drop(&mut self) { let _ = std::fs::remove_file(&self.0); }
+    }
+
+    #[test]
+    fn html_project_reopens_and_saves_into_the_preview_folder() {
+        let database = TestDatabase::new();
+        let session = IdeSession::open_project(&database.0, "web", ProjectOpen::NewHtml).unwrap();
+        assert!(session.is_html());
+        assert_eq!(session.backend, None);
+        let folder = database.0.with_extension("preview");
+        let root = folder.join("public");
+        let source = session.project.borrow().source.clone();
+        assert_eq!(source.files.len(), 3);
+        assert!(source.file("index.html").unwrap().bytes.starts_with(b"<!doctype html>"));
+        assert!(source.file("main.js").unwrap().bytes.windows(20).any(|w| w == b"template console log"));
+        trueos_ide::workspace::publish_html(&root, &source).unwrap();
+        session.project.borrow_mut().preview_root = Some(root.clone());
+        session.project.borrow_mut().save_file("style.css", b"body { background: red; }".to_vec()).unwrap();
+        assert_eq!(std::fs::read(root.join("style.css")).unwrap(), b"body { background: red; }");
+        assert!(!root.join("style.css.preview-tmp").exists());
+        drop(session);
+        let mut reopened = IdeSession::open_project(&database.0, "web", ProjectOpen::Open).unwrap();
+        assert!(reopened.is_html());
+        assert!(reopened.compile().unwrap_err().to_string().contains("Preview"));
+        assert_eq!(reopened.entry, "index.html");
+        drop(reopened);
+        std::fs::remove_dir_all(folder).unwrap();
     }
 
     #[test]
@@ -815,7 +897,7 @@ mod tests {
         assert_eq!(projects.len(), 1);
         assert_eq!(projects[0].name, "rust demo");
         let session = IdeSession::open_project(&database.0, "rust demo", ProjectOpen::Existing).unwrap();
-        assert_eq!(session.backend, CompilerBackend::RustcMin);
+        assert_eq!(session.backend, Some(CompilerBackend::RustcMin));
         assert_eq!(session.entry, "src/custom.rs");
         assert_eq!(session.project.borrow().source.revision.id, original_revision);
     }
@@ -837,7 +919,7 @@ mod tests {
         documents.save_project_documents().unwrap();
         session.change_project(&mut documents, "second", ProjectOpen::Existing).unwrap();
         assert_eq!(session.name(), "second");
-        assert_eq!(session.backend, CompilerBackend::RustcMin);
+        assert_eq!(session.backend, Some(CompilerBackend::RustcMin));
         assert_eq!(documents.open_project_paths(), ["main.rs"]);
         assert!(documents.project_text("main.odin").unwrap().is_none());
         assert_eq!(session.project.borrow().database.get("first", None).unwrap().unwrap().file("main.odin").unwrap().bytes, b"package main\n");

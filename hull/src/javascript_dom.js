@@ -6,7 +6,7 @@
     delete globalThis.__hullDom;
     const states = new WeakMap(), lists = new WeakMap(), wrappers = new Map();
     const token = {}, apply = Reflect.apply, wellFormed = String.prototype.isWellFormed;
-    const setPrototypeOf = Object.setPrototypeOf, own = Object.hasOwn;
+    const setPrototypeOf = Object.setPrototypeOf, own = Object.hasOwn, toWellFormed = String.prototype.toWellFormed;
     const exceptionCodes = {IndexSizeError:1, DOMStringSizeError:2, HierarchyRequestError:3,
         WrongDocumentError:4, InvalidCharacterError:5, NoDataAllowedError:6,
         NoModificationAllowedError:7, NotFoundError:8, NotSupportedError:9,
@@ -73,6 +73,10 @@
         get nextSibling() { return wrap(get(this, 'nextSibling')); }
         get previousSibling() { return wrap(get(this, 'previousSibling')); }
         get isConnected() { return get(this, 'isConnected'); }
+        get baseURI() { return get(this, 'baseURI'); }
+        appendChild(child) { required(arguments,1); return wrap(request('appendChild',state(this).id,state(child).id)); }
+        insertBefore(child, before) { required(arguments,2); return wrap(request('insertBefore',state(this).id,state(child).id,before==null?null:state(before).id)); }
+        removeChild(child) { required(arguments,1); return wrap(request('removeChild',state(this).id,state(child).id)); }
     }
     class Element extends Node {
         get tagName() { return state(this).name; }
@@ -94,8 +98,20 @@
         removeAttribute(name) { required(arguments, 1); attribute(this, 'remove', name); }
         querySelector(selector) { required(arguments, 1); return wrap(request('query', state(this).id, string(selector))[0] ?? null); }
         querySelectorAll(selector) { required(arguments, 1); return new NodeList(token, request('query', state(this).id, string(selector))); }
+        getElementsByTagName(name) { const s=state(this); if(s.type!==1)throw new TypeError('Illegal invocation'); required(arguments, 1); return new HTMLCollection(token, s.id, string(name)); }
     }
     class Document extends Node {
+        get URL() { return get(this,'URL'); }
+        get documentURI() { return get(this,'documentURI'); }
+        createElement(name,options) {
+            const s=state(this);if(s.type!==9)throw new TypeError('Expected a Document');required(arguments,1);
+            if(options!=null&&typeof options!=='string'&&(options.is!==undefined||options.customElementRegistry!==undefined))
+                throw new DOMException('Custom element creation is not implemented','NotSupportedError');
+            return wrap(request('create',s.id,'element',string(name)));
+        }
+        createTextNode(value) { const s=state(this);if(s.type!==9)throw new TypeError('Expected a Document');required(arguments,1);return wrap(request('create',s.id,'text',string(value))); }
+        createComment(value) { const s=state(this);if(s.type!==9)throw new TypeError('Expected a Document');required(arguments,1);return wrap(request('create',s.id,'comment',string(value))); }
+        createDocumentFragment() { const s=state(this);if(s.type!==9)throw new TypeError('Expected a Document');return wrap(request('create',s.id,'fragment')); }
         get readyState() {
             if(state(this).type!==9)throw new TypeError('Expected a Document');
             return documentReadyState;
@@ -107,6 +123,34 @@
         getElementById(id) { required(arguments, 1); return wrap(request('id', state(this).id, string(id))); }
         querySelector(selector) { required(arguments, 1); return wrap(request('query', state(this).id, string(selector))[0] ?? null); }
         querySelectorAll(selector) { required(arguments, 1); return new NodeList(token, request('query', state(this).id, string(selector))); }
+        getElementsByTagName(name) { const s=state(this); if(s.type!==9)throw new TypeError('Illegal invocation'); required(arguments, 1); return new HTMLCollection(token, s.id, string(name)); }
+    }
+    class HTMLElement extends Element {}
+    function linkAttribute(value,action,name,content){
+        const s=state(value);
+        if(s.type!==1||s.name!=='LINK'||s.namespace!=='http://www.w3.org/1999/xhtml')throw new TypeError('Expected an HTMLLinkElement');
+        return attribute(value,action,name,content);
+    }
+    class HTMLLinkElement extends HTMLElement {
+        get href() { return get(this,'linkHref'); }
+        set href(value) { linkAttribute(this,'set','href',apply(toWellFormed,`${value}`,[])); }
+        get rel() { return linkAttribute(this,'get','rel')??''; }
+        set rel(value) { linkAttribute(this,'set','rel',string(value)); }
+        get as() {
+            const value=(linkAttribute(this,'get','as')??'').toLowerCase();
+            return ['fetch','font','image','script','style','track','json','text','audioworklet','paintworklet','serviceworker','sharedworker','worker'].includes(value)?value:'';
+        }
+        set as(value) { linkAttribute(this,'set','as',string(value)); }
+        get crossOrigin() {
+            const value=linkAttribute(this,'get','crossorigin');
+            return value===null?null:value.toLowerCase()==='use-credentials'?'use-credentials':'anonymous';
+        }
+        set crossOrigin(value) { if(value==null)linkAttribute(this,'remove','crossorigin');else linkAttribute(this,'set','crossorigin',string(value)); }
+    }
+    class HTMLTemplateElement extends HTMLElement {get content(){return wrap(get(this,'templateContent'));}}
+    class DocumentFragment extends Node {
+        querySelector(selector){required(arguments,1);return wrap(request('query',state(this).id,string(selector))[0]??null);}
+        querySelectorAll(selector){required(arguments,1);return new NodeList(token,request('query',state(this).id,string(selector)));}
     }
     function list(value) {
         const ids = lists.get(value);
@@ -133,16 +177,117 @@
         *entries() { const ids = list(this); for (let i = 0; i < ids.length; i++) yield [i, wrap(ids[i])]; }
         [Symbol.iterator]() { return this.values(); }
     }
+    const collections = new WeakMap();
+    function collectionIds(value) {
+        const c = collections.get(value);
+        if (!c) throw new TypeError('Illegal invocation');
+        return request('tags', c.root, c.name);
+    }
+    function collectionNames(value, ids = collectionIds(value)) {
+        const names = [];
+        for (const id of ids) {
+            const node = wrap(id);
+            const idName = attribute(node, 'get', 'id') ?? '';
+            const nameName = get(node, 'namespaceURI') === 'http://www.w3.org/1999/xhtml' ? attribute(node, 'get', 'name') : null;
+            for (const name of [idName, nameName]) {
+                if (name && !names.includes(name) && !Object.prototype.hasOwnProperty.call(value, name) && !hasCollectionPrototypeProperty(value, name)) names.push(name);
+            }
+        }
+        return names;
+    }
+    function hasCollectionPrototypeProperty(value, name) {
+        for (let prototype = Reflect.getPrototypeOf(value); prototype !== null; prototype = Reflect.getPrototypeOf(prototype)) {
+            if (Object.prototype.hasOwnProperty.call(prototype, name)) return true;
+        }
+        return false;
+    }
+    function collectionNamedItem(value, name) {
+        if (name === '') return null;
+        for (const id of collectionIds(value)) {
+            const node = wrap(id);
+            if (attribute(node, 'get', 'id') === name || get(node, 'namespaceURI') === 'http://www.w3.org/1999/xhtml' && attribute(node, 'get', 'name') === name) return node;
+        }
+        return null;
+    }
+    function arrayIndex(key) {
+        if (typeof key !== 'string' || !/^(0|[1-9][0-9]*)$/.test(key)) return null;
+        const value = Number(key);
+        return Number.isInteger(value) && value < 4294967295 ? value : null;
+    }
+    class HTMLCollection {
+        constructor(key, root, name) {
+            if (key !== token) throw new TypeError('Illegal constructor');
+            const proxy = new Proxy(this, {
+                get(target, property, receiver) {
+                    const index = arrayIndex(property);
+                    if (index !== null) {
+                        const id = collectionIds(target)[index];
+                        if (id !== undefined) return wrap(id);
+                        return Reflect.get(target, property, receiver);
+                    }
+                    if (typeof property === 'string' && !Reflect.has(target, property) && collectionNames(target).includes(property)) return collectionNamedItem(target, property);
+                    return Reflect.get(target, property, receiver);
+                },
+                has(target, property) {
+                    const index = arrayIndex(property);
+                    if (index !== null) return index < collectionIds(target).length || Reflect.has(target, property);
+                    return Reflect.has(target, property) || typeof property === 'string' && collectionNames(target).includes(property);
+                },
+                set(target, property, value, receiver) {
+                    const index = arrayIndex(property);
+                    if (index !== null) return index < collectionIds(target).length ? false : Reflect.set(target, property, value, receiver);
+                    if (typeof property === 'string' && collectionNames(target).includes(property)) return false;
+                    return Reflect.set(target, property, value, receiver);
+                },
+                defineProperty(target, property, descriptor) {
+                    const index = arrayIndex(property);
+                    if (index !== null) return false;
+                    if (typeof property === 'string' && collectionNames(target).includes(property)) return false;
+                    return Reflect.defineProperty(target, property, descriptor);
+                },
+                deleteProperty(target, property) {
+                    const index = arrayIndex(property);
+                    if (index !== null) return index >= collectionIds(target).length;
+                    if (typeof property === 'string' && collectionNames(target).includes(property)) return false;
+                    return Reflect.deleteProperty(target, property);
+                },
+                ownKeys(target) {
+                    const ids = collectionIds(target);
+                    return [...new Set([...Reflect.ownKeys(target), ...ids.map((_, index) => `${index}`), ...collectionNames(target, ids)])];
+                },
+                getOwnPropertyDescriptor(target, property) {
+                    const index = arrayIndex(property);
+                    if (index !== null) {
+                        const id = collectionIds(target)[index];
+                        if (id !== undefined) return {value:wrap(id), writable:false, enumerable:true, configurable:true};
+                        return Reflect.getOwnPropertyDescriptor(target, property);
+                    }
+                    if (typeof property === 'string' && collectionNames(target).includes(property)) return {value:collectionNamedItem(target, property), writable:false, enumerable:false, configurable:true};
+                    return Reflect.getOwnPropertyDescriptor(target, property);
+                },
+            });
+            collections.set(this, {root, name}); collections.set(proxy, {root, name});
+            return proxy;
+        }
+        get length() { return collectionIds(this).length; }
+        item(index) { required(arguments, 1); const n = +index; const ix = Number.isFinite(n) ? ((Math.trunc(n) % 4294967296) + 4294967296) % 4294967296 : 0; return wrap(collectionIds(this)[ix] ?? null); }
+        namedItem(name) {
+            required(arguments, 1); return collectionNamedItem(this, string(name));
+        }
+        *[Symbol.iterator]() { for (let i = 0; i < this.length; i++) yield this.item(i); }
+    }
     function wrap(id) {
         if (id === null) return null;
         if (wrappers.has(id)) return wrappers.get(id);
         const description = request('describe', id);
-        const Constructor = description.type === 9 ? Document : description.type === 1 ? Element : Node;
+        let Constructor=description.type===9?Document:description.type===11?DocumentFragment:description.type===1?Element:Node;
+        if(description.type===1&&description.namespace==='http://www.w3.org/1999/xhtml')
+            Constructor=description.name==='LINK'?HTMLLinkElement:description.name==='TEMPLATE'?HTMLTemplateElement:HTMLElement;
         const node = new Constructor(token, id, description);
         wrappers.set(id, node);
         return node;
     }
-    for (const Constructor of [EventTarget, Event, CustomEvent, Node, Element, Document, NodeList, DOMException]) {
+    for (const Constructor of [EventTarget, Event, CustomEvent, Node, Element, HTMLElement, HTMLLinkElement, HTMLTemplateElement, DocumentFragment, Document, NodeList, HTMLCollection, DOMException]) {
         Object.defineProperty(Constructor.prototype, Symbol.toStringTag, {value:Constructor.name, configurable:true});
         Object.defineProperty(globalThis, Constructor.name, {value:Constructor, writable:true, configurable:true});
     }

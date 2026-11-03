@@ -17,20 +17,33 @@ unfiltered parent/children/sibling traversal, text/attribute/class access and
 mutation run through native rjqry. The binding preserves node wrappers and runs
 JavaScript callbacks in QuickJS; `each` and callback setters are admitted. Static
 `param` for data values and `escapeSelector` are native. `noConflict` releases the
-global names. Node collections accept nodes, arrays and the existing NodeList;
+global names. Node collections accept nodes, arrays, NodeList and HTMLCollection;
 they do not model arbitrary JS-value collections or fractional indexes.
 
 The guest binding does not yet expose seeded filtering, HTML construction,
-ready scheduling, form values, CSS/computed geometry, events, Deferred, queues,
+ready scheduling, form values, CSS/computed geometry, delegated/namespaced events, Deferred, queues,
 data caches, effects, extend/plugin helpers or Ajax. Traversal selector arguments
 and param function/cyclic/non-data values fail explicitly. Other library exports
 remain available to Rust callers. Page scripts still run in QuickJS.
 
-Hull's separate DOM binding now supplies EventTarget listeners/dispatch on nodes,
-document and window, plus the actor's DOMContentLoaded signal. This does not yet
-expose jQuery's on/off or ready adapters. Winit window focus/blur/resize records
-reach window listeners; raw keyboard/pointer input remains on hullInput pending
-DOM focus/hit-test routing.
+Direct `.on`, `.off`, `.one`, `.mousemove(handler)` and `.keypress(handler)` bridge
+to Hull's existing DOM EventTarget on nodes/document and `jQuery(window)`. The
+admission preserves callback identity, per-handler data, cancellation, one-shot
+removal and handler snapshots. Namespace, delegation, event-map and synthetic
+trigger overloads are not admitted. `jQuery(window)` supports event binding and
+the JS collection accessors; Rust node-selection operations still require node
+handles. `jQuery()` remains an empty collection.
+
+The EventTarget binding delivers actual document DOMContentLoaded and existing
+Winit window focus/blur/resize records. Raw keyboard/pointer input stays on
+hullInput pending DOM focus/hit-test routing; method availability does not imply
+that hardware mousemove/keypress is targeted at arbitrary DOM nodes.
+
+Guest callbacks run in QuickJS. The synchronous JSON bridge cannot re-enter guest
+functions from Rust, so this direct adapter uses the existing JS EventTarget
+dispatcher; it does not claim to expose rjqry::events::EventHub dispatch natively.
+The Rust event implementation remains available to Rust hosts. jQuery ready
+adapters remain unimplemented.
 
 Native batches have a cooperative 20 ms work deadline as well as existing DOM
 size/mutation limits; QuickJS retains its per-call slice and cumulative page

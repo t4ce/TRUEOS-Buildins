@@ -49,6 +49,7 @@ impl Adapter<'_> {
         let mut reader = Gateway {
             document: self.gateway.document.clone(),
             current_script: self.gateway.current_script.clone(),
+            page_url: self.gateway.page_url.clone(),
             window: self.gateway.window.clone(),
             initial_nodes: self.gateway.initial_nodes,
             mutation_bytes: self.gateway.mutation_bytes,

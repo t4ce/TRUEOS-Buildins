@@ -128,7 +128,7 @@ fn canonical(base: &Url, raw: &str) -> Option<String> {
         return None;
     }
     let mut url = base.join(raw).ok()?;
-    if url.scheme() != "https" || !url.username().is_empty() || url.password().is_some() {
+    if !crate::resource_url::allowed(&url) {
         return None;
     }
     url.set_fragment(None);

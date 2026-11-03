@@ -72,6 +72,7 @@ pub fn draw_project_picker(ctx: &mut Context, state: &mut State) {
     let width = (ctx.size().width - 20).max(10);
     let height = (ctx.size().height - 10).max(10);
     let mut activate = false;
+    let mut create_html = false;
     let mut done = false;
     let mut new = false;
     ctx.modal_begin("project-picker", if mode == Mode::New { "New Project" } else { "Open Project" });
@@ -117,6 +118,8 @@ pub fn draw_project_picker(ctx: &mut Context, state: &mut State) {
         ctx.table_next_row();
         if mode == Mode::New {
             activate |= ctx.button("create", "Create", ButtonStyle::default());
+            create_html = ctx.button("create-html", "Create HTML", ButtonStyle::default());
+            activate |= create_html;
         } else {
             if state.project_picker.selected.is_some() {
                 activate |= ctx.button("open", "Open", ButtonStyle::default());
@@ -135,7 +138,7 @@ pub fn draw_project_picker(ctx: &mut Context, state: &mut State) {
             state.project_picker.selected.clone()
         };
         if let Some(name) = name {
-            let request = if mode == Mode::New { ProjectOpen::New } else { ProjectOpen::Existing };
+            let request = if mode == Mode::New { if create_html { ProjectOpen::NewHtml } else { ProjectOpen::New } } else { ProjectOpen::Existing };
             let result = match state.ide.as_mut() {
                 Some(session) => session.change_project(&mut state.documents, &name, request),
                 None => open_project(state, &name, request),

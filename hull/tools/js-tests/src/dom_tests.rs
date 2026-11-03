@@ -38,7 +38,7 @@ fn selectors_create_lazy_identity_preserving_standard_wrappers() {
         if(document.getElementById('box')!==main)throw Error('transport corrupted');
         delete Array.prototype.toJSON;
         if(document.head.tagName!=='HEAD'||document.body.tagName!=='BODY'||document.documentElement.tagName!=='HTML')throw Error('document roots');
-        if(typeof __hullDom!=='undefined'||typeof fetch!=='undefined'||typeof window!=='undefined'||typeof document.createElement!=='undefined')throw Error('unexpected host API');
+        if(typeof __hullDom!=='undefined'||typeof fetch!=='undefined'||typeof window!=='undefined'||typeof document.createElement!=='function')throw Error('unexpected host API');
     "#,
     );
 }

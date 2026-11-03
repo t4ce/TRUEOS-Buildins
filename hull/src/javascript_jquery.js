@@ -5,6 +5,8 @@
     const array = Array.isArray, keys = Object.keys, prototype = Object.getPrototypeOf;
     const plain = Object.prototype, define = Object.defineProperty, brands = new WeakSet();
     const slice = Array.prototype.slice, iterator = Array.prototype[Symbol.iterator];
+    const eventBindings = new WeakMap();
+    const returnFalse = function() { return false; };
     function unsupported(message) { throw new DOMException(message, 'NotSupportedError'); }
     function call(operation, ...args) { return request('jquery', operation, ...args); }
     function transport(values) { setPrototypeOf(values, null); return values; }
@@ -16,17 +18,19 @@
         for (let i = 0; i < value.length; i++) result.push(state(value[i]).id);
         return transport(result);
     }
-    function Collection(ids, previous) {
+    function Collection(ids, previous, extraTargets = []) {
         brands.add(this);
-        for (let i = 0; i < ids.length; i++) this[i] = wrap(ids[i]);
-        this.length = ids.length;
+        let length = 0;
+        for (let i = 0; i < ids.length; i++) this[length++] = wrap(ids[i]);
+        for (const target of extraTargets) this[length++] = target;
+        this.length = length;
         if (previous !== undefined) this.prevObject = previous;
     }
     function idsFrom(value) {
         if (value == null) return transport([]);
         if (brands.has(value)) return handles(value);
         if (states.has(value)) return transport([state(value).id]);
-        if (array(value) || lists.has(value)) {
+        if (array(value) || lists.has(value) || collections.has(value)) {
             const result = [];
             if (value.length > 32768) throw new DOMException('jQuery collection budget exceeded', 'QuotaExceededError');
             for (const node of value) result.push(state(node).id);
@@ -37,6 +41,7 @@
     function jQuery(value, context) {
         if (!value) return new Collection([]);
         if (typeof value === 'function') unsupported('jQuery ready callbacks require a DOM-ready scheduler');
+        if (value === page) return new Collection([], undefined, [page]);
         if (typeof value === 'string') {
             if (/^\s*</.test(value)) unsupported('jQuery HTML construction is not admitted');
             if (context) return jQuery(context).find(value);
@@ -126,6 +131,112 @@
         return this;
     };
     fn.hasClass = function(name) { return call('hasClass', handles(this), string(name)); };
+    // jQuery event callbacks stay in this realm and attach to Hull's existing
+    // EventTarget. Rust's EventHub algorithms are not used here because the
+    // synchronous JSON DOM gateway cannot call guest callbacks.
+    function eventTypes(value) {
+        if (typeof value !== 'string') throw new TypeError('Expected an event type string');
+        const types = value.match(/[^\x20\t\n\r\f]+/g) || [];
+        for (const type of types) if (type.includes('.')) unsupported('jQuery event namespaces are not admitted');
+        return types;
+    }
+    function eventNodes(collection) {
+        if (!brands.has(collection)) throw new TypeError('Expected a native jQuery collection');
+        const nodes = [];
+        for (let i = 0; i < collection.length; i++) {
+            const node = collection[i];
+            if (node && (typeof node.addEventListener !== 'function' || typeof node.removeEventListener !== 'function'))
+                unsupported('jQuery events require an EventTarget');
+            if (node) nodes.push(node);
+        }
+        return nodes;
+    }
+    function bindingsFor(node, create) {
+        let types = eventBindings.get(node);
+        if (!types && create) eventBindings.set(node, types = new Map());
+        return types;
+    }
+    function removeBinding(node, group, entry) {
+        const index = group.entries.indexOf(entry);
+        if (index >= 0) group.entries.splice(index, 1);
+        if (group.entries.length) return;
+        node.removeEventListener(group.type, group.dispatcher);
+        const types = bindingsFor(node, false);
+        types?.delete(group.type);
+        if (types && !types.size) eventBindings.delete(node);
+    }
+    function removeHandlerBindings(node, group, entry) {
+        // jQuery's `.one` removes through the original handler identity, so
+        // duplicate one-shot registrations of the same function share cleanup.
+        for (const candidate of [...group.entries])
+            if (candidate.callback === entry.callback) removeBinding(node, group, candidate);
+    }
+    function groupFor(node, type) {
+        const types = bindingsFor(node, true);
+        let group = types.get(type);
+        if (group) return group;
+        group = {type, entries:[], dispatcher:null};
+        group.dispatcher = function(event) {
+            // Match jQuery's per-owner dispatch queue: handler additions and
+            // removals affect later events, not this already-snapshotted turn.
+            const snapshot = group.entries.slice();
+            for (const entry of snapshot) {
+                if (entry.once) removeHandlerBindings(node, group, entry);
+                const previous = Object.getOwnPropertyDescriptor(event, 'data');
+                define(event, 'data', {value:entry.data, writable:true, configurable:true});
+                try {
+                    if (apply(entry.callback, node, [event]) === false) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                    }
+                } finally {
+                    if (previous) define(event, 'data', previous);
+                    else delete event.data;
+                }
+                if (eventState(event).immediate) break;
+            }
+        };
+        types.set(type, group);
+        node.addEventListener(type, group.dispatcher);
+        return group;
+    }
+    function bind(collection, once, args) {
+        if (args.length < 2 || args.length > 3) unsupported('jQuery event delegation and event maps are not admitted');
+        const types = eventTypes(args[0]);
+        if (args.length === 3 && typeof args[1] === 'string')
+            unsupported('jQuery delegated event handlers are not admitted');
+        const callback = args[args.length - 1] === false ? returnFalse : args[args.length - 1];
+        if (typeof callback !== 'function') throw new TypeError('Expected an event callback');
+        const data = args.length === 3 ? args[1] : undefined;
+        for (const node of eventNodes(collection)) for (const type of types) {
+            const group = groupFor(node, type);
+            group.entries.push({type, callback, data, once});
+        }
+        return collection;
+    }
+    fn.on = function(...args) { return bind(this, false, args); };
+    fn.one = function(...args) { return bind(this, true, args); };
+    fn.off = function(types, callback) {
+        if (arguments.length > 2) unsupported('jQuery event delegation removal is not admitted');
+        const parsed = types === undefined ? [] : eventTypes(types);
+        const names = parsed.length ? parsed : null;
+        if (callback !== undefined && callback !== false && typeof callback !== 'function') throw new TypeError('Expected an event callback');
+        const wanted = callback === false ? returnFalse : callback;
+        for (const node of eventNodes(this)) {
+            const groups = bindingsFor(node, false);
+            if (!groups) continue;
+            for (const [type, group] of [...groups]) {
+                if (names !== null && !names.includes(type)) continue;
+                for (const entry of [...group.entries]) {
+                    if (callback === undefined || wanted === entry.callback) removeBinding(node, group, entry);
+                }
+            }
+        }
+        return this;
+    };
+    for (const type of ['mousemove', 'keypress']) fn[type] = function(...args) {
+        return this.on(type, ...args);
+    };
     fn[Symbol.iterator] = iterator;
     // Tag data rather than JSON-coercing the caller's objects: undefined and
     // nonfinite numbers survive, toJSON is never invoked, cycles/functions and

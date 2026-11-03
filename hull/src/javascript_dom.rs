@@ -11,6 +11,8 @@ use serde_json::{Value, json};
 
 #[path = "javascript_jquery.rs"]
 mod jquery;
+#[path = "javascript_dom_mutation.rs"]
+mod mutation;
 #[path = "javascript_url.rs"]
 mod url_api;
 
@@ -32,7 +34,13 @@ const MAX_MUTATION_BYTES: usize = 4 * 1024 * 1024;
 const MAX_QUERY_RESULTS: usize = 32 * 1024;
 
 pub(super) fn install(engine: &mut Engine, document: SharedDocument) -> Result<(), String> {
-    install_gateway(engine, document, None, Rc::new(Cell::new(None)))
+    install_gateway(
+        engine,
+        document,
+        None,
+        Rc::new(Cell::new(None)),
+        "about:blank",
+    )
 }
 
 /// Window metrics come from Hull's content viewport, not native frame guesses.
@@ -41,7 +49,13 @@ pub(super) fn install_with_window(
     document: SharedDocument,
     window: SharedWindowMetrics,
 ) -> Result<(), String> {
-    install_gateway(engine, document, Some(window), Rc::new(Cell::new(None)))
+    install_gateway(
+        engine,
+        document,
+        Some(window),
+        Rc::new(Cell::new(None)),
+        "about:blank",
+    )
 }
 
 /// The actor owns script execution scope; the gateway only reads its handle.
@@ -50,8 +64,9 @@ pub(super) fn install_for_page(
     document: SharedDocument,
     window: Option<SharedWindowMetrics>,
     current_script: SharedCurrentScript,
+    page_url: &str,
 ) -> Result<(), String> {
-    install_gateway(engine, document, window, current_script)
+    install_gateway(engine, document, window, current_script, page_url)
 }
 
 fn install_gateway(
@@ -59,12 +74,14 @@ fn install_gateway(
     document: SharedDocument,
     window: Option<SharedWindowMetrics>,
     current_script: SharedCurrentScript,
+    page_url: &str,
 ) -> Result<(), String> {
     let initial_nodes = document.borrow().nodes.len();
     let mut gateway = Gateway {
         document,
         window,
         current_script,
+        page_url: page_url.to_owned(),
         initial_nodes,
         mutation_bytes: 0,
     };
@@ -112,21 +129,26 @@ struct Gateway {
     document: SharedDocument,
     window: Option<SharedWindowMetrics>,
     current_script: SharedCurrentScript,
+    page_url: String,
     initial_nodes: usize,
     mutation_bytes: usize,
 }
 impl Gateway {
     fn charge(&mut self, bytes: usize, add_node: bool) -> DomResult<()> {
+        self.charge_nodes(bytes, usize::from(add_node))
+    }
+    fn charge_nodes(&mut self, bytes: usize, add_nodes: usize) -> DomResult<()> {
         if bytes > MAX_STRING_BYTES
             || self.mutation_bytes.saturating_add(bytes) > MAX_MUTATION_BYTES
-            || (add_node
+            || (add_nodes > 0
                 && self
                     .document
                     .borrow()
                     .nodes
                     .len()
                     .saturating_sub(self.initial_nodes)
-                    >= MAX_ADDED_NODES)
+                    .saturating_add(add_nodes)
+                    > MAX_ADDED_NODES)
         {
             return Err(failure(
                 "QuotaExceededError",
@@ -163,6 +185,12 @@ impl Gateway {
             .and_then(|id| usize::try_from(id).ok())
             .filter(|&id| id < self.document.borrow().nodes.len())
             .ok_or_else(|| failure("TypeError", "Invalid node handle"))?;
+        if matches!(
+            operation,
+            "create" | "appendChild" | "insertBefore" | "removeChild"
+        ) {
+            return mutation::call(self, operation, id, args);
+        }
         match operation {
             "describe" => {
                 let doc = self.document.borrow();
@@ -184,13 +212,58 @@ impl Gateway {
                     NodeKind::Comment(_) => (8, "#comment".into()),
                     NodeKind::Doctype { name, .. } => (10, name.clone()),
                 };
-                Ok(json!({"type":node_type,"name":name}))
+                let namespace = doc.element(id).map(|(_, ns, _)| ns.uri());
+                Ok(json!({"type":node_type,"name":name,"namespace":namespace}))
             }
             "get" => {
                 let property = input(args, 2)?;
                 let doc = self.document.borrow();
                 let node = &doc.nodes[id];
                 Ok(match property {
+                    "baseURI" => json!(mutation::base_uri(&doc, &self.page_url)?),
+                    "URL" | "documentURI" => {
+                        if !matches!(node.kind, NodeKind::Document) {
+                            return Err(failure("TypeError", "Expected a Document"));
+                        }
+                        json!(self.page_url)
+                    }
+                    "linkHref" => {
+                        if !doc
+                            .element(id)
+                            .is_some_and(|(name, ns, _)| name == "link" && ns == Namespace::Html)
+                        {
+                            return Err(failure("TypeError", "Expected an HTMLLinkElement"));
+                        }
+                        let value = doc
+                            .element(id)
+                            .unwrap()
+                            .2
+                            .iter()
+                            .find(|a| a.namespace.is_none() && a.name == "href")
+                            .map(|a| a.value.as_str());
+                        json!(match value {
+                            None => String::new(),
+                            Some(value) =>
+                                url::Url::parse(&mutation::base_uri(&doc, &self.page_url)?)
+                                    .and_then(|base| base.join(value))
+                                    .map_or_else(|_| value.to_owned(), |u| u.to_string()),
+                        })
+                    }
+                    "templateContent" => {
+                        let NodeKind::Element {
+                            name,
+                            namespace: Namespace::Html,
+                            template_content: Some(fragment),
+                            ..
+                        } = &node.kind
+                        else {
+                            return Err(failure("TypeError", "Expected an HTMLTemplateElement"));
+                        };
+                        if name != "template" {
+                            return Err(failure("TypeError", "Expected an HTMLTemplateElement"));
+                        }
+                        json!(fragment)
+                    }
                     "currentScript" => {
                         if !matches!(node.kind, NodeKind::Document) {
                             return Err(failure("TypeError", "Expected a Document"));
@@ -428,6 +501,67 @@ impl Gateway {
                     return Err(failure(
                         "QuotaExceededError",
                         "Selector result exceeds the DOM result budget",
+                    ));
+                }
+                Ok(json!(ids))
+            }
+            "tags" => {
+                let requested = input(args, 2)?;
+                if requested.len() > MAX_STRING_BYTES {
+                    return Err(failure(
+                        "QuotaExceededError",
+                        "Tag name exceeds the DOM string budget",
+                    ));
+                }
+                let document = self.document.borrow();
+                if document.nodes.len() > 100_000 {
+                    return Err(failure(
+                        "QuotaExceededError",
+                        "DOM tree exceeds collection bounds",
+                    ));
+                }
+                let html_name = requested.to_ascii_lowercase();
+                let wildcard = requested == "*";
+                let mut pending = document.nodes[id]
+                    .children
+                    .iter()
+                    .rev()
+                    .copied()
+                    .collect::<Vec<_>>();
+                let mut ids = Vec::new();
+                let until = std::time::Instant::now() + std::time::Duration::from_millis(20);
+                let mut visited = 0usize;
+                while let Some(candidate) = pending.pop() {
+                    visited += 1;
+                    if visited % 256 == 0 && std::time::Instant::now() >= until {
+                        return Err(failure(
+                            "QuotaExceededError",
+                            "Tag collection traversal budget exhausted",
+                        ));
+                    }
+                    if let Some((name, namespace, _)) = document.element(candidate) {
+                        if wildcard
+                            || if namespace == Namespace::Html {
+                                name.eq_ignore_ascii_case(&html_name)
+                            } else {
+                                name == requested
+                            }
+                        {
+                            if ids.len() == MAX_QUERY_RESULTS {
+                                return Err(failure(
+                                    "QuotaExceededError",
+                                    "Tag collection result exceeds the DOM result budget",
+                                ));
+                            }
+                            ids.push(candidate);
+                        }
+                    }
+                    pending.extend(document.nodes[candidate].children.iter().rev().copied());
+                }
+                if std::time::Instant::now() >= until {
+                    return Err(failure(
+                        "QuotaExceededError",
+                        "Tag collection traversal budget exhausted",
                     ));
                 }
                 Ok(json!(ids))

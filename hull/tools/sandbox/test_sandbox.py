@@ -88,6 +88,21 @@ class SandboxWorkflow(unittest.TestCase):
         self.assertIn('#13579b', (self.out / "layout.svg").read_text())
         self.assertIn('status=native%20ready', (self.out / "console.log").read_text())
 
+    def test_script_created_stylesheet_participates_in_first_snapshot(self):
+        (self.capture / "late.css").write_text("p{color:#2468ac}")
+        self.page("""<p id=message>before</p><script>
+const link=document.createElement('link');link.rel='stylesheet';link.href='late.css';
+document.head.appendChild(link);document.querySelector('p').textContent='linked stylesheet';
+if(document.getElementsByTagName('link')[0]!==link)throw Error('inserted link missing');
+</script>""", {
+            "https://fixture.test/late.css": {"status":"ok","path":"late.css","kind":"css"},
+        })
+        report = self.run_page()
+        self.assertEqual([item["status"] for item in report["scripts"]], ["executed"])
+        self.assertEqual(svg_text(self.out / "layout.svg"), "linked stylesheet")
+        self.assertIn('#2468ac', (self.out / "layout.svg").read_text())
+        self.assertEqual(report["css_requests"], ["https://fixture.test/late.css"])
+
     def test_larger_css_and_js_are_admitted_and_dom_ready_runs_before_svg(self):
         (self.capture / "large.css").write_text("/*" + " " * (600 * 1024) + "*/p{color:#2468ac}")
         (self.capture / "large.js").write_text("/*" + " " * (1200 * 1024) + "*/" + """

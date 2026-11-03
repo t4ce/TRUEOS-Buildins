@@ -77,6 +77,18 @@ jquery_tests execute the production JS binding and Rust adapter against the same
 rp5 arena. They cover identity and mutable collection indices, stacks/traversal,
 native text/attribute/class changes, guest callbacks, tagged param values,
 prototype toJSON isolation, shared DOM quotas, noConflict and fresh realms.
+jquery_event_bridge_tests additionally exercise direct on/off/one, mousemove and
+keypress aliases, per-handler data, snapshot/reentrant removal, false returns,
+DOM ready and actual Winit window lifecycle forwarding. Callback dispatch uses
+the existing DOM EventTarget; it is not a second native EventHub dispatcher.
+dom_tag_collection_tests check Document/Element getElementsByTagName backed by
+rp5, live HTMLCollection updates, HTML/foreign case rules, indexed/named access,
+argument conversion and resource limits. Tag names are not parsed as CSS syntax.
+dom_mutation_tests cover real detached node creation and link reflection, page
+URL/base resolution, moving/inserting/removing nodes and fragments, rejected
+cycles/document hierarchy without partial edits, and shared allocation quotas.
+The sandbox additionally checks that a JS-created stylesheet changes the first
+SVG snapshot, without fabricating a link load event.
 Ready/HTML creation/seeded selectors and the rest of jQuery remain unadmitted;
 rjqry/README.md describes the exact surface and cooperative native batch limits.
 

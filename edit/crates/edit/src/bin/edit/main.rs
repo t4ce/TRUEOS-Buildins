@@ -393,7 +393,8 @@ fn handle_launch_script(state: &mut State) -> apperr::Result<()> {
         .map_err(|err| std::io::Error::new(std::io::ErrorKind::InvalidData, err))?;
     #[cfg(feature = "ide")]
     if let Some(launch) = launch_script::ide_project(script)? {
-        let session = ide::IdeSession::open_config(Path::new(launch.database), launch.project, launch.backend, launch.entry)?;
+        let mode = if launch.configured { ide::ProjectOpen::Configured(trueos_ide::ProjectBuildConfig { kind: launch.kind, compiler: launch.backend, entry: launch.entry.into() }) } else { ide::ProjectOpen::Open };
+        let session = ide::IdeSession::open_project(Path::new(launch.database), launch.project, mode)?;
         state.documents.load_project(session.project.clone())?;
         session.focus_entry(&mut state.documents);
         state.ide = Some(session);
@@ -475,7 +476,7 @@ fn draw(ctx: &mut Context, state: &mut State) {
         state.wants_compile = false;
         let result = state.documents.save_project_documents().and_then(|()|
             state.ide.as_mut().ok_or_else(|| std::io::Error::other("No IDE project is open"))
-                .and_then(ide::IdeSession::compile).map(|_| ()).map_err(apperr::Error::from));
+                .and_then(|session| if session.is_html() { session.preview().map(|_| ()) } else { session.compile().map(|_| ()) }).map_err(apperr::Error::from));
         if let Err(err) = result {
             error_log_add(ctx, state, err);
         }

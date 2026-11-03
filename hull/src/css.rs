@@ -184,9 +184,9 @@ impl Css {
         if self.requested.contains(url.as_str()) {
             return Some(url.to_string());
         }
-        if url.scheme() != "https" {
+        if !crate::resource_url::allowed(&url) {
             report(format_args!(
-                "CSS URL unsupported by HTTPS downloader: {url}"
+                "CSS URL unsupported by resource downloader: {url}"
             ));
             return None;
         }

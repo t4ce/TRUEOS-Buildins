@@ -519,7 +519,7 @@ fn image_source(attrs: &[rp5::Attribute], base: &Url) -> Option<String> {
         let Ok(mut url) = base.join(raw) else {
             continue;
         };
-        if url.scheme() != "https" || !url.username().is_empty() || url.password().is_some() {
+        if !crate::resource_url::allowed(&url) {
             continue;
         }
         url.set_fragment(None);

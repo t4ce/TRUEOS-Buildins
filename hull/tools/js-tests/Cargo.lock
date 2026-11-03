@@ -318,6 +318,7 @@ dependencies = [
  "rp5",
  "serde_json",
  "tokio",
+ "trueos-ide",
  "url",
  "winit-core",
  "winit-trueos",
@@ -1001,6 +1002,14 @@ version = "0.0.1"
 dependencies = [
  "infer",
  "trueos-crypto",
+]
+
+[[package]]
+name = "trueos-ide"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

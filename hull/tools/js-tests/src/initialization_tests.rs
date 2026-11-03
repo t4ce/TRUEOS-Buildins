@@ -436,3 +436,17 @@ fn endless_microtasks_cannot_hold_the_initial_render_snapshot() {
             .any(|r| matches!(r, Report::Initialized { capped: true, .. }))
     );
 }
+
+#[test]
+fn ide_html_template_logs_once_per_full_page_load() {
+    let mut runtime = Runtime::start().unwrap();
+    let html = format!("<!doctype html><html><head><script>{}</script></head><body></body></html>", trueos_ide::html_preview::JS);
+    for generation in [901, 902] {
+        begin(&mut runtime, generation, &html);
+        let (_, mut reports) = snapshot(&mut runtime, generation);
+        for _ in 0..16 { reports.extend(runtime.poll()); }
+        let logs: Vec<_> = reports.iter().filter_map(|r| match r { Report::Console { batch, .. } => Some(&batch.messages), _ => None }).flatten().map(|m| m.text.as_str()).collect();
+        assert_eq!(logs, ["template console log"]);
+        assert!(!reports.iter().any(|r| matches!(r, Report::Evaluated { result: Err(_), .. } | Report::JobError { .. })), "{reports:?}");
+    }
+}

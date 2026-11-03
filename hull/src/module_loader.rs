@@ -30,12 +30,8 @@ pub(crate) fn checked_url(value: &str) -> Result<String, String> {
         return Err("Module URL exceeds bounds".into());
     }
     let url = Url::parse(value).map_err(|e| e.to_string())?;
-    if url.scheme() != "https"
-        || !url.username().is_empty()
-        || url.password().is_some()
-        || url.host_str().is_none()
-    {
-        return Err("Module URLs must be HTTPS without credentials".into());
+    if !crate::resource_url::allowed(&url) {
+        return Err("Module URLs must be HTTPS or loopback preview URLs without credentials".into());
     }
     Ok(url.into())
 }
@@ -78,7 +74,7 @@ impl Policy {
         value.into()
     }
     pub(crate) fn resolve(&mut self, base: &str, name: &str) -> Result<String, String> {
-        let base = self.canonical(if !base.starts_with("https://") && !self.page.is_empty() {
+        let base = self.canonical(if !base.contains("://") && !self.page.is_empty() {
             &self.page
         } else {
             base

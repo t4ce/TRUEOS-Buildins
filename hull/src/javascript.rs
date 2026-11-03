@@ -513,6 +513,7 @@ async fn worker(
                                 document.clone(),
                                 page.window.clone(),
                                 page.current_script.clone(),
+                                &page.url,
                             )
                         } else {
                             javascript_dom::install_url_only(&mut value)

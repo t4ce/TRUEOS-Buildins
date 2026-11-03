@@ -1,6 +1,9 @@
 //! Host fixtures execute Hull's production JavaScript actor and script extraction.
 #![allow(dead_code)]
 
+#[path = "../../../src/resource_url.rs"]
+mod resource_url;
+
 extern crate self as trueos;
 extern crate self as winit;
 
@@ -47,6 +50,12 @@ pub mod logl {
 mod console_tests;
 #[cfg(test)]
 mod dom_tests;
+#[cfg(test)]
+mod dom_mutation_tests;
+#[cfg(test)]
+mod dom_tag_collection_tests;
+#[cfg(test)]
+mod jquery_event_bridge_tests;
 #[cfg(test)]
 mod dom_events_tests;
 #[cfg(test)]

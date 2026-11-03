@@ -87,6 +87,21 @@ constitute full web-platform conformance.
 - Node `textContent`, `nodeValue`, `nodeName`, `nodeType`, parent/child/sibling
   navigation, `ownerDocument`, and `isConnected`.
 - Static `NodeList` results with indexed access, `item`, iteration and `forEach`.
+- Document/Element `getElementsByTagName`, with live `HTMLCollection` results,
+  wildcard matching, indexed access, `item`, `namedItem` and iteration. These
+  traverse the same rp5 arena and retain the gateway's resource bounds.
+- Document `createElement`, `createTextNode`, `createComment` and
+  `createDocumentFragment`; Node `appendChild`, `insertBefore` and `removeChild`.
+  Creation produces detached nodes. Insertion moves existing handles, expands
+  fragment children, and checks ancestry/document hierarchy before mutation.
+  All allocations share the 4,096-node and 4 MiB DOM mutation allowances.
+- HTML link `href`, `rel`, `as` and `crossOrigin` reflection. Document URL and
+  live `baseURI` resolve href values through Rust's URL parser and the first base
+  element. Script-created stylesheet links participate in CSS collection from
+  the frozen initial document. Insertion alone does not synthesize resource
+  load/error events or execute inserted script elements; module imports retain
+  their existing host-managed loader. HTML parsing/innerHTML, custom element
+  registries and a complete template/inert-document model are not admitted.
 
 When Hull attaches its native window producer, `window` and `self` expose the
 existing page global, with the same `document`, console and script globals.

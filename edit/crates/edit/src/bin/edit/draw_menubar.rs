@@ -42,7 +42,7 @@ pub fn draw_menubar(ctx: &mut Context, state: &mut State) {
             if session.is_building() {
                 ctx.label("compile", "Compile");
             } else {
-                if ctx.button("compile", "Compile", ButtonStyle::default().bracketed(false)) {
+                if ctx.button("compile", if session.is_html() { "Preview" } else { "Compile" }, ButtonStyle::default().bracketed(false)) {
                     state.wants_compile = true;
                 }
             }

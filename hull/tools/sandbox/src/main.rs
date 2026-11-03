@@ -31,6 +31,8 @@ pub mod ui4_winit {
 #[path = "../../../src/buttons.rs"]
 mod buttons;
 
+#[path = "../../../src/resource_url.rs"]
+mod resource_url;
 #[path = "../../../src/css.rs"]
 mod css;
 #[path = "../../../src/javascript.rs"]

@@ -29,6 +29,7 @@ mod links;
 #[path = "../xxx/mod.rs"]
 mod pink_quad_dbg;
 mod scripts;
+mod resource_url;
 mod selectors;
 mod shellio;
 mod snapshot;
@@ -813,6 +814,10 @@ impl ApplicationHandler for Hull {
             }
             WindowEvent::KeyboardInput { event, .. } if event.state == ElementState::Pressed => {
                 let changed = match &event.logical_key {
+                    Key::Named(NamedKey::F5) => {
+                        if !self.page_url.is_empty() { self.start_page(self.page_url.clone()); }
+                        false
+                    }
                     Key::Named(NamedKey::F2) => {
                         if event.repeat {
                             return;
