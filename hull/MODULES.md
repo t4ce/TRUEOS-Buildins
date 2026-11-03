@@ -1,0 +1,84 @@
+# Hull source and CDN loading
+
+Production Hull enables host-owned source preparation for classic external
+scripts, module scripts and `import()`. It uses the existing netfs download tickets;
+there is no network operation inside a QuickJS loader callback.
+
+Bare npm specifiers use **esm.sh first**, then **jsDelivr +esm**:
+
+```js
+import('is-number@7.0.0').then(module => console.log(module.default(42)));
+```
+
+This requests `https://esm.sh/is-number@7.0.0?target=es2022&bundle`. If source
+download or dependency preparation fails, the package root switches to
+`https://cdn.jsdelivr.net/npm/is-number@7.0.0/+esm`. Its imports then resolve
+against the fallback provider. No failed module body is replayed. JavaScript
+runtime exceptions do not switch providers after side effects have occurred.
+Pin versions for reproducible results; unversioned/ranged requests can resolve
+differently at different providers. Simple explicit esm.sh package URLs also
+have fallback; generated build assets, GitHub/JSR paths and custom query options
+are not guessed into another CDN's URL layout.
+
+Site-relative and ordinary absolute URLs retain their own origin. A failed
+`https://crates.io/_app/...` request is never rewritten into an npm package.
+Supported URLs are HTTPS without embedded credentials. The resolver admits
+basic import-map exact/prefix entries, including normalized relative URL keys;
+scopes and non-JavaScript import attributes fail explicitly.
+
+## Execution and downloads
+
+Rust prepares source graphs, using QuickJS's own parser to discover static
+requests. No regex import scanner, JS transpiler or source rewrite is involved.
+The synchronous QuickJS module callback reads prepared memory only. Dynamic
+imports retain their real Promise resolvers while the host downloads and prepares
+the graph. Completion uses QuickJS's normal linker, namespace cache and evaluator,
+including cycles, live bindings and top-level await. Module identity includes
+fragments. Relative imports and import.meta.url use the selected module URL.
+
+External script downloads are prefetched with a FIFO queue and four concurrent
+tickets. Evaluation follows the collected source order. Repeated classic script
+elements execute separately, with their own currentScript; repeated external
+module URLs share QuickJS module execution. Navigation cancels tickets and drops
+the realm, promises, aliases and RAM-only source cache.
+
+Limits per page: 64 source URLs, 1 MiB per source, 8 MiB aggregate, 32 outstanding
+dynamic imports, 256 static requests per module, 4 KiB URLs, 2 seconds per fetch,
+and 5 seconds cumulative download waiting. The original 250 ms cumulative active
+JavaScript allowance remains, including parser/host work charged by engine calls.
+The initial 250 ms wall window excludes download waits, with an overall initial
+cap of 5.25 seconds. Late imports use remaining page budgets and do not cause a
+second render snapshot. No general fetch, XHR, filesystem, timer or process API
+is exported. Source/count/wait failures and unhandled rejections are reported.
+
+This is not a full browser fetch policy. The current netfs body-ticket API does
+not expose response MIME/CORS/final redirect URL metadata; it uses requested URLs
+for resolution and cannot enforce those browser response checks. Canonical CDN
+endpoints work without redirect metadata. Parser-time async/defer scheduling,
+dynamic script-element insertion, scoped import maps and JSON/CSS module types
+are not implemented. Other missing DOM/window APIs still fail normally.
+
+## Offline sandbox
+
+Capture an entry and its static graph without executing downloaded code:
+
+```sh
+python3 hull/tools/sandbox/sandbox.py capture https://example.com/ /tmp/page \
+  --scripts --module is-number@7.0.0
+python3 hull/tools/sandbox/sandbox.py replay /tmp/page --modules --turn-ms 0
+```
+
+Repeat `--module URL_OR_PACKAGE` for computed/dynamic entry points. The capture
+command uses the native parser/resolver helpers, follows static dependencies,
+tries the fallback if a primary graph cannot be captured, and records failures.
+Dynamic imports cannot be enumerated without running arbitrary application code;
+missing URLs appear in replay resource diagnostics and can be added as seeds.
+`--modules` replay reads captured resource tickets only and never opens a socket.
+The older `--external` flag only admits already-captured external bodies, without
+turning on module graph loading.
+
+`report.json` contains resource events separately from CSS requests. `console.log`
+and `trace.jsonl` record requests, successful bodies, fallback and errors. Source
+loading itself writes no production assets to disk. Capture files are explicit
+development artifacts. Run the sandbox tests and tools/js-tests host suite for
+end-to-end checks without building or booting the kernel.

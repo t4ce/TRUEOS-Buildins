@@ -195,7 +195,6 @@ impl Runtime {
         Ok(service)
     }
 
-    /// Store an inert page batch. Replacing a page also drops its VM immediately.
     /// Applies to subsequent pages. Production enables this; offline callers
     /// opt in only after installing their captured-resource ticket backend.
     pub fn enable_resource_loading(&mut self) {
@@ -212,7 +211,8 @@ impl Runtime {
         self.store_page(generation, url.into(), sources, None);
     }
 
-    /// A completed parse explicitly admits the finite initial inline script set.
+    /// A completed parse admits the finite page script set. Opted-in source
+    /// loading prepares external bodies and module graphs cooperatively.
     /// Layout receives a frozen clone; later script mutations stay in this tree.
     pub fn begin_page(
         &mut self,
@@ -529,7 +529,31 @@ async fn worker(
                             if page.load_resources {
                                 let document = page.document.as_ref().map(|d| d.borrow());
                                 match Loader::new(&mut value, &page.url, document.as_deref()) {
-                                    Ok(loader) => resources = Some(loader),
+                                    Ok(mut loader) => {
+                                        for source in
+                                            page.sources.iter().filter(|s| s.bytes.is_none()).take(module_loader::MAX_FILES)
+                                        {
+                                            let kind =
+                                                source.kind.split(';').next().unwrap_or("").trim();
+                                            if kind.eq_ignore_ascii_case("module")
+                                                || kind.is_empty()
+                                                || [
+                                                    "text/javascript",
+                                                    "application/javascript",
+                                                    "text/ecmascript",
+                                                    "application/ecmascript",
+                                                ]
+                                                .iter()
+                                                .any(|mime| kind.eq_ignore_ascii_case(mime))
+                                            {
+                                                loader.prefetch(
+                                                    &source.origin,
+                                                    kind.eq_ignore_ascii_case("module"),
+                                                );
+                                            }
+                                        }
+                                        resources = Some(loader)
+                                    }
                                     Err(error) => {
                                         let _ = reports.try_send(Report::Resource {
                                             generation: page.generation,
@@ -837,9 +861,13 @@ async fn worker(
             })
         };
         page.current_script.set(current_script);
-        let result = if module&&external&&resources.is_some(){
-            engine.add_module(&origin,bytes).and_then(|_|engine.load_module(&origin))
-        }else{engine.eval(bytes, &origin, module)};
+        let result = if module && external && resources.is_some() {
+            engine
+                .add_module(&origin, bytes)
+                .and_then(|_| engine.load_module(&origin))
+        } else {
+            engine.eval(bytes, &origin, module)
+        };
         // Clear even on syntax errors or interruption, before any queued jobs,
         // console delivery, pasted code or input callbacks are admitted.
         page.current_script.set(None);

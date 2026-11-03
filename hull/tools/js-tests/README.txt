@@ -5,8 +5,9 @@ include a network client, the qjs-web-lab copy, or kernel UI services. Input ada
 use the actual Winit TRUEOS/core record types; they never create a window.
 
 Actor startup and replace_page remain inactive. begin_page admits the parsed
-document's inline scripts with one 250 ms active execution allowance and a 250 ms
-initial wall window. Initialization fixtures check real rp5 mutations, frozen
+document's scripts with one 250 ms active execution allowance and a 250 ms
+initial wall window. Resource-enabled pages exclude bounded download waiting
+from that window (up to 5 seconds total). Initialization fixtures check real rp5 mutations, frozen
 render snapshots, faults, navigation reset, infinite sources and microtask
 chains. Other fixtures call Runtime::run explicitly to isolate execution paths.
 
@@ -32,6 +33,13 @@ ordering and Promise jobs, listener errors/once/removal, inactive input discard,
 navigation epoch isolation, oversized-input rejection, and queue overflow reset.
 Input-only fixtures use inert staging without a DOM. Initialization fixtures
 connect the actual minimal DOM, but never create a window or trigger a redraw.
+
+Resource fixtures explicitly enable the production loader against deterministic
+in-memory tickets. They cover esm.sh/jsDelivr fallback, failed primary dependency
+graphs, computed/nested import(), cycles/live bindings/top-level await, import
+maps, external ordering, one fetch with per-element classic execution, shared
+module execution, delayed downloads, navigation cancellation, error diagnostics,
+late imports without redraw and URL/count/byte limits. No sockets are opened.
 
 Console fixtures cover explicit pasted execution without requesting collected
 scripts, shared page globals, Promise ordering, callback logs, navigation reset,

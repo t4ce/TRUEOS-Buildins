@@ -57,7 +57,15 @@ impl Scripts {
                         continue;
                     }
                 };
-                if !kind.split(';').next().unwrap_or("").trim().eq_ignore_ascii_case("module"){url.set_fragment(None);}
+                if !kind
+                    .split(';')
+                    .next()
+                    .unwrap_or("")
+                    .trim()
+                    .eq_ignore_ascii_case("module")
+                {
+                    url.set_fragment(None);
+                }
                 let origin = url.to_string();
                 self.sources.push(ScriptSource {
                     nodes: vec![id],

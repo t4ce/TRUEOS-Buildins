@@ -15,7 +15,7 @@ pub mod window {
 }
 
 pub use tokio;
-#[path="resource_netfs.rs"]
+#[path = "resource_netfs.rs"]
 pub mod netfs;
 pub mod runtime {
     pub use tokio::runtime::{Builder, Handle, Runtime};
@@ -48,12 +48,6 @@ mod console_tests;
 #[cfg(test)]
 mod dom_tests;
 #[cfg(test)]
-mod jquery_tests;
-#[cfg(test)]
-mod resource_tests;
-#[cfg(test)]
-mod resource_failure_tests;
-#[cfg(test)]
 mod helpers_tests;
 #[cfg(test)]
 mod initialization_tests;
@@ -67,6 +61,12 @@ mod javascript;
 mod javascript_dom;
 #[path = "../../../src/javascript_input.rs"]
 mod javascript_input;
+#[cfg(test)]
+mod jquery_tests;
+#[cfg(test)]
+mod resource_failure_tests;
+#[cfg(test)]
+mod resource_tests;
 #[path = "../../../src/scripts.rs"]
 mod scripts;
 #[path = "../../../src/selectors.rs"]

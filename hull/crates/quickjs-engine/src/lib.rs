@@ -221,7 +221,7 @@ unsafe extern "C" {
         name: *mut c_char,
     ) -> c_int;
     fn hull_quickjs_import_complete(engine: *mut c_void, id: u64, error: *const c_char) -> c_int;
-    fn hull_quickjs_load_module(engine:*mut c_void,name:*const c_char)->c_int;
+    fn hull_quickjs_load_module(engine: *mut c_void, name: *const c_char) -> c_int;
     fn hull_quickjs_new(
         heap: usize,
         stack: usize,
@@ -467,9 +467,12 @@ impl Engine {
     }
     /// Evaluate a prepared external entry through QuickJS's module map, so
     /// repeated script elements and import() share one execution/namespace.
-    pub fn load_module(&mut self,url:&str)->Result<(),String>{
-        let name=CString::new(url).map_err(|_|"Module URL contains NUL")?;
-        let started=self.begin_call()?;let status=unsafe{hull_quickjs_load_module(self.native.as_ptr(),name.as_ptr())};self.finish_call(started,status)
+    pub fn load_module(&mut self, url: &str) -> Result<(), String> {
+        if self.modules.is_none() || url.len()>4096 {return Err("Module loader is absent or URL exceeds budget".into());}
+        let name = CString::new(url).map_err(|_| "Module URL contains NUL")?;
+        let started = self.begin_call()?;
+        let status = unsafe { hull_quickjs_load_module(self.native.as_ptr(), name.as_ptr()) };
+        self.finish_call(started, status)
     }
     pub fn take_import_requests(&mut self) -> Vec<ImportRequest> {
         let mut result = Vec::new();

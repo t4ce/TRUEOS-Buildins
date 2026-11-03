@@ -2,8 +2,24 @@ QuickJS Javascript Engine
 Upstream: https://github.com/bellard/quickjs
 Commit: 2833510432045f72915919cef680ba59e5153b16
 License: MIT; see LICENSE.
-Extracted from that commit, with one local quickjs.h guard:
+Extracted from that commit, with the following local integration changes:
 HULL_QUICKJS_FULL_POINTERS disables the 64-bit 47-bit NaN-boxing branch.
 Hull enables it for both TRUEOS and host fixtures so JSValue retains full-width
 native pointers. TRUEOS guest heaps use canonical high-half virtual addresses.
 The existing upstream full-pointer JSValue implementation is otherwise unchanged.
+
+Hull module preparation in quickjs.c/quickjs.h:
+- JS_HullModuleRequests uses an ephemeral context and the upstream parser to
+  return static import/export-from requests without resolving or executing code.
+  JS_EVAL_FLAG_HULL_NO_RESOLVE is an internal host compile-only flag (bit 8).
+  Metadata defines own array elements, avoiding guest prototype setters.
+- JS_HullSetImportWaiter lets the adapter retain dynamic import Promise resolvers
+  after the standard specifier/options conversion. Default behavior is unchanged
+  unless the host installs this hook. Actual linking/evaluation/namespace creation
+  remains JS_LoadModule; the adapter resumes it after source graph preparation.
+- The internal async-function Promise consumed by synchronous module execution
+  is marked handled, so a host rejection tracker reports the public import/module
+  failure once and does not report an error the guest has caught.
+
+The C adapter in build.rs owns prepared source bodies, queued import resolvers
+and bounded rejection diagnostics. None of these add guest globals or perform I/O.

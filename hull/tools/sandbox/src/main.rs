@@ -356,7 +356,7 @@ fn script_sources(
     }
     if options.external {
         experiments.push(
-            "captured external JavaScript enabled (production leaves external sources unfetched)"
+            "captured external JavaScript enabled without the module graph loader"
                 .into(),
         );
     }

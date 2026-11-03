@@ -2,7 +2,7 @@
 use hull_quickjs::{Engine, ImportRequest};
 use std::{
     cell::RefCell,
-    collections::{HashMap, HashSet},
+    collections::{HashMap, HashSet, VecDeque},
     rc::Rc,
     sync::Arc,
     time::{Duration, Instant},
@@ -12,7 +12,7 @@ use url::Url;
 
 pub(crate) const PRIMARY: &str = "https://esm.sh/";
 pub(crate) const SECONDARY: &str = "https://cdn.jsdelivr.net/npm/";
-const MAX_FILES: usize = 64;
+pub(crate) const MAX_FILES: usize = 64;
 const MAX_FILE: usize = 1024 * 1024;
 const MAX_TOTAL: usize = 8 * 1024 * 1024;
 pub(crate) const MAX_WAIT: Duration = Duration::from_secs(5);
@@ -57,9 +57,14 @@ fn package(value: &str) -> bool {
         !value.starts_with(['.', '/'])
     }
 }
-fn mapping_key(base:&Url,name:&str)->Result<String,String>{
-    if name.starts_with(['.','/']){base.join(name).map(String::from).map_err(|e|e.to_string())}
-    else if let Ok(url)=Url::parse(name){Ok(url.into())}else{Ok(name.into())}
+fn mapping_key(base: &Url, name: &str) -> Result<String, String> {
+    if name.starts_with(['.', '/']) {
+        base.join(name).map(String::from).map_err(|e| e.to_string())
+    } else if let Ok(url) = Url::parse(name) {
+        Ok(url.into())
+    } else {
+        Ok(name.into())
+    }
 }
 impl Policy {
     pub(crate) fn canonical(&self, url: &str) -> String {
@@ -73,8 +78,12 @@ impl Policy {
         value.into()
     }
     pub(crate) fn resolve(&mut self, base: &str, name: &str) -> Result<String, String> {
-        let base = self.canonical(if !base.starts_with("https://") && !self.page.is_empty() {&self.page}else{base});
-        let key=mapping_key(&Url::parse(&base).map_err(|e|e.to_string())?,name)?;
+        let base = self.canonical(if !base.starts_with("https://") && !self.page.is_empty() {
+            &self.page
+        } else {
+            base
+        });
+        let key = mapping_key(&Url::parse(&base).map_err(|e| e.to_string())?, name)?;
         let mapped = if let Some(mapped) = self.imports.get(&key) {
             Some(mapped.clone().ok_or("Import map blocks this specifier")?)
         } else {
@@ -82,10 +91,15 @@ impl Policy {
                 .iter()
                 .filter(|(prefix, _)| prefix.ends_with('/') && key.starts_with(prefix.as_str()))
                 .max_by_key(|(prefix, _)| prefix.len())
-                .map(|(prefix, value)| -> Result<String,String> {
-                    let target=value.as_ref().ok_or_else(||"Import map blocks this prefix".to_owned())?;
-                    let resolved=checked_url(&format!("{target}{}",&key[prefix.len()..]))?;
-                    if !resolved.starts_with(target){return Err("Import map prefix escapes its target".into());}Ok(resolved)
+                .map(|(prefix, value)| -> Result<String, String> {
+                    let target = value
+                        .as_ref()
+                        .ok_or_else(|| "Import map blocks this prefix".to_owned())?;
+                    let resolved = checked_url(&format!("{target}{}", &key[prefix.len()..]))?;
+                    if !resolved.starts_with(target) {
+                        return Err("Import map prefix escapes its target".into());
+                    }
+                    Ok(resolved)
                 })
                 .transpose()?
         };
@@ -110,10 +124,11 @@ impl Policy {
         let parsed = Url::parse(&url).unwrap();
         if parsed.host_str() == Some("esm.sh") && parsed.query().is_none() {
             let path = parsed.path().trim_start_matches('/');
-            let first=path.split('/').next().unwrap_or("");
+            let first = path.split('/').next().unwrap_or("");
             if package(path)
-                &&!matches!(first,"gh"|"jsr"|"pr")&&!first.starts_with('_')
-                &&!(first.starts_with('v')&&first[1..].bytes().all(|b|b.is_ascii_digit()))
+                && !matches!(first, "gh" | "jsr" | "pr")
+                && !first.starts_with('_')
+                && !(first.starts_with('v') && first[1..].bytes().all(|b| b.is_ascii_digit()))
                 && !path
                     .split('/')
                     .any(|p| p.starts_with("es20") || matches!(p, "node" | "deno" | "denonext"))
@@ -209,7 +224,9 @@ impl Policy {
                                 }
                                 Some(target)
                             };
-                            self.imports.entry(mapping_key(&base,key)?).or_insert(target);
+                            let key=mapping_key(&base,key)?;
+                            if !self.imports.contains_key(&key)&&self.imports.len()>=128{return Err("Import maps exceed 128 aggregate entries".into());}
+                            self.imports.entry(key).or_insert(target);
                         }
                     }
                 }
@@ -240,6 +257,7 @@ pub(crate) enum Prepared<T> {
     Failed(String),
 }
 pub(crate) struct Loader {
+    queue: VecDeque<String>,
     policy: Rc<RefCell<Policy>>,
     entries: HashMap<String, State>,
     inline: HashMap<String, Result<Vec<String>, String>>,
@@ -269,6 +287,7 @@ impl Loader {
         let resolver = policy.clone();
         engine.install_modules(move |base, name| resolver.borrow_mut().resolve(base, name))?;
         Ok(Self {
+            queue: VecDeque::new(),
             policy,
             entries: HashMap::new(),
             inline: HashMap::new(),
@@ -299,6 +318,7 @@ impl Loader {
             return Err("Module resource count/wait budget exhausted".into());
         }
         self.entries.insert(url.into(), State::Queued);
+        self.queue.push_back(url.into());
         if self.wait_start.is_none() {
             self.wait_start = Some(Instant::now());
         }
@@ -374,12 +394,15 @@ impl Loader {
             .values()
             .filter(|s| matches!(s, State::Fetching(..)))
             .count();
-        let queued = self
-            .entries
-            .iter()
-            .filter_map(|(url, state)| matches!(state, State::Queued).then_some(url.clone()))
-            .take(4usize.saturating_sub(active))
-            .collect::<Vec<_>>();
+        let mut queued = Vec::new();
+        while queued.len() < 4usize.saturating_sub(active) {
+            let Some(url) = self.queue.pop_front() else {
+                break;
+            };
+            if matches!(self.entries.get(&url), Some(State::Queued)) {
+                queued.push(url);
+            }
+        }
         for url in queued {
             match netfs::fetch_bytes_happy_eyeballs(url.as_bytes()) {
                 Ok(id) => {
@@ -579,6 +602,29 @@ impl Loader {
             _ => Prepared::Pending,
         }
     }
+    pub(crate) fn prefetch(&mut self, url: &str, module: bool) {
+        let resolved = if module {
+            self.policy.borrow_mut().resolve(url, url)
+        } else {
+            checked_url(url)
+        };
+        match resolved {
+            Ok(url) => {
+                if let Err(error) = self.request(&url) {
+                    self.events.push(Event {
+                        url,
+                        status: "failed",
+                        detail: error,
+                    });
+                }
+            }
+            Err(error) => self.events.push(Event {
+                url: url.into(),
+                status: "failed",
+                detail: error,
+            }),
+        }
+    }
     pub(crate) fn module_source(
         &mut self,
         engine: &mut Engine,
@@ -600,6 +646,7 @@ impl Loader {
     }
     pub(crate) fn close(&mut self) {
         self.closed = true;
+        self.queue.clear();
         let unfinished = self
             .entries
             .iter()
