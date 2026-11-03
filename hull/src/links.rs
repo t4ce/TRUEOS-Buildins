@@ -75,6 +75,24 @@ impl Links {
         links
     }
 
+    /// Feedback follows painted text, not the anchor's enclosing block/images.
+    pub fn hover_regions(&self, viewport: &Viewport) -> Vec<trueos::ui4_winit::ButtonRegion> {
+        let fragments: Vec<_> = self
+            .boxes
+            .iter()
+            .filter_map(|hit| {
+                let color = hit.hover_color?;
+                (color[3] != 0 && self.targets.contains_key(&hit.node)).then_some(
+                    super::layout::ButtonBox {
+                        rect: hit.rect,
+                        border_color: color,
+                    },
+                )
+            })
+            .collect();
+        super::buttons::regions(&fragments, viewport)
+    }
+
     fn at(&self, x: f64, y: f64, viewport: &Viewport) -> Option<&LinkAction> {
         if !x.is_finite() || !y.is_finite() {
             return None;
@@ -218,6 +236,7 @@ mod tests {
             vec![LinkBox {
                 node,
                 rect: [20.0, 100.0, 80.0, 22.0],
+                hover_color: None,
             }],
             "https://example.test/index",
         );
@@ -332,6 +351,7 @@ mod tests {
             vec![LinkBox {
                 node,
                 rect: [20.0, 100.0, 80.0, 22.0],
+                hover_color: None,
             }],
             "https://example.test/index",
         );

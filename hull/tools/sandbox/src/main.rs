@@ -11,6 +11,26 @@ use std::{
     time::{Duration, Instant},
 };
 
+// Data-only window geometry facade for the production hover projection. Replay
+// never registers these regions with a window or invokes a kernel UI service.
+pub mod ui4_winit {
+    #[derive(Clone, Copy, Debug)]
+    pub struct ButtonRegion {
+        pub x: i32,
+        pub y: i32,
+        pub width: u32,
+        pub height: u32,
+        pub clip_x: i32,
+        pub clip_y: i32,
+        pub clip_width: u32,
+        pub clip_height: u32,
+        pub border_rgba: u32,
+    }
+}
+
+#[path = "../../../src/buttons.rs"]
+mod buttons;
+
 #[path = "../../../src/css.rs"]
 mod css;
 #[path = "../../../src/javascript.rs"]

@@ -7,6 +7,7 @@ publish = false
 hull-quickjs = { path = "../../crates/quickjs-engine" }
 infer = { path = "../../../../TRUEOS/vendor/infer", default-features = false }
 rp5 = { path = "../../rp5" }
+rjqry = { path = "../../rjqry" }
 lightningcss = { version = "=1.0.0-alpha.72", default-features = false, features = ["into_owned", "substitute_variables"] }
 static-self = "0.1.2"
 taffy = { version = "=0.15.0", path = "../../../vendor/taffy-0.15.0-trueos", default-features = false, features = ["std", "taffy_tree", "block_layout", "flexbox", "grid"] }

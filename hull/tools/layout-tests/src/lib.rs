@@ -464,6 +464,70 @@ mod tests {
             && hit.rect[1] + hit.rect[3] >= image[1] + image[3]));
     }
 
+    #[test]
+    fn link_hover_follows_painted_text_color_without_permanent_borders() {
+        let (document, output) = export(
+            "<a href='/next'>blue</a><a href='/red' style='color:red'><span>red</span></a><a href='/image'><img width='30' height='20'></a><a href='/hidden' style='visibility:hidden'>hidden</a><a href='/transparent' style='color:transparent'>invisible</a><a href='javascript:void(0)'>unsupported</a><a>plain</a>",
+            "",
+        );
+        let fragments: Vec<_> = output
+            .link_boxes
+            .iter()
+            .filter(|hit| hit.hover_color.is_some())
+            .collect();
+        assert!(
+            fragments
+                .iter()
+                .any(|hit| hit.hover_color == Some([0, 0, 255, 255]))
+        );
+        assert!(
+            fragments
+                .iter()
+                .any(|hit| hit.hover_color == Some([255, 0, 0, 255]))
+        );
+        assert!(output.border_quads.is_empty());
+        let links = links::Links::new(&document, output.link_boxes, "https://example.test/");
+        let mut viewport = viewport::Viewport::default();
+        viewport.resize(1280, 720);
+        let regions = links.hover_regions(&viewport);
+        assert_eq!(regions.len(), 2);
+        assert_eq!(regions[0].border_rgba, u32::from_le_bytes([0, 0, 255, 255]));
+        assert_eq!(regions[1].border_rgba, u32::from_le_bytes([255, 0, 0, 255]));
+    }
+
+    #[test]
+    fn wrapped_link_hover_has_one_outline_per_painted_line() {
+        let (document, output) = export(
+            "<a href='/next' style='display:block;width:60px'>one two three four five six seven</a>",
+            "",
+        );
+        let fragments: Vec<_> = output
+            .link_boxes
+            .iter()
+            .filter(|hit| hit.hover_color.is_some())
+            .copied()
+            .collect();
+        assert!(fragments.len() > 1);
+        for fragment in &fragments {
+            assert!(
+                output
+                    .text_runs
+                    .iter()
+                    .any(|run| run.x == fragment.rect[0] && run.advance_px == fragment.rect[2])
+            );
+        }
+        let links = links::Links::new(&document, output.link_boxes, "https://example.test/");
+        let mut viewport = viewport::Viewport::default();
+        viewport.resize_with_origin(1280, 720, 0, 32);
+        let regions = links.hover_regions(&viewport);
+        assert_eq!(regions.len(), fragments.len());
+        for (region, fragment) in regions.iter().zip(fragments) {
+            assert_eq!(region.x, fragment.rect[0].floor() as i32 - 1);
+            assert_eq!(region.y, fragment.rect[1].floor() as i32 + 31);
+            assert_eq!(region.clip_y, 32);
+        }
+    }
+
     fn node<'a>(
         doc: &rp5::Document,
         result: &'a serde_json::Value,

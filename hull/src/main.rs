@@ -1057,6 +1057,13 @@ impl ApplicationHandler for Hull {
                         format_args!("hull: button outlines: {error:?}"),
                     );
                 }
+                let regions = self.links.hover_regions(&self.viewport);
+                if let Err(error) = target.set_hover_regions(&regions) {
+                    logl::log(
+                        logl::level::ERROR,
+                        format_args!("hull: link outlines: {error:?}"),
+                    );
+                }
                 self.frame_counter.published();
                 self.pending_publish = false;
                 if self.image_frame_recovery {

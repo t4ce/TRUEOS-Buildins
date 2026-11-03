@@ -69,6 +69,8 @@ pub(super) struct BackgroundQuad {
 pub(super) struct LinkBox {
     pub node: HtmlId,
     pub rect: [f32; 4],
+    /// Only painted text fragments receive hover ink; broad click boxes do not.
+    pub hover_color: Option<[u8; 4]>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -410,6 +412,7 @@ pub(super) fn compute(
                         link_boxes.push(LinkBox {
                             node,
                             rect: [left, top, box_layout.size.width, box_layout.size.height],
+                            hover_color: None,
                         });
                     }
                 }
@@ -465,6 +468,7 @@ pub(super) fn compute(
                                     length,
                                     line_height,
                                 ],
+                                hover_color: Some(context.metrics.color),
                             });
                         }
                         let [r, g, b, a] = context.metrics.color;
