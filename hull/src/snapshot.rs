@@ -34,7 +34,11 @@ impl Snapshot {
         self.pending = Some(Box::pin(async move {
             async_fs::create_dir_all(root.as_bytes()).await?;
             async_fs::write_file(format!("{root}/layout.svg").as_bytes(), svg.as_bytes()).await?;
-            async_fs::write_file(format!("{root}/cookies.txt").as_bytes(), cookies.as_bytes()).await
+            async_fs::write_file(
+                format!("{root}/storage.json").as_bytes(),
+                cookies.as_bytes(),
+            )
+            .await
         }));
     }
 
@@ -71,6 +75,46 @@ impl Snapshot {
 mod tests {
     use super::*;
     use crate::fs_mock::STATE;
+
+    #[test]
+    fn saves_cookie_capture_once_beside_svg_and_replaces_it_with_empty_next_navigation() {
+        STATE.with(|state| {
+            *state.borrow_mut() = Default::default();
+            state.borrow_mut().ready = true;
+        });
+        let mut snapshot = Snapshot::default();
+        snapshot.prepare(
+            "https://example.com/a",
+            "<svg/>".into(),
+            r#"[["cookie:a","one"],["localStorage:a","two"]]"#.into(),
+        );
+        STATE.with(|state| assert!(state.borrow().writes.is_empty()));
+        snapshot.poll();
+        snapshot.poll();
+        STATE.with(|state| {
+            let state = state.borrow();
+            assert_eq!(
+                state.writes,
+                vec![
+                    (
+                        b"apps/hull/example.com/layout.svg".to_vec(),
+                        b"<svg/>".to_vec()
+                    ),
+                    (
+                        b"apps/hull/example.com/storage.json".to_vec(),
+                        br#"[["cookie:a","one"],["localStorage:a","two"]]"#.to_vec()
+                    )
+                ]
+            );
+        });
+        snapshot.prepare(
+            "https://example.com/b",
+            "<svg>new</svg>".into(),
+            "[]".into(),
+        );
+        snapshot.poll();
+        STATE.with(|state| assert_eq!(state.borrow().writes.last().unwrap().1, b"[]"));
+    }
 
     #[test]
     fn preparation_has_no_io_and_each_poll_returns_while_storage_is_pending() {

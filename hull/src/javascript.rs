@@ -282,6 +282,9 @@ impl Runtime {
     pub fn cookie_snapshot(&self) -> String {
         self.pages.borrow().as_ref().map_or_else(String::new, |page| page.cookies.borrow().get())
     }
+    pub fn storage_snapshot(&self) -> String {
+        self.pages.borrow().as_ref().map_or_else(||"[]".into(), |page| page.cookies.borrow().snapshot())
+    }
 
     pub fn is_initializing(&self, generation: u64) -> bool {
         let initial = self.initial.borrow();

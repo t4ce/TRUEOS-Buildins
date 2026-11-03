@@ -1352,6 +1352,7 @@ pub mod fs_mock {
         pub polls: usize,
         pub ready: bool,
         pub fail: bool,
+        pub writes: Vec<(Vec<u8>,Vec<u8>)>,
     }
     thread_local! { pub static STATE: RefCell<State> = RefCell::new(State::default()); }
 }
@@ -1361,8 +1362,10 @@ pub mod async_fs {
     pub async fn create_dir_all(_: &[u8]) -> Result<(), i32> {
         operation().await
     }
-    pub async fn write_file(_: &[u8], _: &[u8]) -> Result<(), i32> {
-        operation().await
+    pub async fn write_file(path: &[u8], bytes: &[u8]) -> Result<(), i32> {
+        operation().await?;
+        STATE.with(|state| state.borrow_mut().writes.push((path.to_vec(),bytes.to_vec())));
+        Ok(())
     }
     async fn operation() -> Result<(), i32> {
         STATE.with(|state| state.borrow_mut().calls += 1);

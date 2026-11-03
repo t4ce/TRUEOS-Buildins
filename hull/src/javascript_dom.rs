@@ -194,6 +194,10 @@ impl Gateway {
             self.cookies.borrow_mut().ignore_further_writes();
             return Ok(Value::Null);
         }
+        if operation == "storage" {
+            return self.cookies.borrow_mut().storage(input(args,1)?,args.get(2).and_then(Value::as_str).unwrap_or(""),args.get(3).and_then(Value::as_str).unwrap_or(""))
+                .ok_or_else(||failure("NotSupportedError","Unsupported storage operation"));
+        }
         if operation == "cookie" {
             if let Some(value) = args.get(1).and_then(Value::as_str) { self.cookies.borrow_mut().set(value); return Ok(Value::Null); }
             return Ok(json!(self.cookies.borrow().get()));

@@ -15,6 +15,57 @@ fn evaluate(engine: &mut Engine, source: &str) {
 }
 
 #[test]
+fn local_storage_shim_shares_prefixed_box_without_cookie_collisions() {
+    let (mut engine, _) = fixture("<p>store</p>");
+    evaluate(
+        &mut engine,
+        r#"
+        if(!(localStorage instanceof Storage)||localStorage.length!==0||localStorage.getItem('missing')!==null||localStorage.missing!==undefined)throw Error('empty storage');
+        document.cookie='theme=cookie';localStorage.setItem('theme','local');
+        if(document.cookie!=='theme=cookie'||localStorage.getItem('theme')!=='local')throw Error('namespace collision');
+        localStorage.count=42;localStorage.setItem('empty','');
+        if(localStorage.count!=='42'||localStorage.getItem('empty')!==''||localStorage.length!==3||localStorage.key(0)!=='theme'||localStorage.key(99)!==null)throw Error('storage reads');
+        if(Object.keys(localStorage).join(',')!=='theme,count,empty'||!('theme' in localStorage)||('missing' in localStorage))throw Error('named properties');
+        delete localStorage.count;localStorage.removeItem('absent');
+        Object.defineProperty(localStorage,'defined',{value:'yes',configurable:true});
+        if(localStorage.defined!=='yes')throw Error('defineProperty');
+        localStorage.setItem('setItem','reserved');if(typeof localStorage.setItem!=='function'||localStorage.getItem('setItem')!=='reserved')throw Error('method collision');
+        localStorage.clear();if(localStorage.length!==0||document.cookie!=='theme=cookie')throw Error('clear namespaces');
+        let failed=false;try{Storage.prototype.getItem.call({},'a')}catch(e){failed=e instanceof TypeError}if(!failed)throw Error('brand');
+        failed=false;try{localStorage.setItem('a')}catch(e){failed=e instanceof TypeError}if(!failed)throw Error('required args');
+    "#,
+    );
+    let (mut fresh, _) = fixture("<p>fresh</p>");
+    evaluate(
+        &mut fresh,
+        "if(localStorage.length!==0||document.cookie!=='')throw Error('previous box restored')",
+    );
+}
+
+#[test]
+fn cookie_and_storage_writes_use_one_cumulative_quota() {
+    let (mut engine, _) = fixture("<p>store</p>");
+    evaluate(
+        &mut engine,
+        r#"
+        document.cookie='keep=yes';
+        localStorage.setItem('large','x'.repeat(600000));
+    "#,
+    );
+    evaluate(
+        &mut engine,
+        r#"
+        document.cookie='large='+'x'.repeat(500000);
+        document.cookie='keep=changed';
+        if(document.cookie!=='keep=yes'||localStorage.getItem('large').length!==600000)throw Error('shared quota');
+        let failed=false;try{localStorage.setItem('after','no')}catch(e){failed=e.name==='QuotaExceededError'}if(!failed)throw Error('storage quota');
+        localStorage.clear();if(localStorage.length!==0)throw Error('clear');
+        failed=false;try{localStorage.setItem('after','no')}catch(e){failed=e.name==='QuotaExceededError'}if(!failed)throw Error('cumulative budget renewed');
+    "#,
+    );
+}
+
+#[test]
 fn selectors_create_lazy_identity_preserving_standard_wrappers() {
     let (mut engine, _) =
         fixture("<main id='box'><p class='note'>one</p><p class='note'>two</p></main>");
@@ -145,25 +196,34 @@ fn mutation_limits_reject_writes_before_changing_the_document() {
 #[test]
 fn cookies_are_navigation_local_pairs_with_setter_conversion() {
     let (mut engine, _) = fixture("<p>cookies</p>");
-    evaluate(&mut engine, r#"
+    evaluate(
+        &mut engine,
+        r#"
         if(document.cookie!=='')throw Error('initial jar');
         document.cookie={toString(){return 'a=one; Path=/; Secure'}};
         document.cookie='b=two'; document.cookie='a=new';
         if(document.cookie!=='a=new; b=two')throw Error(document.cookie);
         document.cookie='a=; Max-Age=-1';
         if(document.cookie!=='b=two')throw Error('delete');
-    "#);
+    "#,
+    );
     let (mut fresh, _) = fixture("<p>fresh</p>");
-    evaluate(&mut fresh,"if(document.cookie!=='')throw Error('persisted cookies')");
+    evaluate(
+        &mut fresh,
+        "if(document.cookie!=='')throw Error('persisted cookies')",
+    );
 }
 
 #[test]
 fn oversized_cookie_write_is_silently_ignored_and_latches() {
     let (mut engine, _) = fixture("<p>cookies</p>");
-    evaluate(&mut engine,r#"
+    evaluate(
+        &mut engine,
+        r#"
         document.cookie='keep=yes';
         document.cookie='big='+String.fromCharCode(1).repeat(200000);
         document.cookie='keep=changed';
         if(document.cookie!=='keep=yes')throw Error('oversized setter did not latch');
-    "#);
+    "#,
+    );
 }

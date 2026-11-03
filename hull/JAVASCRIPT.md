@@ -95,6 +95,13 @@ constitute full web-platform conformance.
   Creation produces detached nodes. Insertion moves existing handles, expands
   fragment children, and checks ancestry/document hierarchy before mutation.
   All allocations share the 4,096-node and 4 MiB DOM mutation allowances.
+- `Text` and `Comment` wrappers/constructors use real rp5 character nodes, with
+  `CharacterData.data` and UTF-16 `length`. `Node.cloneNode(deep)` copies detached
+  nodes, attributes, descendants and template contents within those same quotas;
+  it does not copy listeners or JavaScript expando properties. Cloning a Document
+  is explicitly unsupported by the single-document gateway. Element
+  `insertAdjacentElement` uses the existing validated insertion operations for
+  its four standard positions; these are DOM APIs rather than jQuery aliases.
 - HTML link `href`, `rel`, `as` and `crossOrigin` reflection. Document URL and
   live `baseURI` resolve href values through Rust's URL parser and the first base
   element. Script-created stylesheet links participate in CSS collection from
@@ -112,8 +119,17 @@ resize yields 640x368 content. No guest callback executes during a native update
 `window` keeps its identity; `self` and the inner dimensions have standard
 replaceable property behavior if page code assigns them.
 
-This does not add a general Window implementation, DOM window events, child
-browsing contexts or navigation. DPI, outer/screen geometry and focus bindings
+Window-backed pages expose diagnostic-only `location`/`document.location` and
+`window.open`. Location getters retain the actual current URL; component writes,
+assign/replace/reload and open only log a blocked navigation target. Relative
+URLs use the document base. The first three attempts per navigation are logged,
+the fourth emits one "navigation log exceeded" message, and further attempts
+are silent. No URL is fetched or executed, no window opens, and no document URL
+changes. `window.open` returns null. `navigator` is a separate browser-information
+API and remains absent; it is not a navigation operation.
+
+This does not add a general Window implementation or child browsing contexts.
+DPI, outer/screen geometry and focus bindings
 remain absent. In particular the current Winit backend's `scale_factor()` is a
 constant 1 and `has_focus()` is a false placeholder, so neither is reexported as
 measured browser state. DOM-only fixtures without a native producer do not gain
@@ -123,8 +139,8 @@ Selectors use the CSS parser and shared matcher, supporting common type, ID,
 class, attribute, combinator, structural and `:scope`/`:is`/`:where`/`:not`
 queries. Malformed selectors raise `SyntaxError`; unsupported valid features
 raise `NotSupportedError`. Bounds raise `QuotaExceededError`. There is no
-form-control value model, `innerHTML`, computed layout, tree insertion
-API, DOM event system or observer API. SVG `className` is explicitly unsupported
+form-control value model, `innerHTML`, computed layout or observer API.
+SVG `className` is explicitly unsupported
 instead of approximating `SVGAnimatedString`. Unpaired UTF-16 surrogates are
 rejected because rp5 stores Unicode scalar strings.
 
@@ -274,6 +290,16 @@ charges its JSON-encoded UTF-8 input bytes (including quotes/escapes) plus 32
 bytes for entry overhead, including
 replacements, deletions and invalid inputs. A write exceeding the remaining
 budget latches the jar against all further writes. Reads remain available.
-`cookies.txt` is written beside the diagnostic `layout.svg` with the pairs
-captured when that SVG is prepared. Later JavaScript can change the live jar;
-the saved initial snapshot is not refreshed.
+Cookies and `localStorage` share one Rust-owned navigation-local key/value box.
+Internal keys are prefixed `cookie:` and `localStorage:`; scripts never see
+those prefixes, and identical public names do not overwrite each other.
+`localStorage` provides getItem/setItem/removeItem/clear/key/length and named
+property reads, writes and deletion. Missing getItem returns null. Web Storage
+setItem throws QuotaExceededError on exhaustion; cookie setters remain silent.
+Removing localStorage keys or clearing them does not renew the cumulative budget.
+Storage strings retain the gateway's Unicode scalar limitation.
+
+`storage.json` is written once beside `layout.svg`, containing the shared box
+as prefixed key/value pairs captured when that SVG is prepared. It replaces the
+previous cookie-only diagnostic file. No saved data is restored. Later scripts
+can change live entries without refreshing this initial snapshot.

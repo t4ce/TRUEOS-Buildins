@@ -1,4 +1,4 @@
-//! Navigation-local diagnostic cookies. No disk reads or network integration.
+//! One navigation-local box for cookies and Web Storage. No disk reads or network integration.
 use std::{cell::RefCell, rc::Rc};
 
 pub(crate) type SharedCookies = Rc<RefCell<CookieJar>>;
@@ -10,13 +10,79 @@ pub(crate) struct CookieJar {
     full: bool,
 }
 impl CookieJar {
+    fn charge(&mut self, bytes: usize) -> bool {
+        if self.full || bytes > MAX_COOKIE_BYTES.saturating_sub(self.charged) {
+            self.full = true;
+            return false;
+        }
+        self.charged += bytes;
+        true
+    }
+    pub fn snapshot(&self) -> String {
+        serde_json::to_string(&self.pairs).expect("string pairs serialize")
+    }
+    pub fn storage(&mut self, action: &str, key: &str, value: &str) -> Option<serde_json::Value> {
+        use serde_json::json;
+        let internal = format!("localStorage:{key}");
+        Some(match action {
+            "get" => json!(
+                self.pairs
+                    .iter()
+                    .find(|(name, _)| name == &internal)
+                    .map(|(_, value)| value)
+            ),
+            "keys" => json!(
+                self.pairs
+                    .iter()
+                    .filter_map(|(key, _)| key.strip_prefix("localStorage:"))
+                    .collect::<Vec<_>>()
+            ),
+            "length" => json!(
+                self.pairs
+                    .iter()
+                    .filter(|(key, _)| key.starts_with("localStorage:"))
+                    .count()
+            ),
+            "key" => json!(key.parse::<usize>().ok().and_then(|i| {
+                self.pairs
+                    .iter()
+                    .filter_map(|(key, _)| key.strip_prefix("localStorage:"))
+                    .nth(i)
+            })),
+            "set" => {
+                let bytes = serde_json::to_string(&(&internal, value))
+                    .ok()?
+                    .len()
+                    .saturating_add(32);
+                if !self.charge(bytes) {
+                    return Some(json!(false));
+                }
+                if let Some((_, old)) = self.pairs.iter_mut().find(|(name, _)| name == &internal) {
+                    *old = value.to_owned();
+                } else {
+                    self.pairs.push((internal, value.to_owned()));
+                }
+                json!(true)
+            }
+            "remove" => {
+                self.pairs.retain(|(name, _)| name != &internal);
+                serde_json::Value::Null
+            }
+            "clear" => {
+                self.pairs
+                    .retain(|(name, _)| !name.starts_with("localStorage:"));
+                serde_json::Value::Null
+            }
+            _ => return None,
+        })
+    }
     pub fn ignore_further_writes(&mut self) {
         self.full = true;
     }
     pub fn get(&self) -> String {
         self.pairs
             .iter()
-            .map(|(n, v)| format!("{n}={v}"))
+            .filter_map(|(n, v)| n.strip_prefix("cookie:").map(|n| format!("{n}={v}")))
             .collect::<Vec<_>>()
             .join("; ")
     }
@@ -26,11 +92,9 @@ impl CookieJar {
         let charge = serde_json::to_string(text)
             .map_or(usize::MAX, |encoded| encoded.len())
             .saturating_add(32);
-        if self.full || charge > MAX_COOKIE_BYTES.saturating_sub(self.charged) {
-            self.full = true;
+        if !self.charge(charge) {
             return;
         }
-        self.charged += charge;
         let mut parts = text.split(';');
         let Some((name, value)) = parts.next().unwrap_or("").split_once('=') else {
             return;
@@ -54,7 +118,8 @@ impl CookieJar {
                 }
             }
         }
-        if let Some(index) = self.pairs.iter().position(|(n, _)| n == name) {
+        let name = format!("cookie:{name}");
+        if let Some(index) = self.pairs.iter().position(|(n, _)| n == &name) {
             if delete {
                 self.pairs.remove(index);
             } else {
@@ -92,5 +157,11 @@ mod tests {
         jar.set("a=changed");
         assert!(jar.get().starts_with("a=é; b="));
         assert!(jar.full);
+        assert!(
+            serde_json::to_vec(&serde_json::json!({"ok":true,"value":jar.get()}))
+                .unwrap()
+                .len()
+                <= MAX_COOKIE_BYTES
+        );
     }
 }

@@ -42,18 +42,18 @@ class SandboxWorkflow(unittest.TestCase):
     def test_cookie_snapshot_is_fresh_and_saved_only_with_svg(self):
         self.page("""<p>cookies</p><script>
           if(document.cookie!=='')throw Error('old cookie');
-          document.cookie='a=one; Path=/';
+          document.cookie='a=one; Path=/'; localStorage.setItem('a','stored');
           document.addEventListener('DOMContentLoaded',()=>Promise.resolve().then(()=>document.cookie='a=ready'));
         </script>""")
         report = self.run_page()
         self.assertEqual(report['scripts'][0]['status'], 'executed')
-        self.assertEqual((self.out / 'cookies.txt').read_text(), 'a=ready')
+        self.assertEqual(json.loads((self.out / 'storage.json').read_text()), [['cookie:a', 'ready'], ['localStorage:a', 'stored']])
         self.page("<p>fresh</p><script>if(document.cookie!=='')throw Error('restored')</script>")
         report = self.run_page()
         self.assertEqual(report['scripts'][0]['status'], 'executed')
-        self.assertEqual((self.out / 'cookies.txt').read_text(), '')
+        self.assertEqual(json.loads((self.out / 'storage.json').read_text()), [])
         self.run_page('--no-svg')
-        self.assertFalse((self.out / 'cookies.txt').exists())
+        self.assertFalse((self.out / 'storage.json').exists())
 
     def test_real_dom_css_and_svg_with_independent_script_failures(self):
         (self.capture / "style.css").write_text("#message{color:#123456}")

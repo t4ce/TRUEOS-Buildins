@@ -456,14 +456,16 @@ fn cookie_snapshot_resets_on_every_navigation_and_includes_ready_jobs() {
     let mut runtime = Runtime::start().unwrap();
     begin(&mut runtime, 91, r#"<script>
         document.cookie='before=one';
+        localStorage.setItem('before','local');
         document.addEventListener('DOMContentLoaded',()=>Promise.resolve().then(()=>document.cookie='ready=two'));
     </script>"#);
     snapshot(&mut runtime,91);
     assert_eq!(runtime.cookie_snapshot(),"before=one; ready=two");
+    assert!(runtime.storage_snapshot().contains("localStorage:before"));
     runtime.execute_pasted("document.cookie='late=three'".into()).unwrap();
     for _ in 0..16 { runtime.poll(); }
     assert_eq!(runtime.cookie_snapshot(),"before=one; ready=two; late=three");
-    begin(&mut runtime,92,"<script>if(document.cookie!=='')throw Error('old jar');document.cookie='fresh=yes'</script>");
+    begin(&mut runtime,92,"<script>if(document.cookie!==''||localStorage.length!==0)throw Error('old jar');document.cookie='fresh=yes'</script>");
     let (_,reports)=snapshot(&mut runtime,92);
     assert!(!reports.iter().any(|r|matches!(r,Report::Evaluated{result:Err(_),..})));
     assert_eq!(runtime.cookie_snapshot(),"fresh=yes");

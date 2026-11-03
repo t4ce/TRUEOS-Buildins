@@ -637,7 +637,7 @@ impl ApplicationHandler for Hull {
                     &self.page_url,
                     layout.image_boxes,
                 );
-                self.snapshot.prepare(&self.page_url, layout.svg, self.javascript.as_ref().map_or_else(String::new, |js| js.cookie_snapshot()));
+                self.snapshot.prepare(&self.page_url, layout.svg, self.javascript.as_ref().map_or_else(||"[]".into(), |js| js.storage_snapshot()));
                 self.layout_generation = Some(self.generation);
                 self.layout_extent = layout.line_extent;
                 self.links = links::Links::new(

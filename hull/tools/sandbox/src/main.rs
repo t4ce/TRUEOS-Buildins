@@ -402,7 +402,7 @@ fn run(options: Options) -> Result<(), String> {
     // Do not leave a previous successful SVG beside a failed or JS-only run.
     for name in [
         "layout.svg",
-        "cookies.txt",
+        "storage.json",
         "layout.json",
         "report.json",
         "trace.jsonl",
@@ -422,7 +422,7 @@ fn run(options: Options) -> Result<(), String> {
     let started = Instant::now();
     let mut trace = Vec::new();
     let mut turns = 0usize;
-    let mut cookies = String::new();
+    let mut cookies = "[]".to_owned();
     let (frozen, experiments) = if options.inspect || options.no_js {
         for source in &mut inventory {
             source["status"] = json!(if options.inspect {
@@ -498,7 +498,7 @@ fn run(options: Options) -> Result<(), String> {
             }
         }
         write_json(&options.out.join("admitted/scripts.json"), &json!(selected))?;
-        cookies = runtime.cookie_snapshot();
+        cookies = runtime.storage_snapshot();
         (frozen, experiments)
     };
     let javascript_wall_ms = started.elapsed().as_secs_f64() * 1000.0;
@@ -525,7 +525,7 @@ fn run(options: Options) -> Result<(), String> {
             return Err("layout export exceeds artifact limit".into());
         }
         fs::write(options.out.join("layout.svg"), &export.svg).map_err(|e| e.to_string())?;
-        fs::write(options.out.join("cookies.txt"), &cookies).map_err(|e| e.to_string())?;
+        fs::write(options.out.join("storage.json"), &cookies).map_err(|e| e.to_string())?;
         fs::write(options.out.join("layout.json"), &export.json).map_err(|e| e.to_string())?;
         layout_stats = json!({"ms":start.elapsed().as_secs_f64()*1000.0,"boxes":export.line_rects.len(),"text_runs":export.text_runs.len(),"images":export.image_boxes.len(),"extent":export.line_extent});
     }
