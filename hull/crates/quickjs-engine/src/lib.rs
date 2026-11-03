@@ -468,7 +468,9 @@ impl Engine {
     /// Evaluate a prepared external entry through QuickJS's module map, so
     /// repeated script elements and import() share one execution/namespace.
     pub fn load_module(&mut self, url: &str) -> Result<(), String> {
-        if self.modules.is_none() || url.len()>4096 {return Err("Module loader is absent or URL exceeds budget".into());}
+        if self.modules.is_none() || url.len() > 4096 {
+            return Err("Module loader is absent or URL exceeds budget".into());
+        }
         let name = CString::new(url).map_err(|_| "Module URL contains NUL")?;
         let started = self.begin_call()?;
         let status = unsafe { hull_quickjs_load_module(self.native.as_ptr(), name.as_ptr()) };

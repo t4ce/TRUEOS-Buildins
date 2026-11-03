@@ -111,6 +111,43 @@ fn no_errors(reports: &[Report]) {
     );
 }
 #[test]
+fn wide_static_graph_with_ui_turn_delays_waits_for_preparation_without_spending_js_time() {
+    let sources = (0..40)
+        .map(|i| {
+            (
+                format!("https://fixture.test/path/part{i}.js"),
+                format!("export const value{i}={i};"),
+            )
+        })
+        .collect::<Vec<_>>();
+    let imports = (0..40)
+        .map(|i| format!("import './part{i}.js';"))
+        .collect::<String>();
+    let html = format!(
+        "<p>before</p><script type=module>{imports}document.querySelector('p').textContent='all prepared'</script>"
+    );
+    let mut r = runtime(
+        &html,
+        sources
+            .iter()
+            .map(|(url, code)| (url.as_str(), code.as_str()))
+            .collect(),
+    );
+    let start = Instant::now();
+    let mut reports = Vec::new();
+    let doc = loop {
+        reports.extend(r.poll());
+        if let Some(doc) = r.take_initial_document(1) {
+            break doc;
+        }
+        assert!(start.elapsed() < Duration::from_secs(5));
+        std::thread::sleep(Duration::from_millis(20));
+    };
+    assert_eq!(text(&doc), "all prepared");
+    assert_eq!(netfs::requested().len(), 40);
+    no_errors(&reports);
+}
+#[test]
 fn inline_module_graph_cycles_and_top_level_await_complete_before_snapshot() {
     let mut r = runtime(
         r#"<p>before</p><script type=module>import {answer} from './a.js';document.querySelector('p').textContent=String(answer);</script>"#,

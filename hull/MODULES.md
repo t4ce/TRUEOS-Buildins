@@ -44,9 +44,11 @@ the realm, promises, aliases and RAM-only source cache.
 
 Limits per page: 64 source URLs, 1 MiB per source, 8 MiB aggregate, 32 outstanding
 dynamic imports, 256 static requests per module, 4 KiB URLs, 2 seconds per fetch,
-and 5 seconds cumulative download waiting. The original 250 ms cumulative active
+and 5 seconds cumulative resource waiting (downloads and between-turn graph
+preparation). At most four module probes are admitted per turn with a cooperative
+20 ms preparation deadline. The original 250 ms cumulative active
 JavaScript allowance remains, including parser/host work charged by engine calls.
-The initial 250 ms wall window excludes download waits, with an overall initial
+The initial 250 ms wall window excludes resource waits, with an overall initial
 cap of 5.25 seconds. Late imports use remaining page budgets and do not cause a
 second render snapshot. No general fetch, XHR, filesystem, timer or process API
 is exported. Source/count/wait failures and unhandled rejections are reported.

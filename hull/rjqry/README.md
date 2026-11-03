@@ -33,7 +33,8 @@ not an OS preemption mechanism. Batched mutations may be partial on failure.
 The admission also bounds class operations to 16 KiB/256 tokens per incoming or
 existing class list, and param conversion to 2,048 values, depth 32 and 128 keys
 per object, so core inner loops stay bounded between deadline checks.
-There is no new redraw, network, filesystem, timer or background task. Speedup
+This binding adds no redraw, network, filesystem, timer or background task. Hull's
+separate source/CDN loader is documented in ../MODULES.md. Speedup
 has not been benchmarked: request/result conversion still crosses the JSON host
 bridge, while collection and mutation loops execute in Rust.
 

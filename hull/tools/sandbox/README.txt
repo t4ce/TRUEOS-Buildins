@@ -19,6 +19,19 @@ media, fonts, iframes and arbitrary page navigation are not fetched. --scripts
 also saves external JavaScript but does not enable it in replay. HTTP errors
 are recorded; there is no login, cookie handling or access-control bypass.
 
+To capture an ESM entry and its static graph without executing it:
+
+  python3 hull/tools/sandbox/sandbox.py capture 'https://example.com/' /tmp/hull-page \
+    --scripts --module is-number@7.0.0
+  python3 hull/tools/sandbox/sandbox.py replay /tmp/hull-page --modules --turn-ms 0
+
+--module accepts a bare npm specifier or HTTPS URL and can be repeated for dynamic
+entry points. QuickJS's parser discovers static dependencies; arbitrary computed
+imports cannot be enumerated at capture time. Replay diagnostics identify missing
+URLs, which can be added as seeds. esm.sh is primary, jsDelivr +esm is fallback
+for npm entries. Site-relative /_app/... requests remain on the site's origin.
+See hull/MODULES.md for source preparation, provider rules and API limits.
+
 For a browser-saved HTML file (preserves the exact bytes being investigated):
 
   python3 hull/tools/sandbox/sandbox.py capture 'https://original/page/' /tmp/hull-page \
@@ -66,18 +79,23 @@ Useful comparisons:
   --turn-ms 20     Default: Hull's current idle delay between actor turns.
   --turn-ms 0      Fast headless scheduling; exposes elapsed-wait effects.
   --no-window      Reproduce an environment without window globals.
-  --external       Experiment: admit captured external JS; production still skips it.
+  --external       Legacy experiment: admit captured external bodies without graph loading.
+  --modules        Enable production source/module loading from captured tickets only.
   --prelude FILE   Experiment: execute local JS before page scripts (node 0).
   --only-node N    Experiment: execute one collected source independently.
   --replace N=FILE Experiment: substitute a source without editing the capture.
   --out DIR        Separate artifacts for comparisons.
   --width/--height Content viewport, initially 1280x720, not whole native frame.
 
-Production active 250 ms allowance, per-call 25 ms interrupts and initial 250 ms
-elapsed window are unchanged. The child process additionally has a 30 s host
+Production retains the active 250 ms allowance and per-call 25 ms interrupts.
+Resource-enabled initial pages exclude bounded resource waiting from the 250 ms
+elapsed window (downloads/preparation up to 5 s, 5.25 s overall initial cap). The child
+process additionally has a 30 s host
 timeout, 15 s CPU limit, 1 GiB address-space limit and 64 MiB per-file limit on POSIX.
 These are practical exploration limits, not a general OS security boundary.
-Guest JavaScript has no network, filesystem, shell, timer or process API.
+There is no general-purpose guest fetch/XHR, filesystem, shell, timer or process
+API. Imports request host-managed HTTPS JavaScript sources; replay fulfills them
+only from captured files and never contacts the live CDN.
 
 DOM-backed replay also installs Hull's native rjqry admission as $/jQuery. For
 example $('#message').text('ready').addClass('ready') mutates the same rp5 tree

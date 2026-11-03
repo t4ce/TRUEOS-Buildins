@@ -224,8 +224,10 @@ impl Policy {
                                 }
                                 Some(target)
                             };
-                            let key=mapping_key(&base,key)?;
-                            if !self.imports.contains_key(&key)&&self.imports.len()>=128{return Err("Import maps exceed 128 aggregate entries".into());}
+                            let key = mapping_key(&base, key)?;
+                            if !self.imports.contains_key(&key) && self.imports.len() >= 128 {
+                                return Err("Import maps exceed 128 aggregate entries".into());
+                            }
                             self.imports.entry(key).or_insert(target);
                         }
                     }
@@ -265,6 +267,7 @@ pub(crate) struct Loader {
     pub events: Vec<Event>,
     bytes: usize,
     parse_allowance: usize,
+    parse_deadline: Instant,
     wait_start: Option<Instant>,
     waited: Duration,
     closed: bool,
@@ -294,7 +297,8 @@ impl Loader {
             imports: Vec::new(),
             events: Vec::new(),
             bytes: 0,
-            parse_allowance: 1,
+            parse_allowance: 4,
+            parse_deadline: Instant::now() + Duration::from_millis(20),
             wait_start: None,
             waited: Duration::ZERO,
             closed: false,
@@ -302,6 +306,14 @@ impl Loader {
     }
     pub(crate) fn waited(&self) -> Duration {
         self.waited + self.wait_start.map_or(Duration::ZERO, |t| t.elapsed())
+    }
+    fn wait<T>(&mut self) -> Prepared<T> {
+        // Between-turn graph preparation is resource waiting too. Its parser
+        // CPU still consumes the separate cumulative QuickJS allowance.
+        if self.wait_start.is_none() {
+            self.wait_start = Some(Instant::now());
+        }
+        Prepared::Pending
     }
     pub(crate) fn pending(&self) -> bool {
         !self.imports.is_empty()
@@ -333,7 +345,8 @@ impl Loader {
         self.entries.insert(url, State::Failed(error));
     }
     pub(crate) fn poll(&mut self, engine: &mut Engine) {
-        self.parse_allowance = 1;
+        self.parse_allowance = 4;
+        self.parse_deadline = Instant::now() + Duration::from_millis(20);
         if self.waited() >= MAX_WAIT && !self.closed {
             self.close();
         }
@@ -485,8 +498,8 @@ impl Loader {
         let deps = if let Some(deps) = deps {
             deps
         } else {
-            if self.parse_allowance == 0 {
-                return Prepared::Pending;
+            if self.parse_allowance == 0 || Instant::now() >= self.parse_deadline {
+                return self.wait();
             }
             self.parse_allowance -= 1;
             let raw = match engine.module_dependencies(&bytes, &url) {
@@ -532,7 +545,7 @@ impl Loader {
     pub(crate) fn module(&mut self, engine: &mut Engine, url: &str) -> Prepared<String> {
         match self.graph(engine, url, &mut HashSet::new()) {
             Prepared::Ready(()) => Prepared::Ready(self.policy.borrow().canonical(url)),
-            Prepared::Pending => Prepared::Pending,
+            Prepared::Pending => self.wait(),
             Prepared::Failed(error) => {
                 let fallback = self.policy.borrow_mut().switch(url);
                 if let Some(fallback) = fallback {
@@ -558,8 +571,8 @@ impl Loader {
         bytes: &[u8],
     ) -> Prepared<()> {
         if !self.inline.contains_key(origin) {
-            if self.parse_allowance == 0 {
-                return Prepared::Pending;
+            if self.parse_allowance == 0 || Instant::now() >= self.parse_deadline {
+                return self.wait();
             }
             self.parse_allowance -= 1;
             let deps = engine.module_dependencies(bytes, origin).and_then(|names| {
@@ -583,7 +596,7 @@ impl Loader {
             }
         }
         if pending {
-            Prepared::Pending
+            self.wait()
         } else {
             Prepared::Ready(())
         }

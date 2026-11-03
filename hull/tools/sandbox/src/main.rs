@@ -355,10 +355,8 @@ fn script_sources(
         selected.push(source);
     }
     if options.external {
-        experiments.push(
-            "captured external JavaScript enabled without the module graph loader"
-                .into(),
-        );
+        experiments
+            .push("captured external JavaScript enabled without the module graph loader".into());
     }
     Ok((selected, experiments))
 }
@@ -549,9 +547,9 @@ fn run(options: Options) -> Result<(), String> {
     let failed = inventory.iter().filter(|s| s["status"] == "failed").count();
     let report = json!({"url":page_url,"mode":if options.inspect{"inspect"}else if options.no_js{"static"}else{"replay"},
         "viewport":[options.width,options.height],"turn_ms":options.turn_ms,"window":!options.no_window,
-        "active_budget_ms":250,"initial_wall_window_ms":250,"javascript_wall_ms":javascript_wall_ms,"turns":turns,
+        "active_budget_ms":250,"initial_wall_window_ms":250,"module_loading":options.modules,"resource_wait_budget_ms":if options.modules{5000}else{0},"javascript_wall_ms":javascript_wall_ms,"turns":turns,
         "parse":{"nodes":parse_nodes,"errors":parse_errors},"initialization":initialized,"experiments":experiments,
-        "scripts":inventory,"css_requests":css_requests,"resources":trace.iter().filter(|e|e["event"]=="resource").collect::<Vec<_>>(),"layout":layout_stats,"diagnostics":logl::take(),
+        "scripts":inventory,"css_requests":css_requests,"resources":trace.iter().filter(|e|e["event"]=="resource").collect::<Vec<_>>(),"job_errors":trace.iter().filter(|e|e["event"]=="job-error").map(|e|&e["error"]).collect::<Vec<_>>(),"layout":layout_stats,"diagnostics":logl::take(),
         "notes":["Replay has no live network, kernel, GPU, media or image decoding.","SVG is Hull's diagnostic text/box export, not a browser screenshot.","host_turn_ms includes actor and snapshot work; it is not an exact QuickJS CPU counter."]});
     write_json(&options.out.join("report.json"), &report)?;
     println!(

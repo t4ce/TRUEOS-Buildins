@@ -396,13 +396,24 @@ def source_digest(kernel: Path):
     return digest.hexdigest()
 
 
+def cabi_contracts(path: Path):
+    text = re.sub(r"//[^\n]*", "", path.read_text())
+    # Rust caller-safety qualifiers do not change a C function's binary ABI.
+    declarations = re.finditer(
+        r"pub\s+(?:(?:safe|unsafe)\s+)?(?P<signature>fn\s+(?P<name>trueos_cabi_\w+)\s*\()",
+        text,
+    )
+    return {
+        match["name"]: re.sub(
+            r"\s+", "", text[match.start("signature"):text.index(";", match.end())]
+        ).replace(",)", ")")
+        for match in declarations
+    }
+
+
 def verify_abi(kernel: Path, output: Path, names):
-    def contracts(path):
-        text = re.sub(r"//[^\n]*", "", path.read_text())
-        return {match[1]: re.sub(r"\s+", "", text[match.start():text.index(";", match.end())]).replace(",)", ")")
-                for match in re.finditer(r"pub fn (trueos_cabi_\w+)\s*\(", text)}
-    sdk = contracts(ROOT / "vendor/trueos-v/src/bp_abi.rs")
-    host = contracts(kernel / "crates/trueos-v/src/bp_abi.rs")
+    sdk = cabi_contracts(ROOT / "vendor/trueos-v/src/bp_abi.rs")
+    host = cabi_contracts(kernel / "crates/trueos-v/src/bp_abi.rs")
     loader = (kernel / "src/hv/blueprint/blueprint.rs").read_text()
     unix = (kernel / "src/unix_compat.rs").read_text()
     prebind = (kernel / "src/hv/blueprint/prebind.rs").read_text()

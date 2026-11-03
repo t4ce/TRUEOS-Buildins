@@ -135,7 +135,9 @@ def capture_page(args, executable: Path) -> None:
     def module_tool(mode, value, base):
         process = subprocess.run([str(executable), mode, str(value), base, str(capture)],
                                  cwd=tempfile.gettempdir(), capture_output=True,
-                                 text=True, check=True, timeout=10)
+                                 text=True, timeout=10)
+        if process.returncode:
+            raise ValueError(process.stderr.strip() or f"module helper failed: {process.returncode}")
         return json.loads(process.stdout)
 
     seen_modules = set()
@@ -216,6 +218,11 @@ def summary(report: dict) -> None:
         print(plain(f"  {source['index']:3} nodes={source['nodes']} {source['status']}: {label}"))
     for experiment in report["experiments"]:
         print("  experiment:", experiment)
+    for event in report.get("resources", []):
+        if event["status"] in {"failed", "fallback", "import-failed", "configuration-failed"}:
+            print(plain(f"  resource {event['status']}: {event['url']} {event['detail']}"))
+    for error in report.get("job_errors", []):
+        print(plain("  JavaScript job failed: " + error.splitlines()[0]))
 
 
 def plain(text: str) -> str:
@@ -300,7 +307,7 @@ def parser() -> argparse.ArgumentParser:
         replay.add_argument("--out", type=Path)
         replay.add_argument("--no-js", action="store_true", help="static baseline")
         replay.add_argument("--no-svg", action="store_true", help="script diagnostics only")
-        replay.add_argument("--external", action="store_true", help="experiment: admit captured external sources")
+        replay.add_argument("--external", action="store_true", help="legacy experiment: admit captured external bodies without graph loading")
         replay.add_argument("--no-window", action="store_true", help="experiment: omit window globals")
         replay.add_argument("--modules", action="store_true", help="enable production source loading from captured resources only")
         replay.add_argument("--only-node", type=int)

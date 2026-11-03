@@ -530,8 +530,11 @@ async fn worker(
                                 let document = page.document.as_ref().map(|d| d.borrow());
                                 match Loader::new(&mut value, &page.url, document.as_deref()) {
                                     Ok(mut loader) => {
-                                        for source in
-                                            page.sources.iter().filter(|s| s.bytes.is_none()).take(module_loader::MAX_FILES)
+                                        for source in page
+                                            .sources
+                                            .iter()
+                                            .filter(|s| s.bytes.is_none())
+                                            .take(module_loader::MAX_FILES)
                                         {
                                             let kind =
                                                 source.kind.split(';').next().unwrap_or("").trim();

@@ -18,6 +18,19 @@ spec.loader.exec_module(build)
 
 
 class BuildInputs(unittest.TestCase):
+    def test_rust_safety_qualifiers_preserve_cabi_contracts(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "abi.rs"
+            path.write_text('unsafe extern "C" { pub fn trueos_cabi_status(id: u32) -> i32; }')
+            original = build.cabi_contracts(path)
+            for qualifier in ("safe ", "unsafe "):
+                path.write_text(
+                    'unsafe extern "C" { pub ' + qualifier
+                    + 'fn trueos_cabi_status(id: u32) -> i32; }')
+                self.assertEqual(build.cabi_contracts(path), original)
+            path.write_text('unsafe extern "C" { pub safe fn trueos_cabi_status(id: u64) -> i32; }')
+            self.assertNotEqual(build.cabi_contracts(path), original)
+
     def test_dependency_tables_are_rebased_after_the_trauma_move(self):
         manifest = build.ROOT / "trauma/Cargo.toml"
         with tempfile.TemporaryDirectory() as directory:

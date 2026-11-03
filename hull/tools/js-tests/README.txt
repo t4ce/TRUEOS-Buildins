@@ -6,7 +6,7 @@ use the actual Winit TRUEOS/core record types; they never create a window.
 
 Actor startup and replace_page remain inactive. begin_page admits the parsed
 document's scripts with one 250 ms active execution allowance and a 250 ms
-initial wall window. Resource-enabled pages exclude bounded download waiting
+initial wall window. Resource-enabled pages exclude bounded resource waiting
 from that window (up to 5 seconds total). Initialization fixtures check real rp5 mutations, frozen
 render snapshots, faults, navigation reset, infinite sources and microtask
 chains. Other fixtures call Runtime::run explicitly to isolate execution paths.
