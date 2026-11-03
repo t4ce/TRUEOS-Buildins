@@ -359,7 +359,7 @@ impl Hull {
                 ));
             } else {
                 shellio::linef(format_args!(
-                    "  {}: external nodes={:?} type={} not fetched {}",
+                    "  {}: external nodes={:?} type={} loader-owned {}",
                     index + 1,
                     source.nodes,
                     kind,
@@ -368,7 +368,7 @@ impl Hull {
             }
         }
         shellio::line(
-            "hull: inline JavaScript is admitted before layout; :paste runs your own source with :end",
+            "hull: page scripts use bounded source loading before layout; :paste runs your own source with :end",
         );
     }
 

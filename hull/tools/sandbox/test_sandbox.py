@@ -88,6 +88,49 @@ class SandboxWorkflow(unittest.TestCase):
         self.assertIn('#13579b', (self.out / "layout.svg").read_text())
         self.assertIn('status=native%20ready', (self.out / "console.log").read_text())
 
+    def test_modules_use_captured_fallback_and_render_the_result(self):
+        (self.capture / "fallback.js").write_text("export const answer='CDN fallback ready';")
+        self.page("<p>before</p><script>import('demo@1.0.0').then(m=>document.querySelector('p').textContent=m.answer)</script>", {
+            "https://cdn.jsdelivr.net/npm/demo@1.0.0/+esm": {"status":"ok","path":"fallback.js","kind":"module"},
+        })
+        report = self.run_page("--modules")
+        self.assertEqual(svg_text(self.out / "layout.svg"), "CDN fallback ready")
+        self.assertTrue(any(e["status"] == "fallback" for e in report["resources"]))
+        self.assertEqual(report["css_requests"], [])
+        self.assertIn("esm.sh/demo@1.0.0", (self.out / "console.log").read_text())
+
+    def test_svelte_shaped_current_script_and_dynamic_graph_are_offline(self):
+        (self.capture / "start.js").write_text("export function init(){globalThis.initialized=true}export function start(app,element){if(!initialized||element.id!=='container')throw Error('bootstrap');document.querySelector('p').textContent=app.answer}")
+        (self.capture / "app.js").write_text("export const answer='module bootstrap ready';")
+        self.page("""<div id=container><p>before</p><script>{
+const element=document.currentScript.parentElement;
+import('/_app/start.js').then(async kit=>{kit.init();const app=await import('/_app/app.js');kit.start(app,element)});
+}</script></div>""", {
+            "https://fixture.test/_app/start.js": {"status":"ok","path":"start.js","kind":"module"},
+            "https://fixture.test/_app/app.js": {"status":"ok","path":"app.js","kind":"module"},
+        })
+        report = self.run_page("--modules")
+        self.assertEqual(svg_text(self.out / "layout.svg"), "module bootstrap ready")
+        self.assertFalse(any("esm.sh" in e["url"] for e in report["resources"]))
+
+    def test_capture_module_graph_uses_the_parser_without_executing_bodies(self):
+        from unittest.mock import patch
+        html = b"<p>before</p><script type=module>import 'demo@1.0.0';</script>"
+        bodies = {
+            "https://fixture.test/page": html,
+            "https://esm.sh/demo@1.0.0?target=es2022&bundle": b"export {answer} from './answer.js';globalThis.captureMustNotExecute=1;",
+            "https://esm.sh/answer.js": b"throw Error('capture executed module body');export const answer=42;",
+        }
+        def fetch(url, limit, **kwargs):
+            self.assertLessEqual(len(bodies[url]), limit)
+            return bodies[url], url, "text/javascript"
+        args = sandbox.parser().parse_args(["capture", "https://fixture.test/page", str(self.capture), "--no-css", "--module", "demo@1.0.0"])
+        with patch.object(sandbox, "fetch", side_effect=fetch):
+            sandbox.capture_page(args, self.executable)
+        manifest = json.loads((self.capture / "capture.json").read_text())
+        self.assertEqual(manifest["resources"]["https://esm.sh/answer.js"]["module_status"], "ready")
+        self.assertTrue(all(value["status"] == "ok" for value in manifest["resources"].values()))
+
     def test_replacement_isolation_static_baseline_and_js_only_cleanup(self):
         self.page("<p>before</p><script>throw Error('first')</script><script>throw Error('second')</script>")
         report = self.run_page("--no-js")

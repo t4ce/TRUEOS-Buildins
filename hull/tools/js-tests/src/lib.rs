@@ -280,21 +280,21 @@ mod tests {
         let page = sources(
             "<base href='https://cdn.fixture.test/base/'><script src='./outside.js#first'></script><script src='./outside.js#second'></script><script>if(typeof fetchedExternal!=='undefined')throw Error('external script executed');</script>",
         );
-        assert_eq!(page.len(), 2);
+        assert_eq!(page.len(), 3);
         assert_eq!(page[0].origin, "https://cdn.fixture.test/base/outside.js");
         assert!(page[0].bytes.is_none());
-        assert_eq!(page[0].nodes.len(), 2);
+        assert_eq!(page[0].nodes.len(), 1);
         let mut runtime = Runtime::start().unwrap();
         runtime.replace_page(41, "https://fixture.test/", page);
         runtime.run().unwrap();
-        let reports = until(&mut runtime, |reports| completed(reports) == 2);
+        let reports = until(&mut runtime, |reports| completed(reports) == 3);
         assert_success(&reports, 1);
         assert_eq!(
             reports
                 .iter()
                 .filter(|report| matches!(report, Report::Skipped { .. }))
                 .count(),
-            1
+            2
         );
     }
 

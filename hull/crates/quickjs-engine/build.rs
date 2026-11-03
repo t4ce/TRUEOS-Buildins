@@ -325,6 +325,12 @@ int hull_quickjs_add_module(void *pointer, const char *name, const char *source,
     if (!entry->name || !entry->source) { free(entry->name); free(entry->source); free(entry); return -1; }
     entry->next = engine->modules; engine->modules = entry; return 0;
 }
+int hull_quickjs_load_module(void *pointer, const char *name) {
+    HullQuickJs *engine = pointer; JS_UpdateStackTop(engine->runtime);
+    JSValue promise = JS_LoadModule(engine->context, name, name);
+    int status = JS_IsException(promise) ? -1 : 0;
+    JS_FreeValue(engine->context, promise); return status;
+}
 int hull_quickjs_module_dependencies(void *pointer, const char *source, size_t length, const char *origin,
                                     void (*item)(void *, const char *, size_t), void *opaque) {
     HullQuickJs *engine = pointer; JSContext *ctx = engine->context;

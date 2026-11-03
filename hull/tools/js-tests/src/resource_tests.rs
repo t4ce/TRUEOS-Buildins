@@ -47,6 +47,24 @@ pub(super) fn text(doc: &rp5::Document) -> String {
         .0;
     doc.text_content(node)
 }
+#[test]
+fn repeated_classic_elements_execute_twice_but_repeated_module_urls_execute_once(){
+    let mut r=runtime(r#"<p>before</p><script src='./repeat.js' id='first'></script><script src='./repeat.js' id='second'></script><script type=module src='./once.js'></script><script type=module src='./once.js'></script><script>document.querySelector('p').textContent=visits.join(',')+':'+moduleRuns</script>"#,vec![
+        ("https://fixture.test/path/repeat.js","globalThis.visits=globalThis.visits||[];visits.push(document.currentScript.getAttribute('id'));"),
+        ("https://fixture.test/path/once.js","globalThis.moduleRuns=(globalThis.moduleRuns||0)+1;")]);
+    let(doc,reports)=finish(&mut r,1);assert_eq!(text(&doc),"first,second:1");no_errors(&reports);assert_eq!(netfs::requested().len(),2);
+}
+#[test]
+fn import_map_relative_keys_are_document_relative_and_prefixes_cannot_backtrack(){
+    use crate::javascript::module_loader::Policy;
+    let doc=rp5::parse(r#"<script type=importmap>{"imports":{"./x.js":"./mapped.js","lib/":"./library/"}}</script>"#);
+    let mut p=Policy::default();p.document_maps(&doc,PAGE).unwrap();
+    assert_eq!(p.resolve("https://fixture.test/path/entry.js","./x.js").unwrap(),"https://fixture.test/path/mapped.js");
+    assert_eq!(p.resolve("https://fixture.test/other/entry.js","./x.js").unwrap(),"https://fixture.test/other/x.js");
+    assert!(p.resolve(PAGE,"lib/../escape.js").is_err());
+    assert_eq!(p.candidates(PAGE,"https://esm.sh/gh/owner/repo").unwrap().len(),1);
+    assert_eq!(p.candidates(PAGE,"https://esm.sh/v135/react@18").unwrap().len(),1);
+}
 fn no_errors(reports: &[Report]) {
     assert!(
         !reports.iter().any(|r| matches!(

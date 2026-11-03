@@ -1,5 +1,4 @@
 //! Extract inert script sources. Extraction never parses or executes JavaScript.
-use std::collections::HashMap;
 
 use rp5::{Document, Namespace, NodeId};
 use trueos::logl;
@@ -39,7 +38,6 @@ impl Scripts {
                 }
             }
         }
-        let mut external: HashMap<String, usize> = HashMap::new();
         for id in nodes {
             let Some(("script", namespace, attrs)) = document.element(id) else {
                 continue;
@@ -59,22 +57,16 @@ impl Scripts {
                         continue;
                     }
                 };
-                url.set_fragment(None);
+                if !kind.split(';').next().unwrap_or("").trim().eq_ignore_ascii_case("module"){url.set_fragment(None);}
                 let origin = url.to_string();
-                if let Some(&index) = external.get(&origin) {
-                    self.sources[index].nodes.push(id);
-                    continue;
-                }
-                let index = self.sources.len();
-                external.insert(origin.clone(), index);
                 self.sources.push(ScriptSource {
                     nodes: vec![id],
                     origin,
                     kind,
                     bytes: None,
                 });
-                // Keep the resolved source reference for inspection. Scripts
-                // cannot affect this static renderer and consume no network work.
+                // Keep each element in document order. The resource loader
+                // deduplicates downloads; classic execution is per element.
             } else {
                 self.sources.push(ScriptSource {
                     nodes: vec![id],
@@ -91,7 +83,7 @@ impl Scripts {
         logl::log(
             logl::level::INFO,
             format_args!(
-                "hull: scripts collected={} (external sources are not fetched)",
+                "hull: scripts collected={} (external bodies are loader-owned)",
                 self.sources.len(),
             ),
         );

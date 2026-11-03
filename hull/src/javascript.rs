@@ -837,7 +837,9 @@ async fn worker(
             })
         };
         page.current_script.set(current_script);
-        let result = engine.eval(bytes, &origin, module);
+        let result = if module&&external&&resources.is_some(){
+            engine.add_module(&origin,bytes).and_then(|_|engine.load_module(&origin))
+        }else{engine.eval(bytes, &origin, module)};
         // Clear even on syntax errors or interruption, before any queued jobs,
         // console delivery, pasted code or input callbacks are admitted.
         page.current_script.set(None);
