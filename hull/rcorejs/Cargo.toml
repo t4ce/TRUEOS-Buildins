@@ -1,0 +1,10 @@
+[package]
+name = "rcorejs"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Small dependency-free native translations from pinned core-js sources"
+
+[dependencies]
+
+[workspace]

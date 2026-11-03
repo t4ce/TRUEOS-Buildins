@@ -1,0 +1,29 @@
+import { createConversionChecker } from '../helpers/helpers.js';
+
+import cbrt from 'core-js-pure/es/math/cbrt';
+
+QUnit.test('Math.cbrt', assert => {
+  assert.isFunction(cbrt);
+  assert.name(cbrt, 'cbrt');
+  assert.arity(cbrt, 1);
+  assert.same(cbrt(NaN), NaN);
+  assert.same(cbrt(0), 0);
+  assert.same(cbrt(-0), -0);
+  assert.same(cbrt(Infinity), Infinity);
+  assert.same(cbrt(-Infinity), -Infinity);
+  assert.same(cbrt(-8), -2);
+  assert.same(cbrt(8), 2);
+  assert.closeTo(cbrt(-1000), -10, 1e-11);
+  assert.closeTo(cbrt(1000), 10, 1e-11);
+  assert.same(cbrt(27), 3, 'exact cube root of 27');
+  assert.same(cbrt(64), 4, 'exact cube root of 64');
+  assert.same(cbrt(125), 5, 'exact cube root of 125');
+  assert.same(cbrt(-27), -3, 'exact cube root of -27');
+  assert.closeTo(cbrt(1e-300), 1e-100, 1e-114, 'extreme small value');
+  assert.closeTo(cbrt(1e300), 1e100, 1e86, 'extreme large value');
+
+  const checker = createConversionChecker(1000);
+  assert.closeTo(cbrt(checker), 10, 1e-11);
+  assert.same(checker.$valueOf, 1, 'valueOf calls');
+  assert.same(checker.$toString, 0, 'toString calls');
+});
