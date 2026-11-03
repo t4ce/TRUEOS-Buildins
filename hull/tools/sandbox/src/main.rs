@@ -423,6 +423,7 @@ fn run(options: Options) -> Result<(), String> {
     let mut trace = Vec::new();
     let mut turns = 0usize;
     let mut cookies = "[]".to_owned();
+    let mut video_requests=Vec::new();
     let (frozen, experiments) = if options.inspect || options.no_js {
         for source in &mut inventory {
             source["status"] = json!(if options.inspect {
@@ -453,6 +454,10 @@ fn run(options: Options) -> Result<(), String> {
                 trace.push(event);
             }
             let active_turn_ms = turn_start.elapsed().as_secs_f64() * 1000.0;
+            if let Some((generation,request))=runtime.take_video_request(){
+                video_requests.push(json!({"id":request.id,"node":request.node,"url":request.url}));
+                runtime.video_status(generation,request.id,-95);
+            }
             trace.push(json!({"event":"turn","turn":turns,"host_turn_ms":active_turn_ms}));
             turns += 1;
             if let Some(frozen) = runtime.take_initial_document(1) {
@@ -571,7 +576,7 @@ fn run(options: Options) -> Result<(), String> {
         .cloned()
         .unwrap_or(Value::Null);
     let failed = inventory.iter().filter(|s| s["status"] == "failed").count();
-    let report = json!({"url":page_url,"mode":if options.inspect{"inspect"}else if options.no_js{"static"}else{"replay"},
+    let report = json!({"video_requests":video_requests,"url":page_url,"mode":if options.inspect{"inspect"}else if options.no_js{"static"}else{"replay"},
         "viewport":[options.width,options.height],"turn_ms":options.turn_ms,"window":!options.no_window,
         "active_budget_ms":250,"initial_wall_window_ms":250,"module_loading":options.modules,"resource_wait_budget_ms":if options.modules{5000}else{0},"javascript_wall_ms":javascript_wall_ms,"turns":turns,
         "parse":{"nodes":parse_nodes,"errors":parse_errors},"initialization":initialized,"experiments":experiments,

@@ -185,6 +185,7 @@
         set crossOrigin(value) { if(value==null)linkAttribute(this,'remove','crossorigin');else linkAttribute(this,'set','crossorigin',string(value)); }
     }
     class HTMLTemplateElement extends HTMLElement {get content(){return wrap(get(this,'templateContent'));}}
+    /* HULL_MEDIA */
     class DocumentFragment extends Node {
         querySelector(selector){required(arguments,1);return wrap(request('query',state(this).id,string(selector))[0]??null);}
         querySelectorAll(selector){required(arguments,1);return new NodeList(token,request('query',state(this).id,string(selector)));}
@@ -319,12 +320,12 @@
         const description = request('describe', id);
         let Constructor=description.type===9?Document:description.type===11?DocumentFragment:description.type===3?Text:description.type===8?Comment:description.type===1?Element:Node;
         if(description.type===1&&description.namespace==='http://www.w3.org/1999/xhtml')
-            Constructor=description.name==='LINK'?HTMLLinkElement:description.name==='TEMPLATE'?HTMLTemplateElement:HTMLElement;
+            Constructor=description.name==='LINK'?HTMLLinkElement:description.name==='TEMPLATE'?HTMLTemplateElement:description.name==='VIDEO'?HTMLVideoElement:HTMLElement;
         const node = new Constructor(token, id, description);
         wrappers.set(id, node);
         return node;
     }
-    for (const Constructor of [EventTarget, Event, CustomEvent, Node, CharacterData, Text, Comment, Element, HTMLElement, HTMLLinkElement, HTMLTemplateElement, DocumentFragment, Document, NodeList, HTMLCollection, DOMException]) {
+    for (const Constructor of [EventTarget, Event, CustomEvent, Node, CharacterData, Text, Comment, Element, HTMLElement, HTMLMediaElement, HTMLVideoElement, HTMLLinkElement, HTMLTemplateElement, DocumentFragment, Document, NodeList, HTMLCollection, DOMException]) {
         Object.defineProperty(Constructor.prototype, Symbol.toStringTag, {value:Constructor.name, configurable:true});
         Object.defineProperty(globalThis, Constructor.name, {value:Constructor, writable:true, configurable:true});
     }

@@ -21,6 +21,7 @@ mod console;
 mod css;
 mod favicon;
 mod images;
+mod video;
 mod javascript;
 mod javascript_dom;
 mod javascript_input;
@@ -69,6 +70,7 @@ struct Hull {
     layout_generation: Option<u64>,
     published_generation: Option<u64>,
     images: images::Images,
+    video:video::Playback,
     snapshot: snapshot::Snapshot,
     page_url: String,
     console: Option<console::Console>,
@@ -463,7 +465,9 @@ impl ApplicationHandler for Hull {
     fn about_to_wait(&mut self, event_loop: &dyn ActiveEventLoop) {
         self.poll_javascript_input();
         if let Some(javascript) = &mut self.javascript {
-            for report in javascript.poll() {
+            let reports=javascript.poll();
+            self.video.poll(javascript);
+            for report in reports {
                 match report {
                     javascript::Report::Resource {
                         generation,

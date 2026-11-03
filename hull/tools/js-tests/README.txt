@@ -103,3 +103,8 @@ arguments/context, cancellation, Promise checkpoints, navigation isolation,
 future timers leaving the frozen snapshot untouched, queue quotas and interrupts.
 The native engine alone and direct DOM-only fixtures do not install timers;
 the production page actor supplies the scheduling state.
+
+Video fixtures execute the production one-slot URL handoff over a mocked native
+ABI. They cover relative video/source URLs, coalescing multiple elements, play
+promises waiting for first-frame confirmation, failure/supersession, navigation
+isolation and no native close when Hull is dropped. No media is downloaded.

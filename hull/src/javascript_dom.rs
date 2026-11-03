@@ -19,6 +19,8 @@ mod url_api;
 pub(super) mod cookies;
 #[path="javascript_timers.rs"]
 pub(super) mod timers;
+#[path="javascript_media.rs"]
+pub(super) mod media;
 
 pub(super) fn install_url_with_timers(engine: &mut Engine, timers:Option<timers::SharedTimers>)->Result<(),String>{url_api::install_with_timers(engine,timers)}
 pub(super) fn install_url_only(engine: &mut Engine) -> Result<(), String> {
@@ -47,6 +49,7 @@ pub(super) fn install(engine: &mut Engine, document: SharedDocument) -> Result<(
         "about:blank",
         Rc::new(RefCell::new(cookies::CookieJar::default())),
         None,
+        None,
     )
 }
 
@@ -64,6 +67,7 @@ pub(super) fn install_with_window(
         "about:blank",
         Rc::new(RefCell::new(cookies::CookieJar::default())),
         None,
+        None,
     )
 }
 
@@ -75,7 +79,7 @@ pub(super) fn install_for_page(
     current_script: SharedCurrentScript,
     page_url: &str,
 ) -> Result<(), String> {
-    install_gateway(engine, document, window, current_script, page_url, Rc::new(RefCell::new(cookies::CookieJar::default())),None)
+    install_gateway(engine, document, window, current_script, page_url, Rc::new(RefCell::new(cookies::CookieJar::default())),None,None)
 }
 
 pub(super) fn install_for_page_with_cookies(
@@ -86,8 +90,9 @@ pub(super) fn install_for_page_with_cookies(
     page_url: &str,
     cookies: cookies::SharedCookies,
     timers:Option<timers::SharedTimers>,
+    media:Option<media::SharedMedia>,
 ) -> Result<(), String> {
-    install_gateway(engine, document, window, current_script, page_url, cookies,timers)
+    install_gateway(engine, document, window, current_script, page_url, cookies,timers,media)
 }
 
 fn install_gateway(
@@ -98,6 +103,7 @@ fn install_gateway(
     page_url: &str,
     cookies: cookies::SharedCookies,
     timers:Option<timers::SharedTimers>,
+    media:Option<media::SharedMedia>,
 ) -> Result<(), String> {
     let initial_nodes = document.borrow().nodes.len();
     let mut gateway = Gateway {
@@ -107,6 +113,7 @@ fn install_gateway(
         page_url: page_url.to_owned(),
         cookies,
         timers,
+        media,
         initial_nodes,
         mutation_bytes: 0,
     };
@@ -120,6 +127,7 @@ fn install_gateway(
     })?;
     let source = include_str!("javascript_dom.js")
         .replace("/* HULL_COOKIES */", include_str!("javascript_cookies.js"))
+        .replace("/* HULL_MEDIA */", include_str!("javascript_media.js"))
         .replace(
             "/* HULL_DOM_EVENTS */",
             include_str!("javascript_event_target.js"),
@@ -154,6 +162,7 @@ fn input<'a>(request: &'a [Value], index: usize) -> DomResult<&'a str> {
 
 struct Gateway {
     timers:Option<timers::SharedTimers>,
+    media:Option<media::SharedMedia>,
     cookies: cookies::SharedCookies,
     document: SharedDocument,
     window: Option<SharedWindowMetrics>,
@@ -194,6 +203,15 @@ impl Gateway {
             .ok_or_else(|| failure("TypeError", "Expected a DOM request"))?;
         let operation = input(args, 0)?;
         if operation=="timers" {return Ok(json!(self.timers.is_some()));}
+        if operation=="mediaPlay" {
+            let node=args.get(1).and_then(Value::as_u64).and_then(|v|usize::try_from(v).ok()).ok_or_else(||failure("TypeError","Expected video node"))?;
+            if !self.document.borrow().element(node).is_some_and(|(name,ns,_)|name=="video"&&ns==Namespace::Html){return Err(failure("TypeError","Expected HTMLVideoElement"));}
+            let address=input(args,2)?;
+            let url=url::Url::parse(address).map_err(|_|failure("NotSupportedError","Invalid media URL"))?;
+            if url.scheme()!="https"||url.host_str().is_none()||url.username()!=""||url.password().is_some()||address.len()>3072{return Err(failure("NotSupportedError","Only bounded HTTPS media URLs are admitted"));}
+            let media=self.media.as_ref().ok_or_else(||failure("NotSupportedError","Media handoff is not installed"))?;
+            return Ok(json!(media.borrow_mut().request(node,url.to_string())));
+        }
         if operation=="timer" {
             return self.timers.as_ref().map(|state|timers::call(state,&args[1..])).ok_or_else(||failure("NotSupportedError","Timers are not installed"));
         }

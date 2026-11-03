@@ -212,6 +212,33 @@ budget; timers never renew it or extend the first-render cutoff. Future timers
 do not hold the initial snapshot open; subsequent changes stay in the live DOM
 without requesting another layout or updating saved artifacts.
 
+## Separate video playback
+
+HTMLVideoElement wrappers expose src, currentSrc, paused and play(). A play
+request selects the element's src or its first direct source[src] child,
+resolves it against baseURI, and admits only a bounded HTTPS URL. This is a
+handoff to the existing native video player, not video embedded in Hull's layout.
+No player layout, pixel copies, shader, audio control or new decoder is added.
+
+Each Hull navigation has one newest request slot shared by all video elements.
+The native service keeps one active session and one newest preparation candidate
+per owner. New requests supersede preparation, without pausing active playback.
+Only successful publication of the candidate's first converted frame retires
+the old player. Preparation failures leave it playing. The existing global
+three-session decoder cap includes these candidates; admission waits up to 30 s
+for a slot. Playback belongs to the native service and survives Hull closing.
+
+play() returns a Promise pending until a host first-frame receipt; superseded
+requests reject with AbortError and failed handoffs with NotSupportedError.
+Only confirmed playback emits playing. Old-generation receipts cannot reach a
+new page. The bridge does not implement autoplay, pause/seek, duration/metadata,
+canPlayType, a full media event/state machine or arbitrary player libraries.
+Page scripts must reach a real video.play() call; there is no site-specific
+flashvars extraction or replacement of a site's player constructor.
+
+Offline sandbox replay records video_requests in report.json and rejects native
+playback explicitly; it never downloads media or opens a native player.
+
 ## Native input bridge
 
 The one-way path is Winit's opt-in captured input copy → owned, bounded Rust

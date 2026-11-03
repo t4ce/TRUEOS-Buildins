@@ -57,6 +57,11 @@ mod navigation_tests;
 #[cfg(test)]
 mod timer_tests;
 #[cfg(test)]
+mod video_tests;
+#[cfg(test)]
+#[path="../../../src/video.rs"]
+mod video;
+#[cfg(test)]
 mod dom_tag_collection_tests;
 #[cfg(test)]
 mod jquery_event_bridge_tests;

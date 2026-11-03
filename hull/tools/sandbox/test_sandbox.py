@@ -55,6 +55,17 @@ class SandboxWorkflow(unittest.TestCase):
         self.run_page('--no-svg')
         self.assertFalse((self.out / 'storage.json').exists())
 
+    def test_video_play_records_only_latest_url_without_native_playback(self):
+        self.page("""<video id=a src='/old.mp4'></video><video id=b><source src='/new.mp4'></video>
+        <script>
+          document.getElementById('a').play().catch(()=>{});
+          document.getElementById('b').play().catch(()=>{});
+        </script>""")
+        report = self.run_page()
+        self.assertEqual(report['scripts'][0]['status'], 'executed')
+        self.assertEqual(len(report['video_requests']), 1)
+        self.assertTrue(report['video_requests'][0]['url'].endswith('/new.mp4'))
+
     def test_real_dom_css_and_svg_with_independent_script_failures(self):
         (self.capture / "style.css").write_text("#message{color:#123456}")
         self.page("""<link rel=stylesheet href=style.css><p id=message>before</p>

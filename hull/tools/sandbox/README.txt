@@ -141,3 +141,8 @@ setTimeout/clearTimeout use production actor deadlines and the page's existing
 execution budget (256 pending timers, function callbacks only). Future timers
 do not delay the frozen initial snapshot. Replay stops at initial completion;
 it does not keep running merely to wait for future timers.
+
+Page video.play() requests are recorded as video_requests in report.json.
+The sandbox rejects the separate native-player handoff explicitly; it never
+fetches media or opens a player. Native playback lifecycle is host-mocked in
+js-tests and TRUEOS/tools/testpy/test_browser_video_handoff.py.

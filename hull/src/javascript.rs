@@ -120,6 +120,7 @@ struct Page {
     document: Option<SharedDocument>,
     current_script: SharedCurrentScript,
     cookies: javascript_dom::cookies::SharedCookies,
+    media:javascript_dom::media::SharedMedia,
     load_resources: bool,
     window: Option<SharedWindowMetrics>,
     initial_started: Option<Instant>,
@@ -257,6 +258,7 @@ impl Runtime {
             document,
             current_script: Rc::new(Cell::new(None)),
             cookies: Rc::new(RefCell::new(Default::default())),
+            media:Rc::new(RefCell::new(Default::default())),
             load_resources: self.load_resources,
             window: if automatic { self.window.clone() } else { None },
             initial_started: automatic.then(Instant::now),
@@ -280,6 +282,13 @@ impl Runtime {
         }
     }
 
+    pub fn take_video_request(&self)->Option<(u64,javascript_dom::media::Request)> {
+        let pages=self.pages.borrow();let page=pages.as_ref()?;
+        let request=page.media.borrow_mut().pending.take()?;Some((page.generation,request))
+    }
+    pub fn video_status(&self,generation:u64,id:u32,status:i32){
+        if let Some(page)=self.pages.borrow().as_ref().filter(|page|page.generation==generation){page.media.borrow_mut().receipt=Some((id,status));}
+    }
     pub fn cookie_snapshot(&self) -> String {
         self.pages.borrow().as_ref().map_or_else(String::new, |page| page.cookies.borrow().get())
     }
@@ -531,6 +540,7 @@ async fn worker(
                                 &page.url,
                                 page.cookies.clone(),
                                 timers.clone(),
+                                Some(page.media.clone()),
                             )
                         } else {
                             javascript_dom::install_url_with_timers(&mut value,timers.clone())
@@ -627,6 +637,12 @@ async fn worker(
             while inputs.try_recv().is_ok() {}
             pasted.borrow_mut().clear();
             continue;
+        }
+        let receipt=page.media.borrow_mut().receipt.take();
+        if let Some((id,status))=receipt {
+            let result=engine.dispatch_json(json!({"kind":"__hull_media_receipt","id":id,"status":status}).to_string().as_bytes());
+            if let Err(error)=result{let _=reports.try_send(Report::JobError{generation:page.generation,error});}
+            flush_console(engine,page.generation,&reports);continue;
         }
         if let Some(loader) = &mut resources {
             loader.poll(engine);

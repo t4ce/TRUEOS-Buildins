@@ -141,6 +141,7 @@ for(const [name,value] of Object.entries({NONE:0,CAPTURING_PHASE:1,AT_TARGET:2,B
     Object.defineProperty(Event.prototype,name,{value,enumerable:true});
 }
 function dispatchDomRecord(record) {
+    if(receiveMedia(record))return true;
     if(eventWindow && record.source==='winit-window-state') {
         if(record.kind==='resize')dispatchEventAt(eventWindow,new Event('resize'),true);
         else if(record.kind==='focus' && typeof record.focused==='boolean')
