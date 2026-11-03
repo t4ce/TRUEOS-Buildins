@@ -10,6 +10,11 @@ initial wall window. Initialization fixtures check real rp5 mutations, frozen
 render snapshots, faults, navigation reset, infinite sources and microtask
 chains. Other fixtures call Runtime::run explicitly to isolate execution paths.
 
+document.currentScript is the actual rp5 script wrapper during synchronous classic
+script evaluation. It is null in modules, Promise jobs and pasted code, and is
+cleared on exceptions/syntax failures. Fixtures cover parent/identity, calling a
+function defined by another script, and detaching the currently running script.
+
 Fixtures cover explicit script/Promise ordering, per-poll work admission,
 navigation isolation, native syntax errors, metadata-only JSON/data skips,
 external-source metadata without downloads, missing host capabilities, and a

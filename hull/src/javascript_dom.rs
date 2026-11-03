@@ -13,6 +13,7 @@ use serde_json::{Value, json};
 mod jquery;
 
 pub(super) type SharedDocument = Rc<RefCell<Document>>;
+pub(super) type SharedCurrentScript = Rc<Cell<Option<usize>>>;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct WindowMetrics {
     pub inner_width: u32,
@@ -25,7 +26,7 @@ const MAX_MUTATION_BYTES: usize = 4 * 1024 * 1024;
 const MAX_QUERY_RESULTS: usize = 32 * 1024;
 
 pub(super) fn install(engine: &mut Engine, document: SharedDocument) -> Result<(), String> {
-    install_gateway(engine, document, None)
+    install_gateway(engine, document, None, Rc::new(Cell::new(None)))
 }
 
 /// Window metrics come from Hull's content viewport, not native frame guesses.
@@ -34,18 +35,30 @@ pub(super) fn install_with_window(
     document: SharedDocument,
     window: SharedWindowMetrics,
 ) -> Result<(), String> {
-    install_gateway(engine, document, Some(window))
+    install_gateway(engine, document, Some(window), Rc::new(Cell::new(None)))
+}
+
+/// The actor owns script execution scope; the gateway only reads its handle.
+pub(super) fn install_for_page(
+    engine: &mut Engine,
+    document: SharedDocument,
+    window: Option<SharedWindowMetrics>,
+    current_script: SharedCurrentScript,
+) -> Result<(), String> {
+    install_gateway(engine, document, window, current_script)
 }
 
 fn install_gateway(
     engine: &mut Engine,
     document: SharedDocument,
     window: Option<SharedWindowMetrics>,
+    current_script: SharedCurrentScript,
 ) -> Result<(), String> {
     let initial_nodes = document.borrow().nodes.len();
     let mut gateway = Gateway {
         document,
         window,
+        current_script,
         initial_nodes,
         mutation_bytes: 0,
     };
@@ -78,6 +91,7 @@ fn input<'a>(request: &'a [Value], index: usize) -> DomResult<&'a str> {
 struct Gateway {
     document: SharedDocument,
     window: Option<SharedWindowMetrics>,
+    current_script: SharedCurrentScript,
     initial_nodes: usize,
     mutation_bytes: usize,
 }
@@ -154,6 +168,12 @@ impl Gateway {
                 let doc = self.document.borrow();
                 let node = &doc.nodes[id];
                 Ok(match property {
+                    "currentScript" => {
+                        if !matches!(node.kind, NodeKind::Document) {
+                            return Err(failure("TypeError", "Expected a Document"));
+                        }
+                        json!(self.current_script.get())
+                    }
                     "textContent" => match &node.kind {
                         NodeKind::Document | NodeKind::Doctype { .. } => Value::Null,
                         NodeKind::Text(value) | NodeKind::Comment(value) => json!(value),

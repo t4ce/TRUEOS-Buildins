@@ -92,6 +92,7 @@
         querySelectorAll(selector) { required(arguments, 1); return new NodeList(token, request('query', state(this).id, string(selector))); }
     }
     class Document extends Node {
+        get currentScript() { return wrap(get(this, 'currentScript')); }
         get documentElement() { return wrap(get(this, 'documentElement')); }
         get head() { return wrap(get(this, 'head')); }
         get body() { return wrap(get(this, 'body')); }

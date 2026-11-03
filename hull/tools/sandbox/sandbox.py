@@ -63,10 +63,10 @@ class WebOnlyRedirects(urllib.request.HTTPRedirectHandler):
         return super().redirect_request(request, response, code, message, headers, newurl)
 
 
-def fetch(url: str, limit: int) -> tuple[bytes, str, str]:
+def fetch(url: str, limit: int, *, accept: str = "*/*") -> tuple[bytes, str, str]:
     if urllib.parse.urlsplit(url).scheme not in {"http", "https"}:
         raise ValueError("capture only accepts HTTP(S)")
-    request = urllib.request.Request(url, headers={"User-Agent": "HullSandbox/0.1", "Accept-Encoding": "identity"})
+    request = urllib.request.Request(url, headers={"User-Agent": "HullSandbox/0.1", "Accept-Encoding": "identity", "Accept": accept})
     with urllib.request.build_opener(WebOnlyRedirects()).open(request, timeout=15) as response:
         body = response.read(limit + 1)
         if len(body) > limit:
@@ -85,7 +85,8 @@ def capture_page(args, executable: Path) -> None:
             raise ValueError("HTML exceeds 4 MiB")
         final_url, mime = args.url, "text/html (imported)"
     else:
-        body, final_url, mime = fetch(args.url, 4 * 1024**2)
+        body, final_url, mime = fetch(args.url, 4 * 1024**2,
+                                     accept="text/html,application/xhtml+xml;q=0.9,*/*;q=0.8")
     (capture / "page.html").write_bytes(body)
     manifest = {"version": 1, "url": args.url, "final_url": final_url,
                 "content_type": mime, "resources": {}}

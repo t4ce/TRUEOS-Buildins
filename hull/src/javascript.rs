@@ -15,7 +15,9 @@ use trueos::tokio::{
     task::{self, JoinHandle, LocalSet},
 };
 
-use crate::javascript_dom::{self, SharedDocument, SharedWindowMetrics, WindowMetrics};
+use crate::javascript_dom::{
+    self, SharedCurrentScript, SharedDocument, SharedWindowMetrics, WindowMetrics,
+};
 use crate::scripts::ScriptSource;
 
 const PAGE_EXECUTION_BUDGET: Duration = Duration::from_millis(250);
@@ -106,6 +108,7 @@ struct Page {
     requested: bool,
     active: bool,
     document: Option<SharedDocument>,
+    current_script: SharedCurrentScript,
     window: Option<SharedWindowMetrics>,
     initial_started: Option<Instant>,
 }
@@ -231,6 +234,7 @@ impl Runtime {
             requested: automatic,
             active: automatic,
             document,
+            current_script: Rc::new(Cell::new(None)),
             window: if automatic { self.window.clone() } else { None },
             initial_started: automatic.then(Instant::now),
         }));
@@ -488,15 +492,12 @@ async fn worker(
                         .and_then(|_| value.bind_message_handler("__hullInputReceive"));
                     let initialized = initialized.and_then(|_| {
                         if let Some(document) = &page.document {
-                            if let Some(window) = &page.window {
-                                javascript_dom::install_with_window(
-                                    &mut value,
-                                    document.clone(),
-                                    window.clone(),
-                                )
-                            } else {
-                                javascript_dom::install(&mut value, document.clone())
-                            }
+                            javascript_dom::install_for_page(
+                                &mut value,
+                                document.clone(),
+                                page.window.clone(),
+                                page.current_script.clone(),
+                            )
                         } else {
                             Ok(())
                         }
@@ -693,7 +694,23 @@ async fn worker(
         } else {
             format!("{}#script-{node}", page.url)
         };
+        let current_script = if module {
+            None
+        } else {
+            page.document.as_ref().and_then(|doc| {
+                let doc = doc.borrow();
+                doc.element(node).and_then(|(name, namespace, _)| {
+                    (name == "script"
+                        && matches!(namespace, rp5::Namespace::Html | rp5::Namespace::Svg))
+                    .then_some(node)
+                })
+            })
+        };
+        page.current_script.set(current_script);
         let result = engine.eval(bytes, &origin, module);
+        // Clear even on syntax errors or interruption, before any queued jobs,
+        // console delivery, pasted code or input callbacks are admitted.
+        page.current_script.set(None);
         flush_console(engine, page.generation, &reports);
         let _ = reports.try_send(Report::Evaluated {
             generation: page.generation,

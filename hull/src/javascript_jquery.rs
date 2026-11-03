@@ -48,6 +48,7 @@ impl Adapter<'_> {
         // arena. Mutations always use the original counters below.
         let mut reader = Gateway {
             document: self.gateway.document.clone(),
+            current_script: self.gateway.current_script.clone(),
             window: self.gateway.window.clone(),
             initial_nodes: self.gateway.initial_nodes,
             mutation_bytes: self.gateway.mutation_bytes,

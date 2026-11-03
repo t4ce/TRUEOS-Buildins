@@ -22,6 +22,7 @@ fn selectors_create_lazy_identity_preserving_standard_wrappers() {
         &mut engine,
         r#"
         const main=document.getElementById('box');
+        if(document.currentScript!==null)throw Error('currentScript outside script execution');
         if(main!==document.querySelector('main#box'))throw Error('identity');
         if(!(main instanceof Element)||!(main instanceof Node)||!(document instanceof Document))throw Error('interfaces');
         const notes=main.querySelectorAll(':scope > p.note');

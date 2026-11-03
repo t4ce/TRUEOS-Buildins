@@ -10,8 +10,10 @@ From TRUEOS-Buildins:
   python3 hull/tools/sandbox/sandbox.py capture 'https://example.com/' /tmp/hull-page
   python3 hull/tools/sandbox/sandbox.py replay /tmp/hull-page
 
-Capture is the only command which fetches page resources. It saves page.html,
-capture.json, and bounded CSS resources, using the production parser/CSS collector
+Capture is the only command which fetches page resources. It requests HTML for
+page navigation (some sites return 404 without that Accept header); resource
+fetches retain their general Accept header. It saves page.html, capture.json,
+and bounded CSS resources, using the production parser/CSS collector
 to discover references and imports. It never evaluates JavaScript. Images,
 media, fonts, iframes and arbitrary page navigation are not fetched. --scripts
 also saves external JavaScript but does not enable it in replay. HTTP errors

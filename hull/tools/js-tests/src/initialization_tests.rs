@@ -42,6 +42,114 @@ fn body_text(document: &rp5::Document) -> String {
 }
 
 #[test]
+fn current_script_tracks_classic_identity_and_parent_but_not_jobs_modules_or_pastes() {
+    let mut runtime = Runtime::start().unwrap();
+    begin(
+        &mut runtime,
+        20,
+        r#"<div id="container"><p id="result">before</p>
+<script id="first">
+    const self=document.currentScript;
+    if(self!==document.getElementById('first')||self.parentElement!==document.getElementById('container'))throw Error('classic identity/parent');
+    function readCurrent(){return document.currentScript&&document.currentScript.getAttribute('id')}
+    Promise.resolve().then(()=>{if(document.currentScript!==null)throw Error('microtask retained currentScript');document.querySelector('p').setAttribute('data-job','ok')});
+</script>
+<script id="second">
+    if(readCurrent()!=='second')throw Error('definition script leaked into synchronous call');
+    Promise.resolve().then(()=>{if(document.currentScript!==null)throw Error('error-path job retained currentScript')});
+    throw Error('intentional classic failure');
+</script>
+<script id="bad">const invalid = ;</script>
+<script type="module">if(document.currentScript!==null)throw Error('module currentScript');document.querySelector('p').setAttribute('data-module','ok')</script>
+<script id="last">if(readCurrent()!=='last')throw Error('next classic scope');document.querySelector('p').textContent='ready'</script>
+</div>"#,
+    );
+    let (document, reports) = snapshot(&mut runtime, 20);
+    let p = document
+        .nodes
+        .iter()
+        .enumerate()
+        .find(|(id, _)| document.name(*id) == "p")
+        .unwrap()
+        .0;
+    assert_eq!(document.text_content(p), "ready");
+    let attrs = document.element(p).unwrap().2;
+    assert!(
+        attrs
+            .iter()
+            .any(|a| a.name == "data-job" && a.value == "ok")
+    );
+    assert!(
+        attrs
+            .iter()
+            .any(|a| a.name == "data-module" && a.value == "ok")
+    );
+    let errors = reports
+        .iter()
+        .filter_map(|r| {
+            if let Report::Evaluated { result: Err(e), .. } = r {
+                Some(e.as_str())
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(errors.len(), 2, "{errors:?}");
+    assert!(
+        errors
+            .iter()
+            .any(|e| e.contains("intentional classic failure"))
+    );
+    assert!(errors.iter().any(|e| e.contains("SyntaxError")));
+    assert!(
+        !reports.iter().any(|r| matches!(r, Report::JobError { .. })),
+        "{reports:?}"
+    );
+    runtime
+        .execute_pasted(
+            "if(document.currentScript!==null)throw Error('paste retained script')".into(),
+        )
+        .unwrap();
+    let mut pasted = false;
+    for _ in 0..32 {
+        for report in runtime.poll() {
+            if let Report::Pasted { result, .. } = report {
+                result.unwrap();
+                pasted = true;
+            }
+        }
+        if pasted {
+            break;
+        }
+    }
+    assert!(pasted);
+}
+
+#[test]
+fn current_script_keeps_its_handle_when_its_parent_content_is_replaced() {
+    let mut runtime = Runtime::start().unwrap();
+    begin(
+        &mut runtime,
+        21,
+        r#"<div id="container"><script id="self">
+        const me=document.currentScript;
+        me.parentElement.textContent='replaced';
+        if(document.currentScript!==me||me.parentElement!==null)throw Error('detachment lost active script');
+        Promise.resolve().then(()=>{if(document.currentScript!==null)throw Error('detached script leaked into job')});
+    </script></div>"#,
+    );
+    let (document, reports) = snapshot(&mut runtime, 21);
+    assert_eq!(body_text(&document), "replaced");
+    assert!(
+        !reports.iter().any(|r| matches!(
+            r,
+            Report::Evaluated { result: Err(_), .. } | Report::JobError { .. }
+        )),
+        "{reports:?}"
+    );
+}
+
+#[test]
 fn initial_scripts_and_promise_jobs_mutate_the_real_document_before_capture() {
     let mut runtime = Runtime::start().unwrap();
     begin(
