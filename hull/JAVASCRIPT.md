@@ -214,17 +214,21 @@ input errors named `InvalidCharacterError`). They add no DOM objects. QuickJS
 already provides `Date`/`Date.now()`, JSON, URI helpers and standard language
 builtins.
 
-`setTimeout(callback, delay, ...args)` and `clearTimeout(id)` use monotonic Rust
-Instant deadlines checked by the existing actor on UI turns. Callbacks retain
-arguments in QuickJS, receive the page global as `this`, and run one per turn
-with a Promise checkpoint before the next callback. Collected scripts have
-priority. Delays are minimum waits, converted to signed 32-bit milliseconds;
+`setTimeout(callback, delay, ...args)`/`clearTimeout(id)` and
+`setInterval(callback, delay, ...args)`/`clearInterval(id)` share one monotonic
+deadline queue on the native QJS worker. Its Tokio task waits for notifications
+or the next deadline; timers do not depend on Hull UI polling. Callbacks retain
+arguments in QuickJS, receive the page global as `this`, and run one per worker
+step with a Promise checkpoint before the next callback. Ready collected
+scripts have priority. Delays are minimum waits, converted to signed 32-bit milliseconds;
 negative results become zero, and nested chains use the HTML 4 ms clamp
-once nesting exceeds five. Timing is limited by the actor's polling cadence.
+once nesting exceeds five. Late deadlines do not generate catch-up bursts:
+intervals rearm after callback completion using the same ID. Both clear
+functions cancel either kind, including an interval cancelling itself.
 
 Each realm admits at most 256 pending timers. Full queues throw
 QuotaExceededError. String/eval handlers are explicitly unsupported and throw
-TypeError; setInterval is not exposed. Cancellation removes the deadline and
+TypeError. Cancellation removes the deadline and
 callback. Navigation discards the whole queue. Callback faults are reported
 without discarding other timers. All callback work spends the same 250 ms page
 budget; timers never renew it or extend the first-render cutoff. Future timers

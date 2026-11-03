@@ -557,7 +557,6 @@ async fn worker(
             if let Some(deadline) = timers
                 .as_ref()
                 .and_then(|timers| timers.borrow().next_deadline())
-                .filter(|_| !resources.as_ref().is_some_and(Loader::pending))
             {
                 delay = delay.min(deadline);
             }
@@ -856,23 +855,7 @@ async fn worker(
             None
         };
         let Some(source) = source else {
-            let due = timers
-                .as_ref()
-                .and_then(|timers| timers.borrow_mut().take_due());
-            if let Some(id) = due {
-                let result = engine.dispatch_json(
-                    json!({"kind":"__hull_timer","id":id})
-                        .to_string()
-                        .as_bytes(),
-                );
-                if let Err(error) = result {
-                    let _ = reports.try_send(Report::JobError {
-                        generation: page.generation,
-                        error,
-                    });
-                }
-                publish(page, &published);
-                flush_console(engine, page.generation, &reports);
+            if dispatch_due_timer(engine, page, &timers, &published, &reports) {
                 continue;
             }
             if resources.as_ref().is_some_and(Loader::pending) {
@@ -1058,6 +1041,7 @@ async fn worker(
             match state {
                 Prepared::Pending => {
                     next -= 1;
+                    dispatch_due_timer(engine, page, &timers, &published, &reports);
                     continue;
                 }
                 Prepared::Ready(bytes) => {
@@ -1087,6 +1071,7 @@ async fn worker(
                 match loader.inline(engine, &origin, bytes) {
                     Prepared::Pending => {
                         next -= 1;
+                        dispatch_due_timer(engine, page, &timers, &published, &reports);
                         continue;
                     }
                     Prepared::Failed(error) => {
@@ -1134,6 +1119,37 @@ async fn worker(
             result,
         });
     }
+}
+
+// Ready page sources retain priority. A blocked source yields one callback;
+// the next actor step drains its Promise jobs before admitting another timer.
+fn dispatch_due_timer(
+    engine: &mut Engine,
+    page: &LocalPage,
+    timers: &Option<timers::SharedTimers>,
+    published: &Mutex<Published>,
+    reports: &mpsc::Sender<Report>,
+) -> bool {
+    let Some(id) = timers
+        .as_ref()
+        .and_then(|timers| timers.borrow_mut().take_due())
+    else {
+        return false;
+    };
+    let result = engine.dispatch_json(
+        json!({"kind":"__hull_timer","id":id})
+            .to_string()
+            .as_bytes(),
+    );
+    if let Err(error) = result {
+        let _ = reports.try_send(Report::JobError {
+            generation: page.generation,
+            error,
+        });
+    }
+    publish(page, published);
+    flush_console(engine, page.generation, reports);
+    true
 }
 
 fn initial_pending(initial: &Mutex<InitialRender>, revision: u64) -> bool {
@@ -1250,6 +1266,74 @@ mod native_lane_tests {
             .unwrap()
             .0;
         assert_eq!(document.text_content(p), "initialized");
+    }
+
+    #[test]
+    fn timer_wakes_while_external_source_is_pending_without_ui_polling() {
+        let url = "https://fixture.test/blocked.js";
+        crate::netfs::install([(
+            url.into(),
+            b"document.querySelector('p').textContent='downloaded'".to_vec(),
+        )]);
+        crate::netfs::delay(url, 1_000_000);
+        let mut runtime = Runtime::start().unwrap();
+        runtime.enable_resource_loading();
+        let document = rp5::parse(
+            r#"<p>before</p><script>
+            setTimeout(()=>Promise.resolve().then(()=>{document.cookie='blocked=awake';}),10);
+        </script><script src='/blocked.js'></script>"#,
+        );
+        let mut scripts = crate::scripts::Scripts::default();
+        scripts.extract(&document, "https://fixture.test/native");
+        runtime.begin_page(
+            903,
+            "https://fixture.test/native",
+            scripts.sources,
+            document,
+        );
+        let until = Instant::now() + Duration::from_secs(2);
+        while runtime.cookie_snapshot() != "blocked=awake" {
+            assert!(
+                Instant::now() < until,
+                "blocked source starved timer and its Promise job"
+            );
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        assert!(runtime.is_initializing(903));
+        assert_eq!(crate::netfs::active(), 1);
+        crate::netfs::delay(url, 0);
+        let document = loop {
+            if let Some(document) = runtime.take_initial_document(903) {
+                break document;
+            }
+            assert!(
+                Instant::now() < until,
+                "released download did not finish initialization"
+            );
+            std::thread::sleep(Duration::from_millis(1));
+        };
+        let p = document
+            .nodes
+            .iter()
+            .enumerate()
+            .find(|(id, _)| document.name(*id) == "p")
+            .unwrap()
+            .0;
+        assert_eq!(document.text_content(p), "downloaded");
+    }
+
+    #[test]
+    fn stale_media_receipt_cannot_replace_current_page_status() {
+        let runtime = Runtime::start().unwrap();
+        // Leave the worker dormant while exercising the UI-side receipt slot.
+        *runtime.published.lock().unwrap() = Published {
+            revision: 2,
+            generation: 902,
+            ..Default::default()
+        };
+        runtime.video_status(902, 1, 1);
+        runtime.video_status(901, 1, -95);
+        assert_eq!(runtime.published.lock().unwrap().receipt, Some((902, 1, 1)));
     }
 
     #[test]

@@ -184,6 +184,49 @@ impl CookieJar {
 mod tests {
     use super::*;
     #[test]
+    fn version_tracks_committed_pair_changes_only() {
+        let mut jar = CookieJar::default();
+        assert_eq!(jar.version(), 0);
+        for invalid in [
+            "missing-equals",
+            "=empty",
+            "bad name=value",
+            "a=bad\nvalue",
+            "absent=; Max-Age=0",
+        ] {
+            jar.set(invalid);
+        }
+        assert_eq!(jar.version(), 0);
+        jar.set("a=one");
+        assert_eq!(jar.version(), 1);
+        jar.set("a=one; Path=/");
+        jar.storage("get", "a", "");
+        jar.storage("remove", "absent", "");
+        jar.storage("clear", "", "");
+        jar.session_storage("set", "ignored", "value");
+        assert_eq!(jar.version(), 1);
+        jar.set("a=two");
+        jar.set("a=; Max-Age=0");
+        assert_eq!(jar.version(), 3);
+        jar.storage("set", "key", "one");
+        assert_eq!(jar.version(), 4);
+        jar.storage("set", "key", "one");
+        assert_eq!(jar.version(), 4);
+        jar.storage("set", "key", "two");
+        jar.storage("remove", "key", "");
+        jar.storage("set", "key", "three");
+        jar.storage("clear", "", "");
+        assert_eq!(jar.version(), 8);
+        jar.set("keep=value");
+        let version = jar.version();
+        jar.ignore_further_writes();
+        jar.set("keep=changed");
+        jar.storage("set", "blocked", "value");
+        assert_eq!(jar.version(), version);
+        assert_eq!(jar.get(), "keep=value");
+    }
+
+    #[test]
     fn session_view_reads_its_prefix_without_mutating_or_spending_budget() {
         let mut jar = CookieJar::default();
         jar.storage("set", "same", "local");

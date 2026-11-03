@@ -81,7 +81,11 @@ pub(crate) fn call(state: &SharedTimers, args: &[Value]) -> Value {
             state.next + 1
         };
         while state.pending.iter().any(|timer| timer.id == state.next) {
-            state.next=if state.next>=i32::MAX as u32{1}else{state.next+1};
+            state.next = if state.next >= i32::MAX as u32 {
+                1
+            } else {
+                state.next + 1
+            };
         }
         let id = state.next;
         let delay = args
@@ -103,28 +107,46 @@ pub(crate) fn call(state: &SharedTimers, args: &[Value]) -> Value {
 mod tests {
     use super::*;
     #[test]
-    fn repeating_deadlines_are_rearmed_once_after_dispatch_and_clear_cannot_resurrect(){
-        let state=Rc::new(RefCell::new(Timers::default()));
-        let id=call(&state,&[json!("interval"),json!(0)]).as_u64().unwrap();
-        assert_eq!(state.borrow_mut().take_due(),Some(id as u32));
-        assert_eq!(state.borrow_mut().take_due(),None);assert_eq!(state.borrow().next_deadline(),None);
-        assert_eq!(call(&state,&[json!("rearm"),json!(id),json!(100)]),json!(true));
-        assert!(state.borrow().next_deadline().unwrap()>Duration::from_millis(50));
-        state.borrow_mut().pending[0].at=Instant::now()-Duration::from_secs(1);
-        assert_eq!(state.borrow_mut().take_due(),Some(id as u32));
-        call(&state,&[json!("clear"),json!(id)]);
-        assert_eq!(call(&state,&[json!("rearm"),json!(id),json!(0)]),json!(false));
-        assert_eq!(state.borrow().next_deadline(),None);
+    fn repeating_deadlines_are_rearmed_once_after_dispatch_and_clear_cannot_resurrect() {
+        let state = Rc::new(RefCell::new(Timers::default()));
+        let id = call(&state, &[json!("interval"), json!(0)])
+            .as_u64()
+            .unwrap();
+        assert_eq!(state.borrow_mut().take_due(), Some(id as u32));
+        assert_eq!(state.borrow_mut().take_due(), None);
+        assert_eq!(state.borrow().next_deadline(), None);
+        assert_eq!(
+            call(&state, &[json!("rearm"), json!(id), json!(100)]),
+            json!(true)
+        );
+        assert!(state.borrow().next_deadline().unwrap() > Duration::from_millis(50));
+        state.borrow_mut().pending[0].at = Instant::now() - Duration::from_secs(1);
+        assert_eq!(state.borrow_mut().take_due(), Some(id as u32));
+        call(&state, &[json!("clear"), json!(id)]);
+        assert_eq!(
+            call(&state, &[json!("rearm"), json!(id), json!(0)]),
+            json!(false)
+        );
+        assert_eq!(state.borrow().next_deadline(), None);
     }
     #[test]
-    fn timeout_and_interval_share_ids_quota_and_deadline_order(){
-        let state=Rc::new(RefCell::new(Timers::default()));
-        let repeating=call(&state,&[json!("interval"),json!(0)]);
-        let once=call(&state,&[json!("set"),json!(0)]);
-        assert_ne!(repeating,once);assert_eq!(state.borrow_mut().take_due(),Some(repeating.as_u64().unwrap() as u32));
-        assert_eq!(state.borrow_mut().take_due(),Some(once.as_u64().unwrap() as u32));
-        for _ in 0..255{assert_ne!(call(&state,&[json!("set"),json!(10000)]),json!(0));}
-        assert_eq!(call(&state,&[json!("interval"),json!(0)]),json!(0));
-        assert_eq!(state.borrow().pending.len(),256);
+    fn timeout_and_interval_share_ids_quota_and_deadline_order() {
+        let state = Rc::new(RefCell::new(Timers::default()));
+        let repeating = call(&state, &[json!("interval"), json!(0)]);
+        let once = call(&state, &[json!("set"), json!(0)]);
+        assert_ne!(repeating, once);
+        assert_eq!(
+            state.borrow_mut().take_due(),
+            Some(repeating.as_u64().unwrap() as u32)
+        );
+        assert_eq!(
+            state.borrow_mut().take_due(),
+            Some(once.as_u64().unwrap() as u32)
+        );
+        for _ in 0..255 {
+            assert_ne!(call(&state, &[json!("set"), json!(10000)]), json!(0));
+        }
+        assert_eq!(call(&state, &[json!("interval"), json!(0)]), json!(0));
+        assert_eq!(state.borrow().pending.len(), 256);
     }
 }

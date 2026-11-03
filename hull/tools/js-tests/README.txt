@@ -92,8 +92,8 @@ SVG snapshot, without fabricating a link load event.
 Ready/HTML creation/seeded selectors and the rest of jQuery remain unadmitted;
 rjqry/README.md describes the exact surface and cooperative native batch limits.
 
-Input throughput regressions admit at most 32 messages per UI turn and verify a
-97-message FIFO burst spans at least four turns, with Promise jobs between
+Input throughput regressions admit at most 32 messages per worker step and verify a
+97-message FIFO burst spans at least four worker batches, with Promise jobs between
 callbacks. Separate fixtures cover two initialization-time queue overflows
 without losing accumulated reset counts, a page overriding Object.isFrozen,
 and native keyboard records preceding translated modifier-state callbacks.
@@ -114,3 +114,11 @@ check first valid writes per field/element/navigation, camel-case aliases,
 shorthand protection, custom properties, cssText/attribute/jQuery bypass attempts,
 invalid values/priorities, quota rejection and navigation reset. Sandbox fixtures
 check that the accepted style reaches the first diagnostic SVG.
+
+Both timeout and interval pairs share native actor deadlines, IDs and cancellation.
+Interval fixtures verify automatic repeat/rearm, callback arguments/context,
+Promise checkpoints, cross-kind clears and recovery after a callback exception.
+Queue fixtures verify bounded pending slots and no rearm after cancellation.
+Native-worker fixtures verify progress without UI polling and cooperative exit.
+UI report drains may contain several worker steps; tests await results and use
+delayed resource tickets where deterministic queue pressure is required.

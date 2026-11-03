@@ -65,7 +65,9 @@ fn initial(runtime: &mut Runtime, playback: &mut Playback, generation: u64) -> V
     loop {
         drive(runtime, playback, &mut reports, 1);
         if runtime.take_initial_document(generation).is_some() {
-            playback.poll(runtime);reports.extend(runtime.poll());return reports;
+            playback.poll(runtime);
+            reports.extend(runtime.poll());
+            return reports;
         }
         assert!(start.elapsed() < Duration::from_secs(2), "{reports:?}");
     }
@@ -158,7 +160,10 @@ fn failed_native_handoff_rejects_play_and_navigation_ignores_old_receipts() {
         r#"<video src='/movie.mp4'></video><script>document.querySelector('video').play().catch(e=>console.log(e.name))</script>"#,
     );
     let mut reports = initial(&mut runtime, &mut playback, 1);
-    let waiting=Instant::now();while logs(&reports).is_empty()&&waiting.elapsed()<Duration::from_secs(2){drive(&mut runtime,&mut playback,&mut reports,1);}
+    let waiting = Instant::now();
+    while logs(&reports).is_empty() && waiting.elapsed() < Duration::from_secs(2) {
+        drive(&mut runtime, &mut playback, &mut reports, 1);
+    }
     assert_eq!(logs(&reports), ["NotSupportedError"]);
     begin(&mut runtime, 2, "<p>new page</p>");
     runtime.video_status(1, 1, 1);

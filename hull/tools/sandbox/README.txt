@@ -137,7 +137,8 @@ Cookies and localStorage use one bounded navigation-local box, with internal
 cookie: and localStorage: key prefixes and one cumulative 1 MiB write allowance.
 The storage.json artifact contains both namespaces and is never restored.
 
-setTimeout/clearTimeout use production actor deadlines and the page's existing
+setTimeout/clearTimeout and setInterval/clearInterval share production actor
+deadlines and the page's existing
 execution budget (256 pending timers, function callbacks only). Future timers
 do not delay the frozen initial snapshot. Replay stops at initial completion;
 it does not keep running merely to wait for future timers.

@@ -37,8 +37,8 @@ fn style_locks_span_sources_and_reset_on_navigation() {
             doc,
         );
         let mut frozen = None;
-        let waiting=std::time::Instant::now();
-        while waiting.elapsed()<std::time::Duration::from_secs(3) {
+        let waiting = std::time::Instant::now();
+        while waiting.elapsed() < std::time::Duration::from_secs(3) {
             std::thread::yield_now();
             for report in runtime.poll() {
                 match report {

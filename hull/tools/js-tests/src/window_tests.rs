@@ -34,8 +34,10 @@ fn evaluate(engine: &mut Engine, source: &str) {
 
 #[test]
 fn navigator_has_virtual_identity_and_lazy_empty_plugin_collections() {
-    let (mut engine,_)=fixture();
-    evaluate(&mut engine,r#"
+    let (mut engine, _) = fixture();
+    evaluate(
+        &mut engine,
+        r#"
         if(window.navigator!==navigator||clientInformation!==navigator||!(navigator instanceof Navigator))throw Error('navigator identity');
         if(navigator.userAgent!=='TRUEOS net-fetch'||navigator.platform!=='TRUEOS'||navigator.pdfViewerEnabled!==false)throw Error('virtual identity');
         const plugins=navigator.plugins,mimes=navigator.mimeTypes;
@@ -47,16 +49,28 @@ fn navigator_has_virtual_identity_and_lazy_empty_plugin_collections() {
         let failed=false;try{Object.getOwnPropertyDescriptor(Navigator.prototype,'userAgent').get.call({})}catch(e){failed=e instanceof TypeError}if(!failed)throw Error('brand');
         failed=false;try{plugins.namedItem()}catch(e){failed=e instanceof TypeError}if(!failed)throw Error('required argument');
         failed=false;try{new Navigator()}catch(e){failed=e instanceof TypeError}if(!failed)throw Error('constructor');
-    "#);
+    "#,
+    );
 }
 
 #[test]
 fn virtual_navigator_is_fresh_on_navigation() {
-    let mut runtime=Runtime::start().unwrap();runtime.update_viewport(1280,720);
-    begin(&mut runtime,301,"<script>navigator.previousPage=1;navigator.plugins.previousPage=1;</script>");
-    let (_,reports)=snapshot(&mut runtime,301);assert_success(&reports);
-    begin(&mut runtime,302,"<script>if(navigator.previousPage!==undefined||navigator.plugins.previousPage!==undefined)throw Error('old navigator');</script>");
-    let (_,reports)=snapshot(&mut runtime,302);assert_success(&reports);
+    let mut runtime = Runtime::start().unwrap();
+    runtime.update_viewport(1280, 720);
+    begin(
+        &mut runtime,
+        301,
+        "<script>navigator.previousPage=1;navigator.plugins.previousPage=1;</script>",
+    );
+    let (_, reports) = snapshot(&mut runtime, 301);
+    assert_success(&reports);
+    begin(
+        &mut runtime,
+        302,
+        "<script>if(navigator.previousPage!==undefined||navigator.plugins.previousPage!==undefined)throw Error('old navigator');</script>",
+    );
+    let (_, reports) = snapshot(&mut runtime, 302);
+    assert_success(&reports);
 }
 fn begin(runtime: &mut Runtime, generation: u64, html: &str) {
     let document = rp5::parse(html);
@@ -71,12 +85,13 @@ fn begin(runtime: &mut Runtime, generation: u64, html: &str) {
 }
 fn snapshot(runtime: &mut Runtime, generation: u64) -> (rp5::Document, Vec<Report>) {
     let mut reports = Vec::new();
-    let waiting=std::time::Instant::now();
-        while waiting.elapsed()<std::time::Duration::from_secs(3) {
-            std::thread::yield_now();
+    let waiting = std::time::Instant::now();
+    while waiting.elapsed() < std::time::Duration::from_secs(3) {
+        std::thread::yield_now();
         reports.extend(runtime.poll());
         if let Some(document) = runtime.take_initial_document(generation) {
-            reports.extend(runtime.poll());return (document, reports);
+            reports.extend(runtime.poll());
+            return (document, reports);
         }
     }
     panic!("window-backed page did not initialize: {reports:?}");
@@ -175,8 +190,8 @@ fn actor_uses_native_viewport_updates_without_redraw_and_resets_globals_on_navig
     runtime.execute_pasted("if(window.innerWidth!==640||self.innerHeight!==368)throw Error('resize');document.querySelector('p').textContent='live only';console.log(`${innerWidth}x${innerHeight}`)".into()).unwrap();
     let mut output = Vec::new();
     let mut reports = Vec::new();
-    let waiting=std::time::Instant::now();
-    while waiting.elapsed()<std::time::Duration::from_secs(2) {
+    let waiting = std::time::Instant::now();
+    while waiting.elapsed() < std::time::Duration::from_secs(2) {
         std::thread::yield_now();
         let turn = runtime.poll();
         for report in &turn {

@@ -28,7 +28,8 @@ pub(super) fn finish(runtime: &mut Runtime, generation: u64) -> (rp5::Document, 
     loop {
         reports.extend(runtime.poll());
         if let Some(doc) = runtime.take_initial_document(generation) {
-            reports.extend(runtime.poll());return (doc, reports);
+            reports.extend(runtime.poll());
+            return (doc, reports);
         }
         assert!(
             start.elapsed() < Duration::from_secs(7),
@@ -298,8 +299,11 @@ fn navigation_cancels_old_downloads_and_pending_imports() {
         vec![("https://fixture.test/path/old.js", "export const x=1;")],
     );
     netfs::delay("https://fixture.test/path/old.js", 100000);
-    let waiting=Instant::now();
-    while netfs::active()!=1&&waiting.elapsed()<Duration::from_secs(2){r.poll();std::thread::yield_now();}
+    let waiting = Instant::now();
+    while netfs::active() != 1 && waiting.elapsed() < Duration::from_secs(2) {
+        r.poll();
+        std::thread::yield_now();
+    }
     assert_eq!(netfs::active(), 1);
     begin(
         &mut r,
