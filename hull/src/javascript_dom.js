@@ -160,4 +160,5 @@
         replaceable('innerWidth', () => request('window').innerWidth);
         replaceable('innerHeight', () => request('window').innerHeight);
     }
+    /* HULL_NATIVE_JQUERY */
 })();

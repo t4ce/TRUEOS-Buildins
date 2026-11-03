@@ -43,6 +43,14 @@ updates, replaceable attributes, navigation isolation and the absence of guessed
 DPI/focus/browser services. DOM-only staging without a window producer stays
 without window globals. Host fixtures do not create a kernel-backed Winit window.
 
+DOM-backed realms also install the admitted native rjqry subset as $/jQuery.
+jquery_tests execute the production JS binding and Rust adapter against the same
+rp5 arena. They cover identity and mutable collection indices, stacks/traversal,
+native text/attribute/class changes, guest callbacks, tagged param values,
+prototype toJSON isolation, shared DOM quotas, noConflict and fresh realms.
+Ready/HTML creation/seeded selectors and the rest of jQuery remain unadmitted;
+rjqry/README.md describes the exact surface and cooperative native batch limits.
+
 Input throughput regressions admit at most 32 messages per UI turn and verify a
 97-message FIFO burst spans at least four turns, with Promise jobs between
 callbacks. Separate fixtures cover two initialization-time queue overflows

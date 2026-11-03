@@ -39,8 +39,9 @@ semantics below. Unsupported paths must not be exported as successful stubs.
 
 This map includes untranslated modules deliberately. The crate is a native
 foundation for the portable surface, not a complete drop-in jQuery runtime.
-Hull/rp5/QuickJS integration is separate; no dependency on those crates or guest
-network/filesystem API was added.
+Hull now admits the DOM-focused subset described in README.md through its own
+rp5/QuickJS adapter. The crate retains zero dependencies; remaining integration
+is separate, and no guest network/filesystem API was added.
 
 ## Verification scope
 

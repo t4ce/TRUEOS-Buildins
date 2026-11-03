@@ -46,6 +46,8 @@ mod console_tests;
 #[cfg(test)]
 mod dom_tests;
 #[cfg(test)]
+mod jquery_tests;
+#[cfg(test)]
 mod helpers_tests;
 #[cfg(test)]
 mod initialization_tests;

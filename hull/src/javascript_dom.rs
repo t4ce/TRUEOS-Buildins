@@ -9,6 +9,9 @@ use hull_quickjs::Engine;
 use rp5::{Attribute, Document, Namespace, NodeKind};
 use serde_json::{Value, json};
 
+#[path = "javascript_jquery.rs"]
+mod jquery;
+
 pub(super) type SharedDocument = Rc<RefCell<Document>>;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct WindowMetrics {
@@ -54,7 +57,11 @@ fn install_gateway(
         };
         serde_json::to_vec(&response).map_err(|error| error.to_string())
     })?;
-    engine.eval(include_bytes!("javascript_dom.js"), "hull:dom", false)
+    let source = include_str!("javascript_dom.js").replace(
+        "/* HULL_NATIVE_JQUERY */",
+        include_str!("javascript_jquery.js"),
+    );
+    engine.eval(source.as_bytes(), "hull:dom", false)
 }
 
 type DomResult<T> = Result<T, (&'static str, String)>;
@@ -101,6 +108,9 @@ impl Gateway {
             .as_array()
             .ok_or_else(|| failure("TypeError", "Expected a DOM request"))?;
         let operation = input(args, 0)?;
+        if operation == "jquery" {
+            return jquery::call(self, args);
+        }
         if operation == "root" {
             return Ok(json!(self.document.borrow().root));
         }

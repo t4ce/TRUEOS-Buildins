@@ -76,6 +76,18 @@ class SandboxWorkflow(unittest.TestCase):
         self.assertEqual(svg_text(self.out / "layout.svg"), "library ready")
         self.assertTrue(report["experiments"])
 
+    def test_native_jquery_initialization_reaches_the_svg_snapshot(self):
+        self.page("""<style>p.ready{color:#13579b}</style><p id=message>before</p>
+<script>
+  $('#message').text('native ready').addClass('ready').attr('data-native','yes');
+  console.log($.param({status:'native ready',items:[1,2]}));
+</script>""")
+        report = self.run_page()
+        self.assertEqual([item["status"] for item in report["scripts"]], ["executed"])
+        self.assertEqual(svg_text(self.out / "layout.svg"), "native ready")
+        self.assertIn('#13579b', (self.out / "layout.svg").read_text())
+        self.assertIn('status=native%20ready', (self.out / "console.log").read_text())
+
     def test_replacement_isolation_static_baseline_and_js_only_cleanup(self):
         self.page("<p>before</p><script>throw Error('first')</script><script>throw Error('second')</script>")
         report = self.run_page("--no-js")

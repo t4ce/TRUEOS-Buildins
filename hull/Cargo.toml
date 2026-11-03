@@ -15,6 +15,7 @@ hull-quickjs = { path = "crates/quickjs-engine" }
 crossterm = { path = "../../vendor/crossterm-0.29.0-trueos", default-features = false, features = ["events", "bracketed-paste"] }
 trueos = { path = "../../api", features = ["ui4-scene", "tokio-runtime"] }
 rp5 = { path = "rp5" }
+rjqry = { path = "rjqry" }
 lightningcss = { version = "=1.0.0-alpha.72", default-features = false, features = ["into_owned", "substitute_variables"] }
 static-self = "0.1.2"
 taffy = { version = "=0.15.0", path = "../../vendor/taffy-0.15.0-trueos", default-features = false, features = ["std", "taffy_tree", "block_layout", "flexbox", "grid"] }
@@ -35,4 +36,4 @@ strip = "symbols"           # See split-debuginfo - allows us to drop the size b
 incremental = true          # Improves re-compile times
 
 [workspace]
-exclude = ["crates/quickjs-engine", "tools/js-tests", "tools/layout-tests", "tools/sandbox"]
+exclude = ["crates/quickjs-engine", "rjqry", "tools/js-tests", "tools/layout-tests", "tools/sandbox"]

@@ -77,6 +77,14 @@ timeout, 15 s CPU limit, 1 GiB address-space limit and 64 MiB per-file limit on 
 These are practical exploration limits, not a general OS security boundary.
 Guest JavaScript has no network, filesystem, shell, timer or process API.
 
+DOM-backed replay also installs Hull's native rjqry admission as $/jQuery. For
+example $('#message').text('ready').addClass('ready') mutates the same rp5 tree
+before its frozen first-render snapshot, and $.param/$.escapeSelector execute in
+Rust. This is a DOM-focused subset, not full jQuery: no ready scheduler, HTML
+construction, seeded filtering, effects, plugin helpers or Ajax is admitted.
+See hull/rjqry/README.md for its exact API/work limits. JS callbacks still run
+in QuickJS; the JSON host bridge remains. No speedup is claimed without a benchmark.
+
 Replay never makes live web requests. CSS tickets read captured files only;
 missing resources fail explicitly. Only inspect/capture/replay artifact code in
 the host accesses files. No downloaded JavaScript runs during capture.

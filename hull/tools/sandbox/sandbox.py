@@ -170,6 +170,8 @@ def watched(args, out: Path) -> tuple:
         paths.extend((args.directory / "resources").rglob("*"))
     paths.extend(HULL.joinpath("src").glob("*.rs"))
     paths.extend(HULL.joinpath("src").glob("*.js"))
+    paths.extend(HULL.joinpath("rjqry/src").glob("*.rs"))
+    paths.extend([HULL / "rjqry/Cargo.toml", HERE / "Cargo.toml"])
     paths.extend(HULL.joinpath("crates/quickjs-engine/src").glob("*"))
     paths.extend([HULL / "crates/quickjs-engine/build.rs", HULL / "crates/quickjs-engine/vendor/quickjs/quickjs.h"])
     if args.prelude:

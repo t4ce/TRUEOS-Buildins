@@ -314,6 +314,7 @@ dependencies = [
  "hull-quickjs",
  "lightningcss",
  "parcel_selectors",
+ "rjqry",
  "rp5",
  "serde_json",
  "tokio",
@@ -752,6 +753,10 @@ dependencies = [
  "font-types",
  "once_cell",
 ]
+
+[[package]]
+name = "rjqry"
+version = "0.1.0"
 
 [[package]]
 name = "rp5"

@@ -6,6 +6,7 @@ publish = false
 
 [dependencies]
 rp5 = { path = "../../rp5" }
+rjqry = { path = "../../rjqry" }
 hull-quickjs = { path = "../../crates/quickjs-engine" }
 url = "2.5"
 serde_json = "1"

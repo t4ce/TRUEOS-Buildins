@@ -2,11 +2,40 @@
 
 Native Rust translations of portable algorithms in the supplied `jquery-main`
 tree. **`#![no_std]` + `alloc`, unsafe Rust forbidden, zero runtime, build or test
-dependencies.** This is an independent Cargo workspace, before Hull integration.
+dependencies.** This is an independent Cargo workspace.
 
-The crate does not install `jQuery`/`$` in QuickJS or supply a browser. Page scripts
-need a language binding and a real DOM host to use it. This is a typed native
+The crate itself does not install globals or supply a browser. Hull now connects
+an initial DOM-focused subset through `../src/javascript_jquery.rs` and its
+JavaScript binding, sharing the real rp5 arena. This remains a typed native
 foundation, not a claim of complete jQuery compatibility.
+
+## Hull admission
+
+DOM-backed page realms expose `$` and `jQuery` with `fn.jquery` set to
+`4.0.0-hull-native`. Selector construction/find, collection stacks/indexes/slices,
+unfiltered parent/children/sibling traversal, text/attribute/class access and
+mutation run through native rjqry. The binding preserves node wrappers and runs
+JavaScript callbacks in QuickJS; `each` and callback setters are admitted. Static
+`param` for data values and `escapeSelector` are native. `noConflict` releases the
+global names. Node collections accept nodes, arrays and the existing NodeList;
+they do not model arbitrary JS-value collections or fractional indexes.
+
+The guest binding does not yet expose seeded filtering, HTML construction,
+ready scheduling, form values, CSS/computed geometry, events, Deferred, queues,
+data caches, effects, extend/plugin helpers or Ajax. Traversal selector arguments
+and param function/cyclic/non-data values fail explicitly. Other library exports
+remain available to Rust callers. Page scripts still run in QuickJS.
+
+Native batches have a cooperative 20 ms work deadline as well as existing DOM
+size/mutation limits; QuickJS retains its per-call slice and cumulative page
+execution allowance. The native work deadline is checked at DOM work boundaries,
+not an OS preemption mechanism. Batched mutations may be partial on failure.
+The admission also bounds class operations to 16 KiB/256 tokens per incoming or
+existing class list, and param conversion to 2,048 values, depth 32 and 128 keys
+per object, so core inner loops stay bounded between deadline checks.
+There is no new redraw, network, filesystem, timer or background task. Speedup
+has not been benchmarked: request/result conversion still crosses the JSON host
+bridge, while collection and mutation loops execute in Rust.
 
 ## Native code
 
