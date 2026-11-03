@@ -129,6 +129,8 @@ struct Page {
 #[derive(Default)]
 struct Published {
     revision: u64,
+    generation: u64,
+    cookies_version: Option<u64>,
     cookies: String,
     storage: String,
     media: Option<(u64, javascript_dom::media::Request)>,
@@ -283,6 +285,7 @@ impl Runtime {
         };
         *self.published.lock().unwrap() = Published {
             revision: self.revision,
+            generation,
             ..Default::default()
         };
         self.pages.send_replace(Some(Page {
@@ -314,7 +317,12 @@ impl Runtime {
         self.published.lock().unwrap().media.take()
     }
     pub fn video_status(&self, generation: u64, id: u32, status: i32) {
-        self.published.lock().unwrap().receipt = Some((generation, id, status));
+        let mut state = self.published.lock().unwrap();
+        if state.revision == 0 || state.generation != generation {
+            return;
+        }
+        state.receipt = Some((generation, id, status));
+        drop(state);
         self.wake.notify_one();
     }
     pub fn cookie_snapshot(&self) -> String {
@@ -1138,8 +1146,13 @@ fn publish(page: &LocalPage, published: &Mutex<Published>) {
     if state.revision != page.revision {
         return;
     }
-    state.cookies = page.cookies.borrow().get();
-    state.storage = page.cookies.borrow().snapshot();
+    let cookies = page.cookies.borrow();
+    if state.cookies_version != Some(cookies.version()) {
+        state.cookies = cookies.get();
+        state.storage = cookies.snapshot();
+        state.cookies_version = Some(cookies.version());
+    }
+    drop(cookies);
     if let Some(request) = page.media.borrow_mut().pending.take() {
         state.media = Some((page.generation, request));
     }

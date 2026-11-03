@@ -6,10 +6,21 @@ pub(crate) const MAX_COOKIE_BYTES: usize = 1024 * 1024;
 #[derive(Default)]
 pub(crate) struct CookieJar {
     pairs: Vec<(String, String)>,
+    version: u64,
     charged: usize,
     full: bool,
 }
 impl CookieJar {
+    /// Changes only when the externally visible pairs change, not on reads,
+    /// rejected writes, quota accounting, or setters retaining the same value.
+    pub fn version(&self) -> u64 {
+        self.version
+    }
+
+    fn changed(&mut self) {
+        self.version += 1;
+    }
+
     fn charge(&mut self, bytes: usize) -> bool {
         if self.full || bytes > MAX_COOKIE_BYTES.saturating_sub(self.charged) {
             self.full = true;
@@ -83,18 +94,30 @@ impl CookieJar {
                     return Some(json!(false));
                 }
                 if let Some((_, old)) = self.pairs.iter_mut().find(|(name, _)| name == &internal) {
-                    *old = value.to_owned();
+                    if old != value {
+                        *old = value.to_owned();
+                        self.changed();
+                    }
                 } else {
                     self.pairs.push((internal, value.to_owned()));
+                    self.changed();
                 }
                 json!(true)
             }
             "remove" => {
+                let previous = self.pairs.len();
                 self.pairs.retain(|(name, _)| name != &internal);
+                if self.pairs.len() != previous {
+                    self.changed();
+                }
                 serde_json::Value::Null
             }
             "clear" => {
+                let previous = self.pairs.len();
                 self.pairs.retain(|(name, _)| !name.starts_with(prefix));
+                if self.pairs.len() != previous {
+                    self.changed();
+                }
                 serde_json::Value::Null
             }
             _ => return None,
@@ -146,11 +169,14 @@ impl CookieJar {
         if let Some(index) = self.pairs.iter().position(|(n, _)| n == &name) {
             if delete {
                 self.pairs.remove(index);
-            } else {
+                self.changed();
+            } else if self.pairs[index].1 != value {
                 self.pairs[index].1 = value.to_owned();
+                self.changed();
             }
         } else if !delete {
             self.pairs.push((name.to_owned(), value.to_owned()));
+            self.changed();
         }
     }
 }
