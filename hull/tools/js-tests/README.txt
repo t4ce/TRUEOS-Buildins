@@ -4,6 +4,14 @@ hull-quickjs engine, minimal DOM gateway and shared selector matcher. They do no
 include a network client, the qjs-web-lab copy, or kernel UI services. Input adapter fixtures
 use the actual Winit TRUEOS/core record types; they never create a window.
 
+URL fixtures run production URL/URLSearchParams globals over Hull's existing Rust
+parser, including console-only realms, live query updates, Unicode/IDNA, invalid
+inputs, callbacks/iterators and dynamic modules using import.meta.url. 153 cases
+execute the pinned original core-js URL fallback as a comparison oracle:
+  node tools/url_oracle.mjs
+Run it from this directory; --write regenerates after reviewed changes. No npm
+install or live request is involved. Rust consumes the recorded expectations.
+
 Actor startup and replace_page remain inactive. begin_page admits the parsed
 document's scripts with one 250 ms active execution allowance and a 250 ms
 initial wall window. Resource-enabled pages exclude bounded resource waiting

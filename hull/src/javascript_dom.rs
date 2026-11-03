@@ -11,6 +11,12 @@ use serde_json::{Value, json};
 
 #[path = "javascript_jquery.rs"]
 mod jquery;
+#[path = "javascript_url.rs"]
+mod url_api;
+
+pub(super) fn install_url_only(engine: &mut Engine) -> Result<(), String> {
+    url_api::install(engine)
+}
 
 pub(super) type SharedDocument = Rc<RefCell<Document>>;
 pub(super) type SharedCurrentScript = Rc<Cell<Option<usize>>>;
@@ -70,10 +76,15 @@ fn install_gateway(
         };
         serde_json::to_vec(&response).map_err(|error| error.to_string())
     })?;
-    let source = include_str!("javascript_dom.js").replace(
-        "/* HULL_NATIVE_JQUERY */",
-        include_str!("javascript_jquery.js"),
-    );
+    let source = include_str!("javascript_dom.js")
+        .replace(
+            "/* HULL_NATIVE_JQUERY */",
+            include_str!("javascript_jquery.js"),
+        )
+        .replace(
+            "/* HULL_NATIVE_URL */",
+            &format!("({})(request);", include_str!("javascript_url.js")),
+        );
     engine.eval(source.as_bytes(), "hull:dom", false)
 }
 
@@ -122,6 +133,9 @@ impl Gateway {
             .as_array()
             .ok_or_else(|| failure("TypeError", "Expected a DOM request"))?;
         let operation = input(args, 0)?;
+        if operation == "url" {
+            return url_api::call(args);
+        }
         if operation == "jquery" {
             return jquery::call(self, args);
         }

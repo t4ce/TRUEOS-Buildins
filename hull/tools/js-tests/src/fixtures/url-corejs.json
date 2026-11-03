@@ -1,0 +1,3926 @@
+{
+  "source": "core-js 3.51.0 forced fallback",
+  "cases": [
+    {
+      "kind": "url",
+      "args": [
+        "https://user:pass@EXAMPLE.org:443/a/b?x=one%20two#top"
+      ],
+      "assign": [],
+      "expected": {
+        "href": "https://user:pass@example.org/a/b?x=one%20two#top",
+        "origin": "https://example.org",
+        "protocol": "https:",
+        "username": "user",
+        "password": "pass",
+        "host": "example.org",
+        "hostname": "example.org",
+        "port": "",
+        "pathname": "/a/b",
+        "search": "?x=one%20two",
+        "hash": "#top"
+      },
+      "argsJSON": "[\"https://user:pass@EXAMPLE.org:443/a/b?x=one%20two#top\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "https://user:pass@EXAMPLE.org:443/a/b?x=one%20two#top"
+      ],
+      "assign": [
+        [
+          "protocol",
+          "http:"
+        ]
+      ],
+      "expected": {
+        "href": "http://user:pass@example.org/a/b?x=one%20two#top",
+        "origin": "http://example.org",
+        "protocol": "http:",
+        "username": "user",
+        "password": "pass",
+        "host": "example.org",
+        "hostname": "example.org",
+        "port": "",
+        "pathname": "/a/b",
+        "search": "?x=one%20two",
+        "hash": "#top"
+      },
+      "argsJSON": "[\"https://user:pass@EXAMPLE.org:443/a/b?x=one%20two#top\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "https://user:pass@EXAMPLE.org:443/a/b?x=one%20two#top"
+      ],
+      "assign": [
+        [
+          "username",
+          "a b"
+        ]
+      ],
+      "expected": {
+        "href": "https://a%20b:pass@example.org/a/b?x=one%20two#top",
+        "origin": "https://example.org",
+        "protocol": "https:",
+        "username": "a%20b",
+        "password": "pass",
+        "host": "example.org",
+        "hostname": "example.org",
+        "port": "",
+        "pathname": "/a/b",
+        "search": "?x=one%20two",
+        "hash": "#top"
+      },
+      "argsJSON": "[\"https://user:pass@EXAMPLE.org:443/a/b?x=one%20two#top\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "https://user:pass@EXAMPLE.org:443/a/b?x=one%20two#top"
+      ],
+      "assign": [
+        [
+          "password",
+          "p@ss"
+        ]
+      ],
+      "expected": {
+        "href": "https://user:p%40ss@example.org/a/b?x=one%20two#top",
+        "origin": "https://example.org",
+        "protocol": "https:",
+        "username": "user",
+        "password": "p%40ss",
+        "host": "example.org",
+        "hostname": "example.org",
+        "port": "",
+        "pathname": "/a/b",
+        "search": "?x=one%20two",
+        "hash": "#top"
+      },
+      "argsJSON": "[\"https://user:pass@EXAMPLE.org:443/a/b?x=one%20two#top\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "https://user:pass@EXAMPLE.org:443/a/b?x=one%20two#top"
+      ],
+      "assign": [
+        [
+          "host",
+          "other.test:8090"
+        ]
+      ],
+      "expected": {
+        "href": "https://user:pass@other.test:8090/a/b?x=one%20two#top",
+        "origin": "https://other.test:8090",
+        "protocol": "https:",
+        "username": "user",
+        "password": "pass",
+        "host": "other.test:8090",
+        "hostname": "other.test",
+        "port": "8090",
+        "pathname": "/a/b",
+        "search": "?x=one%20two",
+        "hash": "#top"
+      },
+      "argsJSON": "[\"https://user:pass@EXAMPLE.org:443/a/b?x=one%20two#top\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "https://user:pass@EXAMPLE.org:443/a/b?x=one%20two#top"
+      ],
+      "assign": [
+        [
+          "hostname",
+          "new.test"
+        ]
+      ],
+      "expected": {
+        "href": "https://user:pass@new.test/a/b?x=one%20two#top",
+        "origin": "https://new.test",
+        "protocol": "https:",
+        "username": "user",
+        "password": "pass",
+        "host": "new.test",
+        "hostname": "new.test",
+        "port": "",
+        "pathname": "/a/b",
+        "search": "?x=one%20two",
+        "hash": "#top"
+      },
+      "argsJSON": "[\"https://user:pass@EXAMPLE.org:443/a/b?x=one%20two#top\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "https://user:pass@EXAMPLE.org:443/a/b?x=one%20two#top"
+      ],
+      "assign": [
+        [
+          "port",
+          "8443"
+        ]
+      ],
+      "expected": {
+        "href": "https://user:pass@example.org:8443/a/b?x=one%20two#top",
+        "origin": "https://example.org:8443",
+        "protocol": "https:",
+        "username": "user",
+        "password": "pass",
+        "host": "example.org:8443",
+        "hostname": "example.org",
+        "port": "8443",
+        "pathname": "/a/b",
+        "search": "?x=one%20two",
+        "hash": "#top"
+      },
+      "argsJSON": "[\"https://user:pass@EXAMPLE.org:443/a/b?x=one%20two#top\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "https://user:pass@EXAMPLE.org:443/a/b?x=one%20two#top"
+      ],
+      "assign": [
+        [
+          "port",
+          "bad"
+        ]
+      ],
+      "expected": {
+        "href": "https://user:pass@example.org/a/b?x=one%20two#top",
+        "origin": "https://example.org",
+        "protocol": "https:",
+        "username": "user",
+        "password": "pass",
+        "host": "example.org",
+        "hostname": "example.org",
+        "port": "",
+        "pathname": "/a/b",
+        "search": "?x=one%20two",
+        "hash": "#top"
+      },
+      "argsJSON": "[\"https://user:pass@EXAMPLE.org:443/a/b?x=one%20two#top\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "https://user:pass@EXAMPLE.org:443/a/b?x=one%20two#top"
+      ],
+      "assign": [
+        [
+          "pathname",
+          "/new path"
+        ]
+      ],
+      "expected": {
+        "href": "https://user:pass@example.org/new%20path?x=one%20two#top",
+        "origin": "https://example.org",
+        "protocol": "https:",
+        "username": "user",
+        "password": "pass",
+        "host": "example.org",
+        "hostname": "example.org",
+        "port": "",
+        "pathname": "/new%20path",
+        "search": "?x=one%20two",
+        "hash": "#top"
+      },
+      "argsJSON": "[\"https://user:pass@EXAMPLE.org:443/a/b?x=one%20two#top\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "https://user:pass@EXAMPLE.org:443/a/b?x=one%20two#top"
+      ],
+      "assign": [
+        [
+          "search",
+          "q=one two&x=~"
+        ]
+      ],
+      "expected": {
+        "href": "https://user:pass@example.org/a/b?q=one%20two&x=~#top",
+        "origin": "https://example.org",
+        "protocol": "https:",
+        "username": "user",
+        "password": "pass",
+        "host": "example.org",
+        "hostname": "example.org",
+        "port": "",
+        "pathname": "/a/b",
+        "search": "?q=one%20two&x=~",
+        "hash": "#top"
+      },
+      "argsJSON": "[\"https://user:pass@EXAMPLE.org:443/a/b?x=one%20two#top\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "https://user:pass@EXAMPLE.org:443/a/b?x=one%20two#top"
+      ],
+      "assign": [
+        [
+          "hash",
+          "new value"
+        ]
+      ],
+      "expected": {
+        "href": "https://user:pass@example.org/a/b?x=one%20two#new%20value",
+        "origin": "https://example.org",
+        "protocol": "https:",
+        "username": "user",
+        "password": "pass",
+        "host": "example.org",
+        "hostname": "example.org",
+        "port": "",
+        "pathname": "/a/b",
+        "search": "?x=one%20two",
+        "hash": "#new%20value"
+      },
+      "argsJSON": "[\"https://user:pass@EXAMPLE.org:443/a/b?x=one%20two#top\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "https://user:pass@EXAMPLE.org:443/a/b?x=one%20two#top"
+      ],
+      "assign": [
+        [
+          "href",
+          "https://new.test/?a=2"
+        ]
+      ],
+      "expected": {
+        "href": "https://new.test/?a=2",
+        "origin": "https://new.test",
+        "protocol": "https:",
+        "username": "",
+        "password": "",
+        "host": "new.test",
+        "hostname": "new.test",
+        "port": "",
+        "pathname": "/",
+        "search": "?a=2",
+        "hash": ""
+      },
+      "argsJSON": "[\"https://user:pass@EXAMPLE.org:443/a/b?x=one%20two#top\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "http://127.1:8080/"
+      ],
+      "assign": [],
+      "expected": {
+        "href": "http://127.0.0.1:8080/",
+        "origin": "http://127.0.0.1:8080",
+        "protocol": "http:",
+        "username": "",
+        "password": "",
+        "host": "127.0.0.1:8080",
+        "hostname": "127.0.0.1",
+        "port": "8080",
+        "pathname": "/",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"http://127.1:8080/\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "http://127.1:8080/"
+      ],
+      "assign": [
+        [
+          "protocol",
+          "http:"
+        ]
+      ],
+      "expected": {
+        "href": "http://127.0.0.1:8080/",
+        "origin": "http://127.0.0.1:8080",
+        "protocol": "http:",
+        "username": "",
+        "password": "",
+        "host": "127.0.0.1:8080",
+        "hostname": "127.0.0.1",
+        "port": "8080",
+        "pathname": "/",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"http://127.1:8080/\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "http://127.1:8080/"
+      ],
+      "assign": [
+        [
+          "username",
+          "a b"
+        ]
+      ],
+      "expected": {
+        "href": "http://a%20b@127.0.0.1:8080/",
+        "origin": "http://127.0.0.1:8080",
+        "protocol": "http:",
+        "username": "a%20b",
+        "password": "",
+        "host": "127.0.0.1:8080",
+        "hostname": "127.0.0.1",
+        "port": "8080",
+        "pathname": "/",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"http://127.1:8080/\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "http://127.1:8080/"
+      ],
+      "assign": [
+        [
+          "password",
+          "p@ss"
+        ]
+      ],
+      "expected": {
+        "href": "http://:p%40ss@127.0.0.1:8080/",
+        "origin": "http://127.0.0.1:8080",
+        "protocol": "http:",
+        "username": "",
+        "password": "p%40ss",
+        "host": "127.0.0.1:8080",
+        "hostname": "127.0.0.1",
+        "port": "8080",
+        "pathname": "/",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"http://127.1:8080/\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "http://127.1:8080/"
+      ],
+      "assign": [
+        [
+          "host",
+          "other.test:8090"
+        ]
+      ],
+      "expected": {
+        "href": "http://other.test:8090/",
+        "origin": "http://other.test:8090",
+        "protocol": "http:",
+        "username": "",
+        "password": "",
+        "host": "other.test:8090",
+        "hostname": "other.test",
+        "port": "8090",
+        "pathname": "/",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"http://127.1:8080/\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "http://127.1:8080/"
+      ],
+      "assign": [
+        [
+          "hostname",
+          "new.test"
+        ]
+      ],
+      "expected": {
+        "href": "http://new.test:8080/",
+        "origin": "http://new.test:8080",
+        "protocol": "http:",
+        "username": "",
+        "password": "",
+        "host": "new.test:8080",
+        "hostname": "new.test",
+        "port": "8080",
+        "pathname": "/",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"http://127.1:8080/\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "http://127.1:8080/"
+      ],
+      "assign": [
+        [
+          "port",
+          "8443"
+        ]
+      ],
+      "expected": {
+        "href": "http://127.0.0.1:8443/",
+        "origin": "http://127.0.0.1:8443",
+        "protocol": "http:",
+        "username": "",
+        "password": "",
+        "host": "127.0.0.1:8443",
+        "hostname": "127.0.0.1",
+        "port": "8443",
+        "pathname": "/",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"http://127.1:8080/\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "http://127.1:8080/"
+      ],
+      "assign": [
+        [
+          "port",
+          "bad"
+        ]
+      ],
+      "expected": {
+        "href": "http://127.0.0.1:8080/",
+        "origin": "http://127.0.0.1:8080",
+        "protocol": "http:",
+        "username": "",
+        "password": "",
+        "host": "127.0.0.1:8080",
+        "hostname": "127.0.0.1",
+        "port": "8080",
+        "pathname": "/",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"http://127.1:8080/\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "http://127.1:8080/"
+      ],
+      "assign": [
+        [
+          "pathname",
+          "/new path"
+        ]
+      ],
+      "expected": {
+        "href": "http://127.0.0.1:8080/new%20path",
+        "origin": "http://127.0.0.1:8080",
+        "protocol": "http:",
+        "username": "",
+        "password": "",
+        "host": "127.0.0.1:8080",
+        "hostname": "127.0.0.1",
+        "port": "8080",
+        "pathname": "/new%20path",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"http://127.1:8080/\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "http://127.1:8080/"
+      ],
+      "assign": [
+        [
+          "search",
+          "q=one two&x=~"
+        ]
+      ],
+      "expected": {
+        "href": "http://127.0.0.1:8080/?q=one%20two&x=~",
+        "origin": "http://127.0.0.1:8080",
+        "protocol": "http:",
+        "username": "",
+        "password": "",
+        "host": "127.0.0.1:8080",
+        "hostname": "127.0.0.1",
+        "port": "8080",
+        "pathname": "/",
+        "search": "?q=one%20two&x=~",
+        "hash": ""
+      },
+      "argsJSON": "[\"http://127.1:8080/\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "http://127.1:8080/"
+      ],
+      "assign": [
+        [
+          "hash",
+          "new value"
+        ]
+      ],
+      "expected": {
+        "href": "http://127.0.0.1:8080/#new%20value",
+        "origin": "http://127.0.0.1:8080",
+        "protocol": "http:",
+        "username": "",
+        "password": "",
+        "host": "127.0.0.1:8080",
+        "hostname": "127.0.0.1",
+        "port": "8080",
+        "pathname": "/",
+        "search": "",
+        "hash": "#new%20value"
+      },
+      "argsJSON": "[\"http://127.1:8080/\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "http://127.1:8080/"
+      ],
+      "assign": [
+        [
+          "href",
+          "https://new.test/?a=2"
+        ]
+      ],
+      "expected": {
+        "href": "https://new.test/?a=2",
+        "origin": "https://new.test",
+        "protocol": "https:",
+        "username": "",
+        "password": "",
+        "host": "new.test",
+        "hostname": "new.test",
+        "port": "",
+        "pathname": "/",
+        "search": "?a=2",
+        "hash": ""
+      },
+      "argsJSON": "[\"http://127.1:8080/\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "https://[::1]:443/a"
+      ],
+      "assign": [],
+      "expected": {
+        "href": "https://[::1]/a",
+        "origin": "https://[::1]",
+        "protocol": "https:",
+        "username": "",
+        "password": "",
+        "host": "[::1]",
+        "hostname": "[::1]",
+        "port": "",
+        "pathname": "/a",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"https://[::1]:443/a\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "https://[::1]:443/a"
+      ],
+      "assign": [
+        [
+          "protocol",
+          "http:"
+        ]
+      ],
+      "expected": {
+        "href": "http://[::1]/a",
+        "origin": "http://[::1]",
+        "protocol": "http:",
+        "username": "",
+        "password": "",
+        "host": "[::1]",
+        "hostname": "[::1]",
+        "port": "",
+        "pathname": "/a",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"https://[::1]:443/a\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "https://[::1]:443/a"
+      ],
+      "assign": [
+        [
+          "username",
+          "a b"
+        ]
+      ],
+      "expected": {
+        "href": "https://a%20b@[::1]/a",
+        "origin": "https://[::1]",
+        "protocol": "https:",
+        "username": "a%20b",
+        "password": "",
+        "host": "[::1]",
+        "hostname": "[::1]",
+        "port": "",
+        "pathname": "/a",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"https://[::1]:443/a\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "https://[::1]:443/a"
+      ],
+      "assign": [
+        [
+          "password",
+          "p@ss"
+        ]
+      ],
+      "expected": {
+        "href": "https://:p%40ss@[::1]/a",
+        "origin": "https://[::1]",
+        "protocol": "https:",
+        "username": "",
+        "password": "p%40ss",
+        "host": "[::1]",
+        "hostname": "[::1]",
+        "port": "",
+        "pathname": "/a",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"https://[::1]:443/a\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "https://[::1]:443/a"
+      ],
+      "assign": [
+        [
+          "host",
+          "other.test:8090"
+        ]
+      ],
+      "expected": {
+        "href": "https://other.test:8090/a",
+        "origin": "https://other.test:8090",
+        "protocol": "https:",
+        "username": "",
+        "password": "",
+        "host": "other.test:8090",
+        "hostname": "other.test",
+        "port": "8090",
+        "pathname": "/a",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"https://[::1]:443/a\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "https://[::1]:443/a"
+      ],
+      "assign": [
+        [
+          "hostname",
+          "new.test"
+        ]
+      ],
+      "expected": {
+        "href": "https://new.test/a",
+        "origin": "https://new.test",
+        "protocol": "https:",
+        "username": "",
+        "password": "",
+        "host": "new.test",
+        "hostname": "new.test",
+        "port": "",
+        "pathname": "/a",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"https://[::1]:443/a\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "https://[::1]:443/a"
+      ],
+      "assign": [
+        [
+          "port",
+          "8443"
+        ]
+      ],
+      "expected": {
+        "href": "https://[::1]:8443/a",
+        "origin": "https://[::1]:8443",
+        "protocol": "https:",
+        "username": "",
+        "password": "",
+        "host": "[::1]:8443",
+        "hostname": "[::1]",
+        "port": "8443",
+        "pathname": "/a",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"https://[::1]:443/a\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "https://[::1]:443/a"
+      ],
+      "assign": [
+        [
+          "port",
+          "bad"
+        ]
+      ],
+      "expected": {
+        "href": "https://[::1]/a",
+        "origin": "https://[::1]",
+        "protocol": "https:",
+        "username": "",
+        "password": "",
+        "host": "[::1]",
+        "hostname": "[::1]",
+        "port": "",
+        "pathname": "/a",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"https://[::1]:443/a\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "https://[::1]:443/a"
+      ],
+      "assign": [
+        [
+          "pathname",
+          "/new path"
+        ]
+      ],
+      "expected": {
+        "href": "https://[::1]/new%20path",
+        "origin": "https://[::1]",
+        "protocol": "https:",
+        "username": "",
+        "password": "",
+        "host": "[::1]",
+        "hostname": "[::1]",
+        "port": "",
+        "pathname": "/new%20path",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"https://[::1]:443/a\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "https://[::1]:443/a"
+      ],
+      "assign": [
+        [
+          "search",
+          "q=one two&x=~"
+        ]
+      ],
+      "expected": {
+        "href": "https://[::1]/a?q=one%20two&x=~",
+        "origin": "https://[::1]",
+        "protocol": "https:",
+        "username": "",
+        "password": "",
+        "host": "[::1]",
+        "hostname": "[::1]",
+        "port": "",
+        "pathname": "/a",
+        "search": "?q=one%20two&x=~",
+        "hash": ""
+      },
+      "argsJSON": "[\"https://[::1]:443/a\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "https://[::1]:443/a"
+      ],
+      "assign": [
+        [
+          "hash",
+          "new value"
+        ]
+      ],
+      "expected": {
+        "href": "https://[::1]/a#new%20value",
+        "origin": "https://[::1]",
+        "protocol": "https:",
+        "username": "",
+        "password": "",
+        "host": "[::1]",
+        "hostname": "[::1]",
+        "port": "",
+        "pathname": "/a",
+        "search": "",
+        "hash": "#new%20value"
+      },
+      "argsJSON": "[\"https://[::1]:443/a\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "https://[::1]:443/a"
+      ],
+      "assign": [
+        [
+          "href",
+          "https://new.test/?a=2"
+        ]
+      ],
+      "expected": {
+        "href": "https://new.test/?a=2",
+        "origin": "https://new.test",
+        "protocol": "https:",
+        "username": "",
+        "password": "",
+        "host": "new.test",
+        "hostname": "new.test",
+        "port": "",
+        "pathname": "/",
+        "search": "?a=2",
+        "hash": ""
+      },
+      "argsJSON": "[\"https://[::1]:443/a\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "https://münich.example/é"
+      ],
+      "assign": [],
+      "expected": {
+        "href": "https://xn--mnich-kva.example/%C3%A9",
+        "origin": "https://xn--mnich-kva.example",
+        "protocol": "https:",
+        "username": "",
+        "password": "",
+        "host": "xn--mnich-kva.example",
+        "hostname": "xn--mnich-kva.example",
+        "port": "",
+        "pathname": "/%C3%A9",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"https://münich.example/é\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "https://münich.example/é"
+      ],
+      "assign": [
+        [
+          "protocol",
+          "http:"
+        ]
+      ],
+      "expected": {
+        "href": "http://xn--mnich-kva.example/%C3%A9",
+        "origin": "http://xn--mnich-kva.example",
+        "protocol": "http:",
+        "username": "",
+        "password": "",
+        "host": "xn--mnich-kva.example",
+        "hostname": "xn--mnich-kva.example",
+        "port": "",
+        "pathname": "/%C3%A9",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"https://münich.example/é\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "https://münich.example/é"
+      ],
+      "assign": [
+        [
+          "username",
+          "a b"
+        ]
+      ],
+      "expected": {
+        "href": "https://a%20b@xn--mnich-kva.example/%C3%A9",
+        "origin": "https://xn--mnich-kva.example",
+        "protocol": "https:",
+        "username": "a%20b",
+        "password": "",
+        "host": "xn--mnich-kva.example",
+        "hostname": "xn--mnich-kva.example",
+        "port": "",
+        "pathname": "/%C3%A9",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"https://münich.example/é\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "https://münich.example/é"
+      ],
+      "assign": [
+        [
+          "password",
+          "p@ss"
+        ]
+      ],
+      "expected": {
+        "href": "https://:p%40ss@xn--mnich-kva.example/%C3%A9",
+        "origin": "https://xn--mnich-kva.example",
+        "protocol": "https:",
+        "username": "",
+        "password": "p%40ss",
+        "host": "xn--mnich-kva.example",
+        "hostname": "xn--mnich-kva.example",
+        "port": "",
+        "pathname": "/%C3%A9",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"https://münich.example/é\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "https://münich.example/é"
+      ],
+      "assign": [
+        [
+          "host",
+          "other.test:8090"
+        ]
+      ],
+      "expected": {
+        "href": "https://other.test:8090/%C3%A9",
+        "origin": "https://other.test:8090",
+        "protocol": "https:",
+        "username": "",
+        "password": "",
+        "host": "other.test:8090",
+        "hostname": "other.test",
+        "port": "8090",
+        "pathname": "/%C3%A9",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"https://münich.example/é\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "https://münich.example/é"
+      ],
+      "assign": [
+        [
+          "hostname",
+          "new.test"
+        ]
+      ],
+      "expected": {
+        "href": "https://new.test/%C3%A9",
+        "origin": "https://new.test",
+        "protocol": "https:",
+        "username": "",
+        "password": "",
+        "host": "new.test",
+        "hostname": "new.test",
+        "port": "",
+        "pathname": "/%C3%A9",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"https://münich.example/é\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "https://münich.example/é"
+      ],
+      "assign": [
+        [
+          "port",
+          "8443"
+        ]
+      ],
+      "expected": {
+        "href": "https://xn--mnich-kva.example:8443/%C3%A9",
+        "origin": "https://xn--mnich-kva.example:8443",
+        "protocol": "https:",
+        "username": "",
+        "password": "",
+        "host": "xn--mnich-kva.example:8443",
+        "hostname": "xn--mnich-kva.example",
+        "port": "8443",
+        "pathname": "/%C3%A9",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"https://münich.example/é\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "https://münich.example/é"
+      ],
+      "assign": [
+        [
+          "port",
+          "bad"
+        ]
+      ],
+      "expected": {
+        "href": "https://xn--mnich-kva.example/%C3%A9",
+        "origin": "https://xn--mnich-kva.example",
+        "protocol": "https:",
+        "username": "",
+        "password": "",
+        "host": "xn--mnich-kva.example",
+        "hostname": "xn--mnich-kva.example",
+        "port": "",
+        "pathname": "/%C3%A9",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"https://münich.example/é\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "https://münich.example/é"
+      ],
+      "assign": [
+        [
+          "pathname",
+          "/new path"
+        ]
+      ],
+      "expected": {
+        "href": "https://xn--mnich-kva.example/new%20path",
+        "origin": "https://xn--mnich-kva.example",
+        "protocol": "https:",
+        "username": "",
+        "password": "",
+        "host": "xn--mnich-kva.example",
+        "hostname": "xn--mnich-kva.example",
+        "port": "",
+        "pathname": "/new%20path",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"https://münich.example/é\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "https://münich.example/é"
+      ],
+      "assign": [
+        [
+          "search",
+          "q=one two&x=~"
+        ]
+      ],
+      "expected": {
+        "href": "https://xn--mnich-kva.example/%C3%A9?q=one%20two&x=~",
+        "origin": "https://xn--mnich-kva.example",
+        "protocol": "https:",
+        "username": "",
+        "password": "",
+        "host": "xn--mnich-kva.example",
+        "hostname": "xn--mnich-kva.example",
+        "port": "",
+        "pathname": "/%C3%A9",
+        "search": "?q=one%20two&x=~",
+        "hash": ""
+      },
+      "argsJSON": "[\"https://münich.example/é\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "https://münich.example/é"
+      ],
+      "assign": [
+        [
+          "hash",
+          "new value"
+        ]
+      ],
+      "expected": {
+        "href": "https://xn--mnich-kva.example/%C3%A9#new%20value",
+        "origin": "https://xn--mnich-kva.example",
+        "protocol": "https:",
+        "username": "",
+        "password": "",
+        "host": "xn--mnich-kva.example",
+        "hostname": "xn--mnich-kva.example",
+        "port": "",
+        "pathname": "/%C3%A9",
+        "search": "",
+        "hash": "#new%20value"
+      },
+      "argsJSON": "[\"https://münich.example/é\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "https://münich.example/é"
+      ],
+      "assign": [
+        [
+          "href",
+          "https://new.test/?a=2"
+        ]
+      ],
+      "expected": {
+        "href": "https://new.test/?a=2",
+        "origin": "https://new.test",
+        "protocol": "https:",
+        "username": "",
+        "password": "",
+        "host": "new.test",
+        "hostname": "new.test",
+        "port": "",
+        "pathname": "/",
+        "search": "?a=2",
+        "hash": ""
+      },
+      "argsJSON": "[\"https://münich.example/é\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "file:///C:/a/b"
+      ],
+      "assign": [],
+      "expected": {
+        "href": "file:///C:/a/b",
+        "origin": "null",
+        "protocol": "file:",
+        "username": "",
+        "password": "",
+        "host": "",
+        "hostname": "",
+        "port": "",
+        "pathname": "/C:/a/b",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"file:///C:/a/b\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "file:///C:/a/b"
+      ],
+      "assign": [
+        [
+          "protocol",
+          "http:"
+        ]
+      ],
+      "expected": {
+        "href": "file:///C:/a/b",
+        "origin": "null",
+        "protocol": "file:",
+        "username": "",
+        "password": "",
+        "host": "",
+        "hostname": "",
+        "port": "",
+        "pathname": "/C:/a/b",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"file:///C:/a/b\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "file:///C:/a/b"
+      ],
+      "assign": [
+        [
+          "username",
+          "a b"
+        ]
+      ],
+      "expected": {
+        "href": "file:///C:/a/b",
+        "origin": "null",
+        "protocol": "file:",
+        "username": "",
+        "password": "",
+        "host": "",
+        "hostname": "",
+        "port": "",
+        "pathname": "/C:/a/b",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"file:///C:/a/b\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "file:///C:/a/b"
+      ],
+      "assign": [
+        [
+          "password",
+          "p@ss"
+        ]
+      ],
+      "expected": {
+        "href": "file:///C:/a/b",
+        "origin": "null",
+        "protocol": "file:",
+        "username": "",
+        "password": "",
+        "host": "",
+        "hostname": "",
+        "port": "",
+        "pathname": "/C:/a/b",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"file:///C:/a/b\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "file:///C:/a/b"
+      ],
+      "assign": [
+        [
+          "host",
+          "other.test:8090"
+        ]
+      ],
+      "expected": {
+        "href": "file:///C:/a/b",
+        "origin": "null",
+        "protocol": "file:",
+        "username": "",
+        "password": "",
+        "host": "",
+        "hostname": "",
+        "port": "",
+        "pathname": "/C:/a/b",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"file:///C:/a/b\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "file:///C:/a/b"
+      ],
+      "assign": [
+        [
+          "hostname",
+          "new.test"
+        ]
+      ],
+      "expected": {
+        "href": "file://new.test/C:/a/b",
+        "origin": "null",
+        "protocol": "file:",
+        "username": "",
+        "password": "",
+        "host": "new.test",
+        "hostname": "new.test",
+        "port": "",
+        "pathname": "/C:/a/b",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"file:///C:/a/b\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "file:///C:/a/b"
+      ],
+      "assign": [
+        [
+          "port",
+          "8443"
+        ]
+      ],
+      "expected": {
+        "href": "file:///C:/a/b",
+        "origin": "null",
+        "protocol": "file:",
+        "username": "",
+        "password": "",
+        "host": "",
+        "hostname": "",
+        "port": "",
+        "pathname": "/C:/a/b",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"file:///C:/a/b\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "file:///C:/a/b"
+      ],
+      "assign": [
+        [
+          "port",
+          "bad"
+        ]
+      ],
+      "expected": {
+        "href": "file:///C:/a/b",
+        "origin": "null",
+        "protocol": "file:",
+        "username": "",
+        "password": "",
+        "host": "",
+        "hostname": "",
+        "port": "",
+        "pathname": "/C:/a/b",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"file:///C:/a/b\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "file:///C:/a/b"
+      ],
+      "assign": [
+        [
+          "pathname",
+          "/new path"
+        ]
+      ],
+      "expected": {
+        "href": "file:///new%20path",
+        "origin": "null",
+        "protocol": "file:",
+        "username": "",
+        "password": "",
+        "host": "",
+        "hostname": "",
+        "port": "",
+        "pathname": "/new%20path",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"file:///C:/a/b\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "file:///C:/a/b"
+      ],
+      "assign": [
+        [
+          "search",
+          "q=one two&x=~"
+        ]
+      ],
+      "expected": {
+        "href": "file:///C:/a/b?q=one%20two&x=~",
+        "origin": "null",
+        "protocol": "file:",
+        "username": "",
+        "password": "",
+        "host": "",
+        "hostname": "",
+        "port": "",
+        "pathname": "/C:/a/b",
+        "search": "?q=one%20two&x=~",
+        "hash": ""
+      },
+      "argsJSON": "[\"file:///C:/a/b\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "file:///C:/a/b"
+      ],
+      "assign": [
+        [
+          "hash",
+          "new value"
+        ]
+      ],
+      "expected": {
+        "href": "file:///C:/a/b#new%20value",
+        "origin": "null",
+        "protocol": "file:",
+        "username": "",
+        "password": "",
+        "host": "",
+        "hostname": "",
+        "port": "",
+        "pathname": "/C:/a/b",
+        "search": "",
+        "hash": "#new%20value"
+      },
+      "argsJSON": "[\"file:///C:/a/b\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "file:///C:/a/b"
+      ],
+      "assign": [
+        [
+          "href",
+          "https://new.test/?a=2"
+        ]
+      ],
+      "expected": {
+        "href": "https://new.test/?a=2",
+        "origin": "https://new.test",
+        "protocol": "https:",
+        "username": "",
+        "password": "",
+        "host": "new.test",
+        "hostname": "new.test",
+        "port": "",
+        "pathname": "/",
+        "search": "?a=2",
+        "hash": ""
+      },
+      "argsJSON": "[\"file:///C:/a/b\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "ftp://example.org/a"
+      ],
+      "assign": [],
+      "expected": {
+        "href": "ftp://example.org/a",
+        "origin": "ftp://example.org",
+        "protocol": "ftp:",
+        "username": "",
+        "password": "",
+        "host": "example.org",
+        "hostname": "example.org",
+        "port": "",
+        "pathname": "/a",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"ftp://example.org/a\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "ftp://example.org/a"
+      ],
+      "assign": [
+        [
+          "protocol",
+          "http:"
+        ]
+      ],
+      "expected": {
+        "href": "http://example.org/a",
+        "origin": "http://example.org",
+        "protocol": "http:",
+        "username": "",
+        "password": "",
+        "host": "example.org",
+        "hostname": "example.org",
+        "port": "",
+        "pathname": "/a",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"ftp://example.org/a\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "ftp://example.org/a"
+      ],
+      "assign": [
+        [
+          "username",
+          "a b"
+        ]
+      ],
+      "expected": {
+        "href": "ftp://a%20b@example.org/a",
+        "origin": "ftp://example.org",
+        "protocol": "ftp:",
+        "username": "a%20b",
+        "password": "",
+        "host": "example.org",
+        "hostname": "example.org",
+        "port": "",
+        "pathname": "/a",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"ftp://example.org/a\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "ftp://example.org/a"
+      ],
+      "assign": [
+        [
+          "password",
+          "p@ss"
+        ]
+      ],
+      "expected": {
+        "href": "ftp://:p%40ss@example.org/a",
+        "origin": "ftp://example.org",
+        "protocol": "ftp:",
+        "username": "",
+        "password": "p%40ss",
+        "host": "example.org",
+        "hostname": "example.org",
+        "port": "",
+        "pathname": "/a",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"ftp://example.org/a\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "ftp://example.org/a"
+      ],
+      "assign": [
+        [
+          "host",
+          "other.test:8090"
+        ]
+      ],
+      "expected": {
+        "href": "ftp://other.test:8090/a",
+        "origin": "ftp://other.test:8090",
+        "protocol": "ftp:",
+        "username": "",
+        "password": "",
+        "host": "other.test:8090",
+        "hostname": "other.test",
+        "port": "8090",
+        "pathname": "/a",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"ftp://example.org/a\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "ftp://example.org/a"
+      ],
+      "assign": [
+        [
+          "hostname",
+          "new.test"
+        ]
+      ],
+      "expected": {
+        "href": "ftp://new.test/a",
+        "origin": "ftp://new.test",
+        "protocol": "ftp:",
+        "username": "",
+        "password": "",
+        "host": "new.test",
+        "hostname": "new.test",
+        "port": "",
+        "pathname": "/a",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"ftp://example.org/a\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "ftp://example.org/a"
+      ],
+      "assign": [
+        [
+          "port",
+          "8443"
+        ]
+      ],
+      "expected": {
+        "href": "ftp://example.org:8443/a",
+        "origin": "ftp://example.org:8443",
+        "protocol": "ftp:",
+        "username": "",
+        "password": "",
+        "host": "example.org:8443",
+        "hostname": "example.org",
+        "port": "8443",
+        "pathname": "/a",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"ftp://example.org/a\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "ftp://example.org/a"
+      ],
+      "assign": [
+        [
+          "port",
+          "bad"
+        ]
+      ],
+      "expected": {
+        "href": "ftp://example.org/a",
+        "origin": "ftp://example.org",
+        "protocol": "ftp:",
+        "username": "",
+        "password": "",
+        "host": "example.org",
+        "hostname": "example.org",
+        "port": "",
+        "pathname": "/a",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"ftp://example.org/a\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "ftp://example.org/a"
+      ],
+      "assign": [
+        [
+          "pathname",
+          "/new path"
+        ]
+      ],
+      "expected": {
+        "href": "ftp://example.org/new%20path",
+        "origin": "ftp://example.org",
+        "protocol": "ftp:",
+        "username": "",
+        "password": "",
+        "host": "example.org",
+        "hostname": "example.org",
+        "port": "",
+        "pathname": "/new%20path",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"ftp://example.org/a\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "ftp://example.org/a"
+      ],
+      "assign": [
+        [
+          "search",
+          "q=one two&x=~"
+        ]
+      ],
+      "expected": {
+        "href": "ftp://example.org/a?q=one%20two&x=~",
+        "origin": "ftp://example.org",
+        "protocol": "ftp:",
+        "username": "",
+        "password": "",
+        "host": "example.org",
+        "hostname": "example.org",
+        "port": "",
+        "pathname": "/a",
+        "search": "?q=one%20two&x=~",
+        "hash": ""
+      },
+      "argsJSON": "[\"ftp://example.org/a\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "ftp://example.org/a"
+      ],
+      "assign": [
+        [
+          "hash",
+          "new value"
+        ]
+      ],
+      "expected": {
+        "href": "ftp://example.org/a#new%20value",
+        "origin": "ftp://example.org",
+        "protocol": "ftp:",
+        "username": "",
+        "password": "",
+        "host": "example.org",
+        "hostname": "example.org",
+        "port": "",
+        "pathname": "/a",
+        "search": "",
+        "hash": "#new%20value"
+      },
+      "argsJSON": "[\"ftp://example.org/a\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "ftp://example.org/a"
+      ],
+      "assign": [
+        [
+          "href",
+          "https://new.test/?a=2"
+        ]
+      ],
+      "expected": {
+        "href": "https://new.test/?a=2",
+        "origin": "https://new.test",
+        "protocol": "https:",
+        "username": "",
+        "password": "",
+        "host": "new.test",
+        "hostname": "new.test",
+        "port": "",
+        "pathname": "/",
+        "search": "?a=2",
+        "hash": ""
+      },
+      "argsJSON": "[\"ftp://example.org/a\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "ws://example.org:80/a"
+      ],
+      "assign": [],
+      "expected": {
+        "href": "ws://example.org/a",
+        "origin": "ws://example.org",
+        "protocol": "ws:",
+        "username": "",
+        "password": "",
+        "host": "example.org",
+        "hostname": "example.org",
+        "port": "",
+        "pathname": "/a",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"ws://example.org:80/a\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "ws://example.org:80/a"
+      ],
+      "assign": [
+        [
+          "protocol",
+          "http:"
+        ]
+      ],
+      "expected": {
+        "href": "http://example.org/a",
+        "origin": "http://example.org",
+        "protocol": "http:",
+        "username": "",
+        "password": "",
+        "host": "example.org",
+        "hostname": "example.org",
+        "port": "",
+        "pathname": "/a",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"ws://example.org:80/a\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "ws://example.org:80/a"
+      ],
+      "assign": [
+        [
+          "username",
+          "a b"
+        ]
+      ],
+      "expected": {
+        "href": "ws://a%20b@example.org/a",
+        "origin": "ws://example.org",
+        "protocol": "ws:",
+        "username": "a%20b",
+        "password": "",
+        "host": "example.org",
+        "hostname": "example.org",
+        "port": "",
+        "pathname": "/a",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"ws://example.org:80/a\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "ws://example.org:80/a"
+      ],
+      "assign": [
+        [
+          "password",
+          "p@ss"
+        ]
+      ],
+      "expected": {
+        "href": "ws://:p%40ss@example.org/a",
+        "origin": "ws://example.org",
+        "protocol": "ws:",
+        "username": "",
+        "password": "p%40ss",
+        "host": "example.org",
+        "hostname": "example.org",
+        "port": "",
+        "pathname": "/a",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"ws://example.org:80/a\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "ws://example.org:80/a"
+      ],
+      "assign": [
+        [
+          "host",
+          "other.test:8090"
+        ]
+      ],
+      "expected": {
+        "href": "ws://other.test:8090/a",
+        "origin": "ws://other.test:8090",
+        "protocol": "ws:",
+        "username": "",
+        "password": "",
+        "host": "other.test:8090",
+        "hostname": "other.test",
+        "port": "8090",
+        "pathname": "/a",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"ws://example.org:80/a\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "ws://example.org:80/a"
+      ],
+      "assign": [
+        [
+          "hostname",
+          "new.test"
+        ]
+      ],
+      "expected": {
+        "href": "ws://new.test/a",
+        "origin": "ws://new.test",
+        "protocol": "ws:",
+        "username": "",
+        "password": "",
+        "host": "new.test",
+        "hostname": "new.test",
+        "port": "",
+        "pathname": "/a",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"ws://example.org:80/a\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "ws://example.org:80/a"
+      ],
+      "assign": [
+        [
+          "port",
+          "8443"
+        ]
+      ],
+      "expected": {
+        "href": "ws://example.org:8443/a",
+        "origin": "ws://example.org:8443",
+        "protocol": "ws:",
+        "username": "",
+        "password": "",
+        "host": "example.org:8443",
+        "hostname": "example.org",
+        "port": "8443",
+        "pathname": "/a",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"ws://example.org:80/a\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "ws://example.org:80/a"
+      ],
+      "assign": [
+        [
+          "port",
+          "bad"
+        ]
+      ],
+      "expected": {
+        "href": "ws://example.org/a",
+        "origin": "ws://example.org",
+        "protocol": "ws:",
+        "username": "",
+        "password": "",
+        "host": "example.org",
+        "hostname": "example.org",
+        "port": "",
+        "pathname": "/a",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"ws://example.org:80/a\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "ws://example.org:80/a"
+      ],
+      "assign": [
+        [
+          "pathname",
+          "/new path"
+        ]
+      ],
+      "expected": {
+        "href": "ws://example.org/new%20path",
+        "origin": "ws://example.org",
+        "protocol": "ws:",
+        "username": "",
+        "password": "",
+        "host": "example.org",
+        "hostname": "example.org",
+        "port": "",
+        "pathname": "/new%20path",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"ws://example.org:80/a\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "ws://example.org:80/a"
+      ],
+      "assign": [
+        [
+          "search",
+          "q=one two&x=~"
+        ]
+      ],
+      "expected": {
+        "href": "ws://example.org/a?q=one%20two&x=~",
+        "origin": "ws://example.org",
+        "protocol": "ws:",
+        "username": "",
+        "password": "",
+        "host": "example.org",
+        "hostname": "example.org",
+        "port": "",
+        "pathname": "/a",
+        "search": "?q=one%20two&x=~",
+        "hash": ""
+      },
+      "argsJSON": "[\"ws://example.org:80/a\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "ws://example.org:80/a"
+      ],
+      "assign": [
+        [
+          "hash",
+          "new value"
+        ]
+      ],
+      "expected": {
+        "href": "ws://example.org/a#new%20value",
+        "origin": "ws://example.org",
+        "protocol": "ws:",
+        "username": "",
+        "password": "",
+        "host": "example.org",
+        "hostname": "example.org",
+        "port": "",
+        "pathname": "/a",
+        "search": "",
+        "hash": "#new%20value"
+      },
+      "argsJSON": "[\"ws://example.org:80/a\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "ws://example.org:80/a"
+      ],
+      "assign": [
+        [
+          "href",
+          "https://new.test/?a=2"
+        ]
+      ],
+      "expected": {
+        "href": "https://new.test/?a=2",
+        "origin": "https://new.test",
+        "protocol": "https:",
+        "username": "",
+        "password": "",
+        "host": "new.test",
+        "hostname": "new.test",
+        "port": "",
+        "pathname": "/",
+        "search": "?a=2",
+        "hash": ""
+      },
+      "argsJSON": "[\"ws://example.org:80/a\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "mailto:person@example.org"
+      ],
+      "assign": [],
+      "expected": {
+        "href": "mailto:person@example.org",
+        "origin": "null",
+        "protocol": "mailto:",
+        "username": "",
+        "password": "",
+        "host": "",
+        "hostname": "",
+        "port": "",
+        "pathname": "person@example.org",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"mailto:person@example.org\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "mailto:person@example.org"
+      ],
+      "assign": [
+        [
+          "protocol",
+          "http:"
+        ]
+      ],
+      "expected": {
+        "href": "mailto:person@example.org",
+        "origin": "null",
+        "protocol": "mailto:",
+        "username": "",
+        "password": "",
+        "host": "",
+        "hostname": "",
+        "port": "",
+        "pathname": "person@example.org",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"mailto:person@example.org\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "mailto:person@example.org"
+      ],
+      "assign": [
+        [
+          "username",
+          "a b"
+        ]
+      ],
+      "expected": {
+        "href": "mailto:person@example.org",
+        "origin": "null",
+        "protocol": "mailto:",
+        "username": "",
+        "password": "",
+        "host": "",
+        "hostname": "",
+        "port": "",
+        "pathname": "person@example.org",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"mailto:person@example.org\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "mailto:person@example.org"
+      ],
+      "assign": [
+        [
+          "password",
+          "p@ss"
+        ]
+      ],
+      "expected": {
+        "href": "mailto:person@example.org",
+        "origin": "null",
+        "protocol": "mailto:",
+        "username": "",
+        "password": "",
+        "host": "",
+        "hostname": "",
+        "port": "",
+        "pathname": "person@example.org",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"mailto:person@example.org\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "mailto:person@example.org"
+      ],
+      "assign": [
+        [
+          "host",
+          "other.test:8090"
+        ]
+      ],
+      "expected": {
+        "href": "mailto:person@example.org",
+        "origin": "null",
+        "protocol": "mailto:",
+        "username": "",
+        "password": "",
+        "host": "",
+        "hostname": "",
+        "port": "",
+        "pathname": "person@example.org",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"mailto:person@example.org\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "mailto:person@example.org"
+      ],
+      "assign": [
+        [
+          "hostname",
+          "new.test"
+        ]
+      ],
+      "expected": {
+        "href": "mailto:person@example.org",
+        "origin": "null",
+        "protocol": "mailto:",
+        "username": "",
+        "password": "",
+        "host": "",
+        "hostname": "",
+        "port": "",
+        "pathname": "person@example.org",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"mailto:person@example.org\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "mailto:person@example.org"
+      ],
+      "assign": [
+        [
+          "port",
+          "8443"
+        ]
+      ],
+      "expected": {
+        "href": "mailto:person@example.org",
+        "origin": "null",
+        "protocol": "mailto:",
+        "username": "",
+        "password": "",
+        "host": "",
+        "hostname": "",
+        "port": "",
+        "pathname": "person@example.org",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"mailto:person@example.org\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "mailto:person@example.org"
+      ],
+      "assign": [
+        [
+          "port",
+          "bad"
+        ]
+      ],
+      "expected": {
+        "href": "mailto:person@example.org",
+        "origin": "null",
+        "protocol": "mailto:",
+        "username": "",
+        "password": "",
+        "host": "",
+        "hostname": "",
+        "port": "",
+        "pathname": "person@example.org",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"mailto:person@example.org\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "mailto:person@example.org"
+      ],
+      "assign": [
+        [
+          "pathname",
+          "/new path"
+        ]
+      ],
+      "expected": {
+        "href": "mailto:person@example.org",
+        "origin": "null",
+        "protocol": "mailto:",
+        "username": "",
+        "password": "",
+        "host": "",
+        "hostname": "",
+        "port": "",
+        "pathname": "person@example.org",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"mailto:person@example.org\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "mailto:person@example.org"
+      ],
+      "assign": [
+        [
+          "search",
+          "q=one two&x=~"
+        ]
+      ],
+      "expected": {
+        "href": "mailto:person@example.org?q=one%20two&x=~",
+        "origin": "null",
+        "protocol": "mailto:",
+        "username": "",
+        "password": "",
+        "host": "",
+        "hostname": "",
+        "port": "",
+        "pathname": "person@example.org",
+        "search": "?q=one%20two&x=~",
+        "hash": ""
+      },
+      "argsJSON": "[\"mailto:person@example.org\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "mailto:person@example.org"
+      ],
+      "assign": [
+        [
+          "hash",
+          "new value"
+        ]
+      ],
+      "expected": {
+        "href": "mailto:person@example.org#new%20value",
+        "origin": "null",
+        "protocol": "mailto:",
+        "username": "",
+        "password": "",
+        "host": "",
+        "hostname": "",
+        "port": "",
+        "pathname": "person@example.org",
+        "search": "",
+        "hash": "#new%20value"
+      },
+      "argsJSON": "[\"mailto:person@example.org\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "mailto:person@example.org"
+      ],
+      "assign": [
+        [
+          "href",
+          "https://new.test/?a=2"
+        ]
+      ],
+      "expected": {
+        "href": "https://new.test/?a=2",
+        "origin": "https://new.test",
+        "protocol": "https:",
+        "username": "",
+        "password": "",
+        "host": "new.test",
+        "hostname": "new.test",
+        "port": "",
+        "pathname": "/",
+        "search": "?a=2",
+        "hash": ""
+      },
+      "argsJSON": "[\"mailto:person@example.org\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "data:text/plain,hello"
+      ],
+      "assign": [],
+      "expected": {
+        "href": "data:text/plain,hello",
+        "origin": "null",
+        "protocol": "data:",
+        "username": "",
+        "password": "",
+        "host": "",
+        "hostname": "",
+        "port": "",
+        "pathname": "text/plain,hello",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"data:text/plain,hello\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "data:text/plain,hello"
+      ],
+      "assign": [
+        [
+          "protocol",
+          "http:"
+        ]
+      ],
+      "expected": {
+        "href": "data:text/plain,hello",
+        "origin": "null",
+        "protocol": "data:",
+        "username": "",
+        "password": "",
+        "host": "",
+        "hostname": "",
+        "port": "",
+        "pathname": "text/plain,hello",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"data:text/plain,hello\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "data:text/plain,hello"
+      ],
+      "assign": [
+        [
+          "username",
+          "a b"
+        ]
+      ],
+      "expected": {
+        "href": "data:text/plain,hello",
+        "origin": "null",
+        "protocol": "data:",
+        "username": "",
+        "password": "",
+        "host": "",
+        "hostname": "",
+        "port": "",
+        "pathname": "text/plain,hello",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"data:text/plain,hello\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "data:text/plain,hello"
+      ],
+      "assign": [
+        [
+          "password",
+          "p@ss"
+        ]
+      ],
+      "expected": {
+        "href": "data:text/plain,hello",
+        "origin": "null",
+        "protocol": "data:",
+        "username": "",
+        "password": "",
+        "host": "",
+        "hostname": "",
+        "port": "",
+        "pathname": "text/plain,hello",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"data:text/plain,hello\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "data:text/plain,hello"
+      ],
+      "assign": [
+        [
+          "host",
+          "other.test:8090"
+        ]
+      ],
+      "expected": {
+        "href": "data:text/plain,hello",
+        "origin": "null",
+        "protocol": "data:",
+        "username": "",
+        "password": "",
+        "host": "",
+        "hostname": "",
+        "port": "",
+        "pathname": "text/plain,hello",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"data:text/plain,hello\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "data:text/plain,hello"
+      ],
+      "assign": [
+        [
+          "hostname",
+          "new.test"
+        ]
+      ],
+      "expected": {
+        "href": "data:text/plain,hello",
+        "origin": "null",
+        "protocol": "data:",
+        "username": "",
+        "password": "",
+        "host": "",
+        "hostname": "",
+        "port": "",
+        "pathname": "text/plain,hello",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"data:text/plain,hello\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "data:text/plain,hello"
+      ],
+      "assign": [
+        [
+          "port",
+          "8443"
+        ]
+      ],
+      "expected": {
+        "href": "data:text/plain,hello",
+        "origin": "null",
+        "protocol": "data:",
+        "username": "",
+        "password": "",
+        "host": "",
+        "hostname": "",
+        "port": "",
+        "pathname": "text/plain,hello",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"data:text/plain,hello\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "data:text/plain,hello"
+      ],
+      "assign": [
+        [
+          "port",
+          "bad"
+        ]
+      ],
+      "expected": {
+        "href": "data:text/plain,hello",
+        "origin": "null",
+        "protocol": "data:",
+        "username": "",
+        "password": "",
+        "host": "",
+        "hostname": "",
+        "port": "",
+        "pathname": "text/plain,hello",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"data:text/plain,hello\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "data:text/plain,hello"
+      ],
+      "assign": [
+        [
+          "pathname",
+          "/new path"
+        ]
+      ],
+      "expected": {
+        "href": "data:text/plain,hello",
+        "origin": "null",
+        "protocol": "data:",
+        "username": "",
+        "password": "",
+        "host": "",
+        "hostname": "",
+        "port": "",
+        "pathname": "text/plain,hello",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"data:text/plain,hello\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "data:text/plain,hello"
+      ],
+      "assign": [
+        [
+          "search",
+          "q=one two&x=~"
+        ]
+      ],
+      "expected": {
+        "href": "data:text/plain,hello?q=one%20two&x=~",
+        "origin": "null",
+        "protocol": "data:",
+        "username": "",
+        "password": "",
+        "host": "",
+        "hostname": "",
+        "port": "",
+        "pathname": "text/plain,hello",
+        "search": "?q=one%20two&x=~",
+        "hash": ""
+      },
+      "argsJSON": "[\"data:text/plain,hello\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "data:text/plain,hello"
+      ],
+      "assign": [
+        [
+          "hash",
+          "new value"
+        ]
+      ],
+      "expected": {
+        "href": "data:text/plain,hello#new%20value",
+        "origin": "null",
+        "protocol": "data:",
+        "username": "",
+        "password": "",
+        "host": "",
+        "hostname": "",
+        "port": "",
+        "pathname": "text/plain,hello",
+        "search": "",
+        "hash": "#new%20value"
+      },
+      "argsJSON": "[\"data:text/plain,hello\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "data:text/plain,hello"
+      ],
+      "assign": [
+        [
+          "href",
+          "https://new.test/?a=2"
+        ]
+      ],
+      "expected": {
+        "href": "https://new.test/?a=2",
+        "origin": "https://new.test",
+        "protocol": "https:",
+        "username": "",
+        "password": "",
+        "host": "new.test",
+        "hostname": "new.test",
+        "port": "",
+        "pathname": "/",
+        "search": "?a=2",
+        "hash": ""
+      },
+      "argsJSON": "[\"data:text/plain,hello\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "custom://example.org/a"
+      ],
+      "assign": [],
+      "expected": {
+        "href": "custom://example.org/a",
+        "origin": "null",
+        "protocol": "custom:",
+        "username": "",
+        "password": "",
+        "host": "example.org",
+        "hostname": "example.org",
+        "port": "",
+        "pathname": "/a",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"custom://example.org/a\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "custom://example.org/a"
+      ],
+      "assign": [
+        [
+          "protocol",
+          "http:"
+        ]
+      ],
+      "expected": {
+        "href": "custom://example.org/a",
+        "origin": "null",
+        "protocol": "custom:",
+        "username": "",
+        "password": "",
+        "host": "example.org",
+        "hostname": "example.org",
+        "port": "",
+        "pathname": "/a",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"custom://example.org/a\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "custom://example.org/a"
+      ],
+      "assign": [
+        [
+          "username",
+          "a b"
+        ]
+      ],
+      "expected": {
+        "href": "custom://a%20b@example.org/a",
+        "origin": "null",
+        "protocol": "custom:",
+        "username": "a%20b",
+        "password": "",
+        "host": "example.org",
+        "hostname": "example.org",
+        "port": "",
+        "pathname": "/a",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"custom://example.org/a\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "custom://example.org/a"
+      ],
+      "assign": [
+        [
+          "password",
+          "p@ss"
+        ]
+      ],
+      "expected": {
+        "href": "custom://:p%40ss@example.org/a",
+        "origin": "null",
+        "protocol": "custom:",
+        "username": "",
+        "password": "p%40ss",
+        "host": "example.org",
+        "hostname": "example.org",
+        "port": "",
+        "pathname": "/a",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"custom://example.org/a\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "custom://example.org/a"
+      ],
+      "assign": [
+        [
+          "host",
+          "other.test:8090"
+        ]
+      ],
+      "expected": {
+        "href": "custom://other.test:8090/a",
+        "origin": "null",
+        "protocol": "custom:",
+        "username": "",
+        "password": "",
+        "host": "other.test:8090",
+        "hostname": "other.test",
+        "port": "8090",
+        "pathname": "/a",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"custom://example.org/a\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "custom://example.org/a"
+      ],
+      "assign": [
+        [
+          "hostname",
+          "new.test"
+        ]
+      ],
+      "expected": {
+        "href": "custom://new.test/a",
+        "origin": "null",
+        "protocol": "custom:",
+        "username": "",
+        "password": "",
+        "host": "new.test",
+        "hostname": "new.test",
+        "port": "",
+        "pathname": "/a",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"custom://example.org/a\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "custom://example.org/a"
+      ],
+      "assign": [
+        [
+          "port",
+          "8443"
+        ]
+      ],
+      "expected": {
+        "href": "custom://example.org:8443/a",
+        "origin": "null",
+        "protocol": "custom:",
+        "username": "",
+        "password": "",
+        "host": "example.org:8443",
+        "hostname": "example.org",
+        "port": "8443",
+        "pathname": "/a",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"custom://example.org/a\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "custom://example.org/a"
+      ],
+      "assign": [
+        [
+          "port",
+          "bad"
+        ]
+      ],
+      "expected": {
+        "href": "custom://example.org/a",
+        "origin": "null",
+        "protocol": "custom:",
+        "username": "",
+        "password": "",
+        "host": "example.org",
+        "hostname": "example.org",
+        "port": "",
+        "pathname": "/a",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"custom://example.org/a\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "custom://example.org/a"
+      ],
+      "assign": [
+        [
+          "pathname",
+          "/new path"
+        ]
+      ],
+      "expected": {
+        "href": "custom://example.org/new%20path",
+        "origin": "null",
+        "protocol": "custom:",
+        "username": "",
+        "password": "",
+        "host": "example.org",
+        "hostname": "example.org",
+        "port": "",
+        "pathname": "/new%20path",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"custom://example.org/a\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "custom://example.org/a"
+      ],
+      "assign": [
+        [
+          "search",
+          "q=one two&x=~"
+        ]
+      ],
+      "expected": {
+        "href": "custom://example.org/a?q=one%20two&x=~",
+        "origin": "null",
+        "protocol": "custom:",
+        "username": "",
+        "password": "",
+        "host": "example.org",
+        "hostname": "example.org",
+        "port": "",
+        "pathname": "/a",
+        "search": "?q=one%20two&x=~",
+        "hash": ""
+      },
+      "argsJSON": "[\"custom://example.org/a\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "custom://example.org/a"
+      ],
+      "assign": [
+        [
+          "hash",
+          "new value"
+        ]
+      ],
+      "expected": {
+        "href": "custom://example.org/a#new%20value",
+        "origin": "null",
+        "protocol": "custom:",
+        "username": "",
+        "password": "",
+        "host": "example.org",
+        "hostname": "example.org",
+        "port": "",
+        "pathname": "/a",
+        "search": "",
+        "hash": "#new%20value"
+      },
+      "argsJSON": "[\"custom://example.org/a\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "custom://example.org/a"
+      ],
+      "assign": [
+        [
+          "href",
+          "https://new.test/?a=2"
+        ]
+      ],
+      "expected": {
+        "href": "https://new.test/?a=2",
+        "origin": "https://new.test",
+        "protocol": "https:",
+        "username": "",
+        "password": "",
+        "host": "new.test",
+        "hostname": "new.test",
+        "port": "",
+        "pathname": "/",
+        "search": "?a=2",
+        "hash": ""
+      },
+      "argsJSON": "[\"custom://example.org/a\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "../x",
+        "https://example.org/dir/page"
+      ],
+      "assign": [],
+      "expected": {
+        "href": "https://example.org/x",
+        "origin": "https://example.org",
+        "protocol": "https:",
+        "username": "",
+        "password": "",
+        "host": "example.org",
+        "hostname": "example.org",
+        "port": "",
+        "pathname": "/x",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"../x\",\"https://example.org/dir/page\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "?q=1",
+        "https://example.org/dir/page"
+      ],
+      "assign": [],
+      "expected": {
+        "href": "https://example.org/dir/page?q=1",
+        "origin": "https://example.org",
+        "protocol": "https:",
+        "username": "",
+        "password": "",
+        "host": "example.org",
+        "hostname": "example.org",
+        "port": "",
+        "pathname": "/dir/page",
+        "search": "?q=1",
+        "hash": ""
+      },
+      "argsJSON": "[\"?q=1\",\"https://example.org/dir/page\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "#hash",
+        "https://example.org/dir/page"
+      ],
+      "assign": [],
+      "expected": {
+        "href": "https://example.org/dir/page#hash",
+        "origin": "https://example.org",
+        "protocol": "https:",
+        "username": "",
+        "password": "",
+        "host": "example.org",
+        "hostname": "example.org",
+        "port": "",
+        "pathname": "/dir/page",
+        "search": "",
+        "hash": "#hash"
+      },
+      "argsJSON": "[\"#hash\",\"https://example.org/dir/page\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "/a b",
+        "https://example.org/dir/page"
+      ],
+      "assign": [],
+      "expected": {
+        "href": "https://example.org/a%20b",
+        "origin": "https://example.org",
+        "protocol": "https:",
+        "username": "",
+        "password": "",
+        "host": "example.org",
+        "hostname": "example.org",
+        "port": "",
+        "pathname": "/a%20b",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"/a b\",\"https://example.org/dir/page\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "//other.test/x",
+        "https://example.org/dir/page"
+      ],
+      "assign": [],
+      "expected": {
+        "href": "https://other.test/x",
+        "origin": "https://other.test",
+        "protocol": "https:",
+        "username": "",
+        "password": "",
+        "host": "other.test",
+        "hostname": "other.test",
+        "port": "",
+        "pathname": "/x",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"//other.test/x\",\"https://example.org/dir/page\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "https:other.test/a",
+        "https://example.org/dir/page"
+      ],
+      "assign": [],
+      "expected": {
+        "href": "https://example.org/dir/other.test/a",
+        "origin": "https://example.org",
+        "protocol": "https:",
+        "username": "",
+        "password": "",
+        "host": "example.org",
+        "hostname": "example.org",
+        "port": "",
+        "pathname": "/dir/other.test/a",
+        "search": "",
+        "hash": ""
+      },
+      "argsJSON": "[\"https:other.test/a\",\"https://example.org/dir/page\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "relative"
+      ],
+      "assign": [],
+      "expected": {
+        "error": "TypeError"
+      },
+      "argsJSON": "[\"relative\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "http://[bad"
+      ],
+      "assign": [],
+      "expected": {
+        "error": "TypeError"
+      },
+      "argsJSON": "[\"http://[bad\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "https://x:99999"
+      ],
+      "assign": [],
+      "expected": {
+        "error": "TypeError"
+      },
+      "argsJSON": "[\"https://x:99999\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "https://"
+      ],
+      "assign": [],
+      "expected": {
+        "error": "TypeError"
+      },
+      "argsJSON": "[\"https://\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        ""
+      ],
+      "assign": [],
+      "expected": {
+        "error": "TypeError"
+      },
+      "argsJSON": "[\"\"]"
+    },
+    {
+      "kind": "url",
+      "args": [
+        "https://example.org",
+        "invalid base"
+      ],
+      "assign": [],
+      "expected": {
+        "error": "TypeError"
+      },
+      "argsJSON": "[\"https://example.org\",\"invalid base\"]"
+    },
+    {
+      "kind": "query",
+      "args": [],
+      "operations": [],
+      "expected": {
+        "serialized": "",
+        "entries": [],
+        "size": 0
+      },
+      "argsJSON": "[]"
+    },
+    {
+      "kind": "query",
+      "args": [],
+      "operations": [
+        [
+          "append",
+          "x",
+          "+ ~"
+        ],
+        [
+          "set",
+          "a",
+          "new"
+        ]
+      ],
+      "expected": {
+        "serialized": "x=%2B+%7E&a=new",
+        "entries": [
+          [
+            "x",
+            "+ ~"
+          ],
+          [
+            "a",
+            "new"
+          ]
+        ],
+        "size": 2
+      },
+      "argsJSON": "[]"
+    },
+    {
+      "kind": "query",
+      "args": [],
+      "operations": [
+        [
+          "delete",
+          "a",
+          "1"
+        ],
+        [
+          "sort"
+        ]
+      ],
+      "expected": {
+        "serialized": "",
+        "entries": [],
+        "size": 0
+      },
+      "argsJSON": "[]"
+    },
+    {
+      "kind": "query",
+      "args": [
+        ""
+      ],
+      "operations": [],
+      "expected": {
+        "serialized": "",
+        "entries": [],
+        "size": 0
+      },
+      "argsJSON": "[\"\"]"
+    },
+    {
+      "kind": "query",
+      "args": [
+        ""
+      ],
+      "operations": [
+        [
+          "append",
+          "x",
+          "+ ~"
+        ],
+        [
+          "set",
+          "a",
+          "new"
+        ]
+      ],
+      "expected": {
+        "serialized": "x=%2B+%7E&a=new",
+        "entries": [
+          [
+            "x",
+            "+ ~"
+          ],
+          [
+            "a",
+            "new"
+          ]
+        ],
+        "size": 2
+      },
+      "argsJSON": "[\"\"]"
+    },
+    {
+      "kind": "query",
+      "args": [
+        ""
+      ],
+      "operations": [
+        [
+          "delete",
+          "a",
+          "1"
+        ],
+        [
+          "sort"
+        ]
+      ],
+      "expected": {
+        "serialized": "",
+        "entries": [],
+        "size": 0
+      },
+      "argsJSON": "[\"\"]"
+    },
+    {
+      "kind": "query",
+      "args": [
+        null
+      ],
+      "operations": [],
+      "expected": {
+        "serialized": "null=",
+        "entries": [
+          [
+            "null",
+            ""
+          ]
+        ],
+        "size": 1
+      },
+      "argsJSON": "[null]"
+    },
+    {
+      "kind": "query",
+      "args": [
+        null
+      ],
+      "operations": [
+        [
+          "append",
+          "x",
+          "+ ~"
+        ],
+        [
+          "set",
+          "a",
+          "new"
+        ]
+      ],
+      "expected": {
+        "serialized": "null=&x=%2B+%7E&a=new",
+        "entries": [
+          [
+            "null",
+            ""
+          ],
+          [
+            "x",
+            "+ ~"
+          ],
+          [
+            "a",
+            "new"
+          ]
+        ],
+        "size": 3
+      },
+      "argsJSON": "[null]"
+    },
+    {
+      "kind": "query",
+      "args": [
+        null
+      ],
+      "operations": [
+        [
+          "delete",
+          "a",
+          "1"
+        ],
+        [
+          "sort"
+        ]
+      ],
+      "expected": {
+        "serialized": "null=",
+        "entries": [
+          [
+            "null",
+            ""
+          ]
+        ],
+        "size": 1
+      },
+      "argsJSON": "[null]"
+    },
+    {
+      "kind": "query",
+      "args": [
+        "?a=1&a=2&x=one+two"
+      ],
+      "operations": [],
+      "expected": {
+        "serialized": "a=1&a=2&x=one+two",
+        "entries": [
+          [
+            "a",
+            "1"
+          ],
+          [
+            "a",
+            "2"
+          ],
+          [
+            "x",
+            "one two"
+          ]
+        ],
+        "size": 3
+      },
+      "argsJSON": "[\"?a=1&a=2&x=one+two\"]"
+    },
+    {
+      "kind": "query",
+      "args": [
+        "?a=1&a=2&x=one+two"
+      ],
+      "operations": [
+        [
+          "append",
+          "x",
+          "+ ~"
+        ],
+        [
+          "set",
+          "a",
+          "new"
+        ]
+      ],
+      "expected": {
+        "serialized": "a=new&x=one+two&x=%2B+%7E",
+        "entries": [
+          [
+            "a",
+            "new"
+          ],
+          [
+            "x",
+            "one two"
+          ],
+          [
+            "x",
+            "+ ~"
+          ]
+        ],
+        "size": 3
+      },
+      "argsJSON": "[\"?a=1&a=2&x=one+two\"]"
+    },
+    {
+      "kind": "query",
+      "args": [
+        "?a=1&a=2&x=one+two"
+      ],
+      "operations": [
+        [
+          "delete",
+          "a",
+          "1"
+        ],
+        [
+          "sort"
+        ]
+      ],
+      "expected": {
+        "serialized": "a=2&x=one+two",
+        "entries": [
+          [
+            "a",
+            "2"
+          ],
+          [
+            "x",
+            "one two"
+          ]
+        ],
+        "size": 2
+      },
+      "argsJSON": "[\"?a=1&a=2&x=one+two\"]"
+    },
+    {
+      "kind": "query",
+      "args": [
+        "bad=%E0%A4%A&zero=%00&x=%zz"
+      ],
+      "operations": [],
+      "expected": {
+        "serialized": "bad=%EF%BF%BD%25A&zero=%00&x=%25zz",
+        "entries": [
+          [
+            "bad",
+            "�%A"
+          ],
+          [
+            "zero",
+            "\u0000"
+          ],
+          [
+            "x",
+            "%zz"
+          ]
+        ],
+        "size": 3
+      },
+      "argsJSON": "[\"bad=%E0%A4%A&zero=%00&x=%zz\"]"
+    },
+    {
+      "kind": "query",
+      "args": [
+        "bad=%E0%A4%A&zero=%00&x=%zz"
+      ],
+      "operations": [
+        [
+          "append",
+          "x",
+          "+ ~"
+        ],
+        [
+          "set",
+          "a",
+          "new"
+        ]
+      ],
+      "expected": {
+        "serialized": "bad=%EF%BF%BD%25A&zero=%00&x=%25zz&x=%2B+%7E&a=new",
+        "entries": [
+          [
+            "bad",
+            "�%A"
+          ],
+          [
+            "zero",
+            "\u0000"
+          ],
+          [
+            "x",
+            "%zz"
+          ],
+          [
+            "x",
+            "+ ~"
+          ],
+          [
+            "a",
+            "new"
+          ]
+        ],
+        "size": 5
+      },
+      "argsJSON": "[\"bad=%E0%A4%A&zero=%00&x=%zz\"]"
+    },
+    {
+      "kind": "query",
+      "args": [
+        "bad=%E0%A4%A&zero=%00&x=%zz"
+      ],
+      "operations": [
+        [
+          "delete",
+          "a",
+          "1"
+        ],
+        [
+          "sort"
+        ]
+      ],
+      "expected": {
+        "serialized": "bad=%EF%BF%BD%25A&x=%25zz&zero=%00",
+        "entries": [
+          [
+            "bad",
+            "�%A"
+          ],
+          [
+            "x",
+            "%zz"
+          ],
+          [
+            "zero",
+            "\u0000"
+          ]
+        ],
+        "size": 3
+      },
+      "argsJSON": "[\"bad=%E0%A4%A&zero=%00&x=%zz\"]"
+    },
+    {
+      "kind": "query",
+      "args": [
+        {
+          "q": "é a",
+          "n": null
+        }
+      ],
+      "operations": [],
+      "expected": {
+        "serialized": "q=%C3%A9+a&n=null",
+        "entries": [
+          [
+            "q",
+            "é a"
+          ],
+          [
+            "n",
+            "null"
+          ]
+        ],
+        "size": 2
+      },
+      "argsJSON": "[{\"q\":\"é a\",\"n\":null}]"
+    },
+    {
+      "kind": "query",
+      "args": [
+        {
+          "q": "é a",
+          "n": null
+        }
+      ],
+      "operations": [
+        [
+          "append",
+          "x",
+          "+ ~"
+        ],
+        [
+          "set",
+          "a",
+          "new"
+        ]
+      ],
+      "expected": {
+        "serialized": "q=%C3%A9+a&n=null&x=%2B+%7E&a=new",
+        "entries": [
+          [
+            "q",
+            "é a"
+          ],
+          [
+            "n",
+            "null"
+          ],
+          [
+            "x",
+            "+ ~"
+          ],
+          [
+            "a",
+            "new"
+          ]
+        ],
+        "size": 4
+      },
+      "argsJSON": "[{\"q\":\"é a\",\"n\":null}]"
+    },
+    {
+      "kind": "query",
+      "args": [
+        {
+          "q": "é a",
+          "n": null
+        }
+      ],
+      "operations": [
+        [
+          "delete",
+          "a",
+          "1"
+        ],
+        [
+          "sort"
+        ]
+      ],
+      "expected": {
+        "serialized": "n=null&q=%C3%A9+a",
+        "entries": [
+          [
+            "n",
+            "null"
+          ],
+          [
+            "q",
+            "é a"
+          ]
+        ],
+        "size": 2
+      },
+      "argsJSON": "[{\"q\":\"é a\",\"n\":null}]"
+    },
+    {
+      "kind": "query",
+      "args": [
+        [
+          [
+            "b",
+            "1"
+          ],
+          [
+            "a",
+            "2"
+          ],
+          [
+            "a",
+            "3"
+          ]
+        ]
+      ],
+      "operations": [],
+      "expected": {
+        "serialized": "b=1&a=2&a=3",
+        "entries": [
+          [
+            "b",
+            "1"
+          ],
+          [
+            "a",
+            "2"
+          ],
+          [
+            "a",
+            "3"
+          ]
+        ],
+        "size": 3
+      },
+      "argsJSON": "[[[\"b\",\"1\"],[\"a\",\"2\"],[\"a\",\"3\"]]]"
+    },
+    {
+      "kind": "query",
+      "args": [
+        [
+          [
+            "b",
+            "1"
+          ],
+          [
+            "a",
+            "2"
+          ],
+          [
+            "a",
+            "3"
+          ]
+        ]
+      ],
+      "operations": [
+        [
+          "append",
+          "x",
+          "+ ~"
+        ],
+        [
+          "set",
+          "a",
+          "new"
+        ]
+      ],
+      "expected": {
+        "serialized": "b=1&a=new&x=%2B+%7E",
+        "entries": [
+          [
+            "b",
+            "1"
+          ],
+          [
+            "a",
+            "new"
+          ],
+          [
+            "x",
+            "+ ~"
+          ]
+        ],
+        "size": 3
+      },
+      "argsJSON": "[[[\"b\",\"1\"],[\"a\",\"2\"],[\"a\",\"3\"]]]"
+    },
+    {
+      "kind": "query",
+      "args": [
+        [
+          [
+            "b",
+            "1"
+          ],
+          [
+            "a",
+            "2"
+          ],
+          [
+            "a",
+            "3"
+          ]
+        ]
+      ],
+      "operations": [
+        [
+          "delete",
+          "a",
+          "1"
+        ],
+        [
+          "sort"
+        ]
+      ],
+      "expected": {
+        "serialized": "a=2&a=3&b=1",
+        "entries": [
+          [
+            "a",
+            "2"
+          ],
+          [
+            "a",
+            "3"
+          ],
+          [
+            "b",
+            "1"
+          ]
+        ],
+        "size": 3
+      },
+      "argsJSON": "[[[\"b\",\"1\"],[\"a\",\"2\"],[\"a\",\"3\"]]]"
+    }
+  ]
+}

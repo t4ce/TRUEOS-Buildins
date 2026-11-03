@@ -48,6 +48,34 @@ parsing, GC, native operations and cloning can overrun a checkpoint. Rust select
 walks have their own finite resource limits. This is not an OS sandbox or a hard
 250 ms UI-latency guarantee.
 
+## URL and query parameters
+
+Active page and console-only realms expose `URL` and `URLSearchParams`. Parsing,
+relative resolution, browser-style component setters, origins and form query
+encoding/decoding reuse Hull's existing Rust `url` crate. QuickJS retains object
+identity, Web IDL string coercion, list mutations, callbacks and live iterators.
+There is no persistent native URL-object registry.
+
+URL provides href/protocol/username/password/host/hostname/port/pathname/search/
+hash accessors, origin, toString/toJSON, canParse and parse. Its same-object
+searchParams view tracks href/search changes in both directions. URLSearchParams
+accepts strings, records and name/value iterables, with size, append/delete/get/
+getAll/has/set/sort, forEach and live entries/keys/values. USVString conversion
+replaces lone surrogates; sorting uses stable UTF-16 key order. Blob object-URL
+registration/revocation is not provided.
+
+These constructors do not navigate, fetch, read files or imply window.location.
+UTF-8 string inputs/serialized outputs and aggregate query data are bounded to
+128 KiB per operation, with at most 4,096 query pairs; excess throws RangeError.
+The shared QuickJS allowance applies; native parsing is bounded cooperatively,
+not preempted by a separate thread.
+
+Host fixtures cover components, invalid setters, Unicode/IDNA/IPv6, live identity,
+iterators, console-only installation and dynamically loaded modules using
+import.meta.url. A development oracle forces the pinned core-js 3.51.0 fallback
+and compares 153 source cases against the production binding. This does not
+constitute full web-platform conformance.
+
 ## Small standard DOM subset
 
 - `document.getElementById`, `querySelector`, `querySelectorAll`,

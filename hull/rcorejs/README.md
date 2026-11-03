@@ -33,6 +33,11 @@ existing engine builtins, bundle polyfills into page startup or provide a
 JavaScript object heap. A future binding should use actual QuickJS values and
 strings; the DOM JSON gateway cannot preserve arbitrary JS semantics.
 
+Hull now exposes URL/URLSearchParams separately through its existing Rust `url`
+dependency and production binding in `../src/javascript_url.{rs,js}`. Host JS
+tests compare it with this reference's original URL polyfill. The URL parser was
+reused, not translated into rcorejs.
+
 ## Validation and growth
 
 ```sh

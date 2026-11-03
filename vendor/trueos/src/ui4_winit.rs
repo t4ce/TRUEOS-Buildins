@@ -120,6 +120,28 @@ impl SceneTarget {
             _ => Err(Error::InvalidState),
         }
     }
+    /// Replace hover-only outlines, independently of buttons. Uses border_rgba
+    /// as the ink color at half opacity, with no pressed or permanent border.
+    pub fn set_hover_regions(
+        &mut self,
+        regions: &[v::bp_abi::TrueosUi4ButtonRegionV1],
+    ) -> Result<(), Error> {
+        if regions.len() > 256 {
+            return Err(Error::Invalid);
+        }
+        let rc = unsafe {
+            v::bp_abi::trueos_cabi_ui4_scene_hover_regions_v1(
+                self.surface.window_id,
+                regions.as_ptr(),
+                regions.len(),
+            )
+        };
+        match rc {
+            0 => Ok(()),
+            -7 => Err(Error::Busy),
+            _ => Err(Error::InvalidState),
+        }
+    }
     pub fn draw_sprite_commands(&mut self, commands: &[SpriteCommand]) -> Result<(), Error> {
         self.surface.draw_sprite_commands(commands)
     }

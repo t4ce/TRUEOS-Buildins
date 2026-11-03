@@ -37,6 +37,7 @@
         const response = native(args);
         if (!response.ok) {
             if (response.name === 'TypeError') throw new TypeError(response.message);
+            if (response.name === 'RangeError') throw new RangeError(response.message);
             throw new DOMException(response.message, response.name);
         }
         return response.value;
@@ -162,4 +163,5 @@
         replaceable('innerHeight', () => request('window').innerHeight);
     }
     /* HULL_NATIVE_JQUERY */
+    /* HULL_NATIVE_URL */
 })();

@@ -113,6 +113,15 @@ import('/_app/start.js').then(async kit=>{kit.init();const app=await import('/_a
         self.assertEqual(svg_text(self.out / "layout.svg"), "module bootstrap ready")
         self.assertFalse(any("esm.sh" in e["url"] for e in report["resources"]))
 
+    def test_native_url_is_available_in_a_dynamic_module(self):
+        (self.capture / "url-module.js").write_text("export function resolve(){const u=new URL('./asset.js',import.meta.url);u.searchParams.set('q','native URL');return u.href}")
+        self.page("<p>before</p><script>import('./url-module.js').then(m=>document.querySelector('p').textContent=m.resolve())</script>", {
+            "https://fixture.test/url-module.js": {"status":"ok","path":"url-module.js","kind":"module"},
+        })
+        report = self.run_page("--modules")
+        self.assertEqual(svg_text(self.out / "layout.svg"), "https://fixture.test/asset.js?q=native+URL")
+        self.assertEqual(report["job_errors"], [])
+
     def test_capture_module_graph_uses_the_parser_without_executing_bodies(self):
         from unittest.mock import patch
         html = b"<p>before</p><script type=module>import 'demo@1.0.0';</script>"

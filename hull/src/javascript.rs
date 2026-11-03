@@ -521,7 +521,7 @@ async fn worker(
                                 page.current_script.clone(),
                             )
                         } else {
-                            Ok(())
+                            javascript_dom::install_url_only(&mut value)
                         }
                     });
                     match initialized {

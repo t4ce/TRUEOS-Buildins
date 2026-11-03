@@ -97,6 +97,11 @@ There is no general-purpose guest fetch/XHR, filesystem, shell, timer or process
 API. Imports request host-managed HTTPS JavaScript sources; replay fulfills them
 only from captured files and never contacts the live CDN.
 
+URL and URLSearchParams are available in inline scripts and loaded modules,
+including new URL(relative, import.meta.url). They use Hull's Rust parser and live
+query binding with finite string/pair limits. URL construction performs no fetch
+or navigation. JAVASCRIPT.md describes the admitted API.
+
 DOM-backed replay also installs Hull's native rjqry admission as $/jQuery. For
 example $('#message').text('ready').addClass('ready') mutates the same rp5 tree
 before its frozen first-render snapshot, and $.param/$.escapeSelector execute in
