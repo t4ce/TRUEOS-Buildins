@@ -175,6 +175,7 @@ struct Options {
     width: u32,
     height: u32,
     turn_ms: u64,
+    post_ms: u64,
     only_node: Option<usize>,
     replacements: HashMap<usize, PathBuf>,
     prelude: Option<PathBuf>,
@@ -193,6 +194,7 @@ impl Options {
             width: 1280,
             height: 720,
             turn_ms: 20,
+            post_ms: 0,
             only_node: None,
             replacements: HashMap::new(),
             prelude: None,
@@ -217,6 +219,7 @@ impl Options {
                         "--height" => {
                             result.height = value.parse().map_err(|_| "invalid height")?
                         }
+                        "--post-ms" => { result.post_ms = value.parse().map_err(|_| "invalid post-snapshot delay")?; }
                         "--turn-ms" => {
                             result.turn_ms = value.parse().map_err(|_| "invalid turn delay")?
                         }
@@ -245,6 +248,7 @@ impl Options {
             || result.height == 0
             || result.width > 8192
             || result.height > 8192
+            || result.post_ms > 10000
             || result.turn_ms > 100
         {
             return Err("viewport must be 1..8192; turn-ms must be 0..100".into());
@@ -448,6 +452,7 @@ fn run(options: Options) -> Result<(), String> {
     let mut turns = 0usize;
     let mut cookies = "[]".to_owned();
     let mut video_requests=Vec::new();
+    let mut live_runtime = None;
     let (frozen, experiments) = if options.inspect || options.no_js {
         for source in &mut inventory {
             source["status"] = json!(if options.inspect {
@@ -536,6 +541,7 @@ fn run(options: Options) -> Result<(), String> {
         }
         write_json(&options.out.join("admitted/scripts.json"), &json!(selected))?;
         cookies = runtime.storage_snapshot();
+        live_runtime = Some(runtime);
         (frozen, experiments)
     };
     let javascript_wall_ms = started.elapsed().as_secs_f64() * 1000.0;
@@ -565,6 +571,25 @@ fn run(options: Options) -> Result<(), String> {
         fs::write(options.out.join("storage.json"), &cookies).map_err(|e| e.to_string())?;
         fs::write(options.out.join("layout.json"), &export.json).map_err(|e| e.to_string())?;
         layout_stats = json!({"ms":start.elapsed().as_secs_f64()*1000.0,"boxes":export.line_rects.len(),"text_runs":export.text_runs.len(),"images":export.image_boxes.len(),"extent":export.line_extent});
+    }
+    // Keep the same actor alive after export, while preserving the frozen SVG
+    // and once-only storage export. This observation window is host-only.
+    if let Some(runtime) = &mut live_runtime {
+        let until = Instant::now() + Duration::from_millis(options.post_ms);
+        loop {
+            for report in runtime.poll() {
+                let mut event = record(report);
+                event["phase"] = json!("post-snapshot");
+                event["elapsed_ms"] = json!(started.elapsed().as_secs_f64()*1000.0);
+                trace.push(event);
+            }
+            if let Some((generation,request))=runtime.take_video_request(){
+                video_requests.push(json!({"id":request.id,"node":request.node,"url":request.url,"phase":"post-snapshot"}));
+                runtime.video_status(generation,request.id,-95);
+            }
+            if Instant::now() >= until { break; }
+            std::thread::sleep(Duration::from_millis(2));
+        }
     }
     let mut console = String::new();
     for event in &trace {
@@ -608,8 +633,8 @@ fn run(options: Options) -> Result<(), String> {
         .cloned()
         .unwrap_or(Value::Null);
     let failed = inventory.iter().filter(|s| s["status"] == "failed").count();
-    let report = json!({"video_requests":video_requests,"url":page_url,"mode":if options.inspect{"inspect"}else if options.no_js{"static"}else{"replay"},
-        "viewport":[options.width,options.height],"turn_ms":options.turn_ms,"window":!options.no_window,
+    let report = json!({"dynamic_scripts":trace.iter().filter(|e| e["event"]=="script" && e["node"].is_number() && !inventory.iter().any(|s|s["nodes"].as_array().is_some_and(|nodes|nodes.contains(&e["node"])))).collect::<Vec<_>>(),"video_requests":video_requests,"url":page_url,"mode":if options.inspect{"inspect"}else if options.no_js{"static"}else{"replay"},
+        "viewport":[options.width,options.height],"turn_ms":options.turn_ms,"post_ms":options.post_ms,"window":!options.no_window,
         "active_budget_ms":250,"initial_wall_window_ms":250,"module_loading":options.modules,"resource_wait_budget_ms":if options.modules{5000}else{0},"javascript_wall_ms":javascript_wall_ms,"turns":turns,
         "parse":{"nodes":parse_nodes,"errors":parse_errors},"initialization":initialized,"experiments":experiments,
         "scripts":inventory,"css_requests":css_requests,"resources":trace.iter().filter(|e|e["event"]=="resource").collect::<Vec<_>>(),"job_errors":trace.iter().filter(|e|e["event"]=="job-error").map(|e|&e["error"]).collect::<Vec<_>>(),"layout":layout_stats,"diagnostics":logl::take(),

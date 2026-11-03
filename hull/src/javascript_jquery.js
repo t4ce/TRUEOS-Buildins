@@ -71,7 +71,7 @@
     fn.ready = function(callback) {
         if (typeof callback === 'function') readyPromise.then(() => {
             try { apply(callback, document, [jQuery]); }
-            catch (error) { globalThis.console?.error(String(error)); }
+            catch (error) { globalThis.console?.error(String(error)+(error?.stack?'\n'+error.stack:'')); }
         });
         return this;
     };

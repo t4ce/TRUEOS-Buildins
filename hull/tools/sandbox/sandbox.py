@@ -194,7 +194,7 @@ def capture_page(args, executable: Path) -> None:
 
 
 def replay_arguments(args) -> list[str]:
-    result = ["--width", str(args.width), "--height", str(args.height), "--turn-ms", str(args.turn_ms)]
+    result = ["--post-ms", str(args.post_ms), "--width", str(args.width), "--height", str(args.height), "--turn-ms", str(args.turn_ms)]
     for name in ("no_js", "no_svg", "external", "no_window", "modules"):
         if getattr(args, name):
             result.append("--" + name.replace("_", "-"))
@@ -313,6 +313,7 @@ def parser() -> argparse.ArgumentParser:
         replay.add_argument("--only-node", type=int)
         replay.add_argument("--replace", action="append", default=[], metavar="NODE=FILE")
         replay.add_argument("--prelude", type=Path, help="experiment: local JS source before page scripts")
+        replay.add_argument("--post-ms", type=int, default=0, help="observe the live actor after SVG export for 0..10000 ms; never redraw")
         replay.add_argument("--turn-ms", type=int, default=20, help="20 matches Hull's idle delay; 0 isolates fast headless scheduling")
         replay.add_argument("--width", type=int, default=1280)
         replay.add_argument("--height", type=int, default=720)

@@ -336,3 +336,90 @@ fn import_map_exact_and_prefix_entries_resolve_before_cdn_defaults() {
     no_errors(&reports);
     assert!(!netfs::requested().iter().any(|u| u.contains("esm.sh")));
 }
+
+#[test]
+fn dynamic_scripts_load_once_with_current_script_and_real_completion_events() {
+    let mut r=runtime(r#"<p>before</p><script>
+      globalThis.trace=[];
+      const s=document.createElement('script');s.src='./dynamic.js';s.id='dynamic';
+      s.setAttribute('id','dynamic');
+      s.onload=function(e){if(this!==s||e.target!==s||!e.isTrusted)throw Error('load identity');trace.push('load');document.querySelector('p').textContent=trace.join(',')};
+      document.head.appendChild(s);
+      document.head.appendChild(s);
+      const missing=document.createElement('script');missing.src='./missing.js';
+      missing.onerror=()=>{document.cookie='missing=error'};document.head.appendChild(missing);
+    </script>"#,vec![("https://fixture.test/path/dynamic.js", "if(document.currentScript.getAttribute('id')!=='dynamic')throw Error('currentScript');trace.push('source');")]);
+    let (doc,reports)=finish(&mut r,1);
+    assert_eq!(text(&doc),"source,load");
+    assert!(r.cookie_snapshot().contains("missing=error"));
+    assert_eq!(netfs::requested().iter().filter(|u|u.ends_with("dynamic.js")).count(),1);
+    assert_eq!(reports.iter().filter(|r|matches!(r,Report::Evaluated{origin,result:Ok(()),..} if origin.ends_with("dynamic.js"))).count(),1);
+}
+
+#[test]
+fn inner_html_scripts_and_their_clones_remain_inert_after_insertion() {
+    let mut r=runtime(r#"<p>before</p><script>
+      const d=document.implementation.createHTMLDocument();
+      d.body.innerHTML='<script src="./must-not-load.js"><\/script>';
+      const script=d.body.firstChild,clone=script.cloneNode(true);
+      document.head.appendChild(script);document.head.appendChild(clone);
+      const active=document.createElement('script');active.text='document.querySelector("p").textContent="active"';
+      document.head.appendChild(active);
+    </script>"#,vec![]);
+    let (doc,reports)=finish(&mut r,1);
+    assert_eq!(text(&doc),"active");
+    assert!(netfs::requested().is_empty());
+    no_errors(&reports);
+}
+
+#[test]
+fn late_script_runs_after_snapshot_and_can_request_video_without_changing_snapshot() {
+    let mut r=runtime(r#"<p>before</p><script>
+      setTimeout(()=>{const s=document.createElement('script');s.src='./late.js';
+      s.onload=()=>document.cookie='late=loaded';document.head.appendChild(s)},80);
+    </script>"#,vec![("https://fixture.test/path/late.js",r#"
+      document.querySelector('p').textContent='after';
+      const video=document.createElement('video');video.src='https://fixture.test/movie.mp4';video.play().catch(()=>{});
+    "#)]);
+    let (frozen,mut reports)=finish(&mut r,1);
+    assert_eq!(text(&frozen),"before");
+    let until=Instant::now()+Duration::from_secs(2);
+    while !r.cookie_snapshot().contains("late=loaded") && Instant::now()<until {
+        reports.extend(r.poll());std::thread::sleep(Duration::from_millis(2));
+    }
+    assert!(r.cookie_snapshot().contains("late=loaded"),"{reports:?}");
+    assert_eq!(r.take_video_request().unwrap().1.url,"https://fixture.test/movie.mp4");
+    assert_eq!(text(&frozen),"before");
+    assert!(r.take_initial_document(1).is_none());
+    no_errors(&reports);
+}
+
+#[test]
+fn kt_player_adapter_hands_off_configured_url_without_loading_player_ui_or_captcha() {
+    let mut r=runtime(r#"<div id=player></div><script src='/player/kt_player.js?v=10'></script>
+    <script>kt_player('player','unused.swf','100%','100%',{video_url:'https://fixture.test/movie.mp4?token=keep'});</script>
+    <script src='https://www.google.com/recaptcha/api.js'></script>"#,vec![]);
+    let (_doc,reports)=finish(&mut r,1);
+    assert_eq!(r.take_video_request().unwrap().1.url,"https://fixture.test/movie.mp4?token=keep");
+    assert!(netfs::requested().is_empty());
+    assert!(reports.iter().any(|r|matches!(r,Report::Skipped{reason,..} if reason.contains("CAPTCHA"))));
+    no_errors(&reports);
+}
+
+#[test]
+fn video_subdocument_play_control_is_neutralized_into_media_inspection_not_navigation() {
+    let mut r=runtime(r#"<p>page stays</p><iframe title='Play video' src='/loading.html'></iframe>"#,vec![
+        ("https://fixture.test/loading.html",r#"<button id='playButton' onclick='playVideoFunction()'>Play</button><script>
+        function playVideoFunction(){document.cookie='frame=visited';location.href='./play.html';window.open('https://ads.test/');}
+        </script>"#),
+        ("https://fixture.test/play.html",r#"<video src='https://fixture.test/actual.mp4?signature=keep'></video>"#),
+    ]);
+    r.update_viewport(1280,720);
+    let (doc,reports)=finish(&mut r,1);
+    assert_eq!(text(&doc),"page stays");
+    assert_eq!(r.take_video_request().unwrap().1.url,"https://fixture.test/actual.mp4?signature=keep");
+    assert!(r.cookie_snapshot().contains("frame=visited"));
+    assert!(!netfs::requested().iter().any(|u|u.contains("ads.test")));
+    assert_eq!(netfs::requested().len(),2);
+    no_errors(&reports);
+}

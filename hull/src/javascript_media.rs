@@ -8,6 +8,7 @@ pub(crate) struct Request {
 #[derive(Default)]
 pub(crate) struct Media {
     next: u32,
+    pub inspection_navigation: std::collections::VecDeque<String>,
     pub pending: Option<Request>,
     pub receipt: Option<(u32, i32)>,
 }
@@ -20,4 +21,16 @@ impl Media {
         self.receipt = None;
         id
     }
+}
+
+/// Known player entry points are adapters, not browser UI implementations.
+pub(crate) fn player_adapter(address: &str) -> Option<&'static [u8]> {
+    let url = url::Url::parse(address).ok()?;
+    (crate::resource_url::allowed(&url) && url.path().ends_with("/kt_player.js"))
+        .then_some(include_bytes!("javascript_player_kt.js").as_slice())
+}
+pub(crate) fn ignored_script(address: &str) -> bool {
+    let Ok(url)=url::Url::parse(address) else { return false; };
+    matches!(url.host_str(),Some("www.google.com"|"www.recaptcha.net"|"www.gstatic.com"))
+        && url.path().starts_with("/recaptcha/")
 }

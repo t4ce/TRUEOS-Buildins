@@ -55,6 +55,25 @@ class SandboxWorkflow(unittest.TestCase):
         self.run_page('--no-svg')
         self.assertFalse((self.out / 'storage.json').exists())
 
+    def test_late_dynamic_script_requests_video_after_svg_without_rewriting_exports(self):
+        (self.capture / 'late.js').write_text("""
+          document.querySelector('p').textContent='late-render-must-not-appear';
+          document.cookie='phase=late';
+          const video=document.createElement('video');video.src='https://fixture.test/late.mp4';video.play().catch(()=>{});
+        """)
+        self.page("""<p>initial-render</p><script>
+          document.cookie='phase=initial';
+          setTimeout(()=>{const script=document.createElement('script');script.src='/late.js';document.head.appendChild(script)},300);
+        </script>""", {'https://fixture.test/late.js':{'status':'ok','kind':'js','path':'late.js'}})
+        report=self.run_page('--modules','--post-ms','450')
+        self.assertEqual(report['post_ms'],450)
+        self.assertIn('initial-render',svg_text(self.out / 'layout.svg'))
+        self.assertNotIn('late-render-must-not-appear',svg_text(self.out / 'layout.svg'))
+        self.assertEqual(json.loads((self.out / 'storage.json').read_text()),[['cookie:phase','initial']])
+        self.assertEqual(report['video_requests'][0]['url'],'https://fixture.test/late.mp4')
+        self.assertEqual(report['video_requests'][0]['phase'],'post-snapshot')
+        self.assertTrue(any(s['origin'].endswith('/late.js') and s['status']=='executed' for s in report['dynamic_scripts']))
+
     def test_video_play_records_only_latest_url_without_native_playback(self):
         self.page("""<video id=a src='/old.mp4'></video><video id=b><source src='/new.mp4'></video>
         <script>

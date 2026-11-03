@@ -18,7 +18,7 @@ class Event {
     constructor(type, options = {}) {
         if (!arguments.length) throw new TypeError('Expected an event type');
         const value = {type:string(type), bubbles:!!options?.bubbles, cancelable:!!options?.cancelable,
-            composed:!!options?.composed, target:null, current:null, phase:0, dispatching:false,
+            composed:!!options?.composed, initialized:true, target:null, current:null, phase:0, dispatching:false,
             stopped:false, immediate:false, canceled:false, passive:false, path:[], trusted:false,
             timestamp:eventNow ? eventNow() : 0, detail:null};
         eventStates.set(this, value);
@@ -44,7 +44,7 @@ class Event {
     composedPath() { return eventState(this).path.slice(); }
     initEvent(type, bubbles=false, cancelable=false) {
         const s=eventState(this); if(s.dispatching) return;
-        s.type=string(type);s.bubbles=!!bubbles;s.cancelable=!!cancelable;
+        s.initialized=true;s.composed=false;s.type=string(type);s.bubbles=!!bubbles;s.cancelable=!!cancelable;
         s.stopped=false;s.immediate=false;s.canceled=false;s.trusted=false;s.target=null;
     }
 }
@@ -104,7 +104,7 @@ class EventTarget {
 }
 function dispatchEventAt(target,event,trusted) {
     const state=eventState(event);eventTarget(target);
-    if(state.dispatching)throw new DOMException('Event is already dispatching','InvalidStateError');
+    if(state.dispatching||!state.initialized)throw new DOMException('Event is already dispatching','InvalidStateError');
     state.trusted=trusted;state.target=target;state.dispatching=true;
     const path=[target];
     for(let parent=eventTarget(target).parent();parent;parent=eventTarget(parent).parent())path.push(parent);
@@ -123,7 +123,7 @@ function dispatchEventAt(target,event,trusted) {
             } catch(error) {
                 // Event-listener exceptions are reported, not propagated to the
                 // dispatchEvent caller, and do not stop the remaining listeners.
-                try { globalThis.console?.error(String(error)); } catch(_) {}
+                try { globalThis.console?.error(String(error)+(error?.stack?'\n'+error.stack:'')); } catch(_) {}
             } finally { state.passive=false; }
         }
     }
@@ -142,6 +142,11 @@ for(const [name,value] of Object.entries({NONE:0,CAPTURING_PHASE:1,AT_TARGET:2,B
 }
 function dispatchDomRecord(record) {
     if(receiveMedia(record))return true;
+    if(record.kind==='__hull_script_event') {
+        const node=wrap(record.node);
+        if(node)dispatchEventAt(node,new Event(record.error?'error':'load'),true);
+        return true;
+    }
     if(eventWindow && record.source==='winit-window-state') {
         if(record.kind==='resize')dispatchEventAt(eventWindow,new Event('resize'),true);
         else if(record.kind==='focus' && typeof record.focused==='boolean')

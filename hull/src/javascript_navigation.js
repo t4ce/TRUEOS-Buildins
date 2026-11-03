@@ -6,6 +6,7 @@ if (eventWindow !== null) (() => {
     const current=new URLClass(document.URL), base=document.baseURI;
     let attempts=0;
     function blocked(kind,target) {
+        request("mediaNavigation",kind,target);
         if(attempts>3)return;
         if(attempts++===3) {
             if(output)apply(output,undefined,['hull: navigation log exceeded; further attempts silent']);

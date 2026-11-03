@@ -13,6 +13,8 @@ use serde_json::{Value, json};
 mod jquery;
 #[path = "javascript_dom_mutation.rs"]
 mod mutation;
+#[path = "javascript_dom_html.rs"]
+mod html;
 #[path="javascript_style.rs"]
 mod style;
 #[path = "javascript_url.rs"]
@@ -30,6 +32,14 @@ pub(super) fn install_url_only(engine: &mut Engine) -> Result<(), String> {
 }
 
 pub(super) type SharedDocument = Rc<RefCell<Document>>;
+#[derive(Default)]
+pub(super) struct ScriptState {
+    pub dirty: bool,
+    pub media_navigation: bool,
+    pub started: std::collections::HashSet<usize>,
+}
+pub(super) type SharedScriptState = Rc<RefCell<ScriptState>>;
+
 pub(super) type SharedCurrentScript = Rc<Cell<Option<usize>>>;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct WindowMetrics {
@@ -93,8 +103,9 @@ pub(super) fn install_for_page_with_cookies(
     cookies: cookies::SharedCookies,
     timers:Option<timers::SharedTimers>,
     media:Option<media::SharedMedia>,
+    script_state: SharedScriptState,
 ) -> Result<(), String> {
-    install_gateway(engine, document, window, current_script, page_url, cookies,timers,media)
+    install_gateway_with_scripts(engine, document, window, current_script, page_url, cookies,timers,media,script_state)
 }
 
 fn install_gateway(
@@ -106,6 +117,13 @@ fn install_gateway(
     cookies: cookies::SharedCookies,
     timers:Option<timers::SharedTimers>,
     media:Option<media::SharedMedia>,
+) -> Result<(), String> {
+    install_gateway_with_scripts(engine, document, window, current_script, page_url, cookies, timers, media, Default::default())
+}
+fn install_gateway_with_scripts(
+    engine: &mut Engine, document: SharedDocument, window: Option<SharedWindowMetrics>,
+    current_script: SharedCurrentScript, page_url: &str, cookies: cookies::SharedCookies,
+    timers: Option<timers::SharedTimers>, media: Option<media::SharedMedia>, script_state: SharedScriptState,
 ) -> Result<(), String> {
     let initial_nodes = document.borrow().nodes.len();
     let root = document.borrow().root;
@@ -119,6 +137,7 @@ fn install_gateway(
         cookies,
         timers,
         media,
+        script_state,
         style_locks:Default::default(),
         initial_nodes,
         mutation_bytes: 0,
@@ -169,6 +188,7 @@ fn input<'a>(request: &'a [Value], index: usize) -> DomResult<&'a str> {
 }
 
 struct Gateway {
+    script_state: SharedScriptState,
     documents: Rc<RefCell<Vec<usize>>>,
     owners: Rc<RefCell<Vec<usize>>>,
     style_locks:style::Locks,
@@ -226,6 +246,9 @@ impl Gateway {
                 .unwrap_or_default()
         } else { vec![] };
         let result = self.call_inner(request);
+        if result.is_ok() && matches!(request.get(0).and_then(Value::as_str), Some("appendChild"|"insertBefore"|"set"|"attribute"|"innerHTML")) {
+            self.script_state.borrow_mut().dirty = true;
+        }
         let after = self.document.borrow().nodes.len();
         self.owners.borrow_mut().resize(after, owner);
         if result.is_ok() && matches!(request.get(0).and_then(Value::as_str), Some("appendChild" | "insertBefore")) {
@@ -248,6 +271,15 @@ impl Gateway {
             .as_array()
             .ok_or_else(|| failure("TypeError", "Expected a DOM request"))?;
         let operation = input(args, 0)?;
+        if operation=="mediaNavigation" {
+            if self.script_state.borrow().media_navigation && input(args,1)?.starts_with("location") {
+                if let Some(media)=&self.media {
+                    let target=input(args,2)?;
+                    if target.len()<=3072 && media.borrow().inspection_navigation.len()<3 {media.borrow_mut().inspection_navigation.push_back(target.into());}
+                }
+            }
+            return Ok(Value::Null);
+        }
         if operation=="timers" {return Ok(json!(self.timers.is_some()));}
         if operation=="mediaPlay" {
             let node=args.get(1).and_then(Value::as_u64).and_then(|v|usize::try_from(v).ok()).ok_or_else(||failure("TypeError","Expected video node"))?;
@@ -298,6 +330,11 @@ impl Gateway {
             .and_then(|id| usize::try_from(id).ok())
             .filter(|&id| id < self.document.borrow().nodes.len())
             .ok_or_else(|| failure("TypeError", "Invalid node handle"))?;
+        if operation == "children" { return Ok(json!(self.document.borrow().nodes[id].children)); }
+        if operation == "innerHTML" {
+            if args.len() > 2 { html::set(self,id,input(args,2)?)?; return Ok(Value::Null); }
+            return html::get(&self.document.borrow(),id).map(|s|json!(s));
+        }
         if operation == "createHTMLDocument" {
             if !matches!(self.document.borrow().nodes[id].kind, NodeKind::Document) {
                 return Err(failure("TypeError", "Expected a Document"));
@@ -371,10 +408,10 @@ impl Gateway {
                         }
                         json!(if id == doc.root { self.page_url.as_str() } else { "about:blank" })
                     }
-                    "linkHref" => {
+                    "linkHref" | "scriptSrc" => {
                         if !doc
                             .element(id)
-                            .is_some_and(|(name, ns, _)| name == "link" && ns == Namespace::Html)
+                            .is_some_and(|(name, ns, _)| name == if property == "linkHref" { "link" } else { "script" } && ns == Namespace::Html)
                         {
                             return Err(failure("TypeError", "Expected an HTMLLinkElement"));
                         }
@@ -383,7 +420,7 @@ impl Gateway {
                             .unwrap()
                             .2
                             .iter()
-                            .find(|a| a.namespace.is_none() && a.name == "href")
+                            .find(|a| a.namespace.is_none() && a.name == if property == "linkHref" { "href" } else { "src" })
                             .map(|a| a.value.as_str());
                         json!(match value {
                             None => String::new(),

@@ -147,3 +147,14 @@ Page video.play() requests are recorded as video_requests in report.json.
 The sandbox rejects the separate native-player handoff explicitly; it never
 fetches media or opens a player. Native playback lifecycle is host-mocked in
 js-tests and TRUEOS/tools/testpy/test_browser_video_handoff.py.
+
+Post-export observation:
+
+  python3 hull/tools/sandbox/sandbox.py replay /tmp/hull-page --modules --post-ms 1000
+
+The actor remains alive while layout is exported, then this option observes it
+for another 0..10000 ms. Timers and explicitly inserted scripts can continue;
+layout.svg and storage.json are never rewritten. Reports include dynamic_scripts
+and late video_requests. The same 250 ms cumulative active JS budget applies.
+Replay never falls back to live networking: newly discovered script URLs must
+be captured/imported before they can run. Scripts parsed by innerHTML stay inert.

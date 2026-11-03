@@ -15,8 +15,8 @@ canonical high-half heap pointers; a native pointer round-trip regression checks
 this without dereferencing synthetic addresses.
 
 After rp5 completes an HTML parse, Hull admits its collected inline JavaScript
-for a finite initialization pass. External script references remain unfetched;
-there is no guest network or filesystem API. Navigation drops the context,
+for a finite initialization pass. External script references use the bounded
+host resource loader; there is no guest fetch or filesystem API. Navigation drops the context,
 document wrappers, Promise jobs, listeners, queued input and queued pastes.
 Closing Hull signals cooperative shutdown without waiting on the UI thread. The lower-level `replace_page` path remains inert
 for navigation reset and explicit-execution fixtures.
@@ -37,8 +37,9 @@ before the next source (at most sixteen jobs per batch). There are two bounds:
   page, not renewed for each script. Exhaustion refuses further guest work.
 - The initial render waits at most a **250 ms wall-time window**, checked when
   the actor runs. This also bounds a long collection of tiny sources or a
-  self-replenishing microtask queue. At the cutoff, unstarted page sources are
-  omitted from this pass. Remaining jobs may use the remaining active budget.
+  self-replenishing microtask queue. At the cutoff, the first-render document is
+  captured; remaining sources and jobs may continue using the remaining active
+  budget. Capturing the SVG does not discard the actor or its live DOM.
 
 When admitted work finishes or a bound is reached, Hull clones the current
 document once for layout. CSS extraction runs on that frozen clone, so admitted
@@ -113,9 +114,13 @@ constitute full web-platform conformance.
 - HTML link `href`, `rel`, `as` and `crossOrigin` reflection. Document URL and
   live `baseURI` resolve href values through Rust's URL parser and the first base
   element. Script-created stylesheet links participate in CSS collection from
-  the frozen initial document. Insertion alone does not synthesize resource
-  load/error events or execute inserted script elements; module imports retain
-  their existing host-managed loader. HTML parsing/innerHTML, custom element
+  the frozen initial document. Explicitly inserted script elements are queued on
+  the existing actor, use the bounded host loader and receive trusted load/error
+  events through the existing EventTarget. HTMLScriptElement reflects src, type
+  and text, with onload/onerror handlers. Classic scripts set currentScript;
+  removal and reinsertion do not rerun a started script. Queue admission does not
+  reproduce the browser's full synchronous insertion/async/defer ordering model.
+  Module imports retain the existing host-managed loader. Custom element
   registries and a complete template model are not admitted.
 
 `document.implementation.createHTMLDocument(title)` creates an inert document
@@ -126,8 +131,16 @@ emit one console warning for the page. Detached documents have no window,
 current script, resource loading or execution context; queries stay within their
 own tree. Native node creation, cloning and cross-document insertion retain or
 adopt `ownerDocument` as appropriate. They do not enter the rendered page unless
-nodes are explicitly moved into its tree. HTML parsing through `innerHTML` is
-still unsupported.
+nodes are explicitly moved into its tree. Element.innerHTML parses rp5 fragments
+with the element's parsing context and serializes actual children. Template
+markup uses its content fragment. Replacement is validated against the existing
+string/node budgets before changing the live tree. Parsed script elements and
+clones of started scripts stay inert. Node.childNodes is a cached live NodeList;
+querySelectorAll retains its static NodeList behavior.
+
+Document.createEvent supports Event/Events/HTMLEvents and CustomEvent through
+the existing Event wrappers. Returned events require initEvent/initCustomEvent
+before dispatch. Unsupported event interfaces raise NotSupportedError.
 
 Native jQuery accepts `$(function ($) { ... })` and `$(document).ready(fn)`.
 Callbacks use the existing DOM-ready signal, run asynchronously in Promise jobs,
@@ -175,7 +188,7 @@ Selectors use the CSS parser and shared matcher, supporting common type, ID,
 class, attribute, combinator, structural and `:scope`/`:is`/`:where`/`:not`
 queries. Malformed selectors raise `SyntaxError`; unsupported valid features
 raise `NotSupportedError`. Bounds raise `QuotaExceededError`. There is no
-form-control value model, `innerHTML`, computed layout or observer API.
+form-control value model, computed layout or observer API.
 SVG `className` is explicitly unsupported
 instead of approximating `SVGAnimatedString`. Unpaired UTF-16 surrogates are
 rejected because rp5 stores Unicode scalar strings.
@@ -383,6 +396,10 @@ not launch Hull.
 actor/DOM/layout code on the host, without a kernel build, boot, VM or GPU. It
 exports exact script bytes, per-source traces and optional diagnostic SVG; node
 isolation, local replacements and watch mode support iterative investigation.
+`replay --post-ms 1000` keeps observing the actor for one second after export.
+The saved SVG and storage snapshot stay fixed; later script reports, dynamic
+sources and video URL requests appear in the trace/report. This does not extend
+the page's cumulative active execution budget.
 See `tools/sandbox/README.txt` for commands and explicit experiment flags.
 
 `document.cookie` reads navigation-local `name=value` pairs separated by `; `.

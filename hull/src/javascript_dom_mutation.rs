@@ -324,6 +324,7 @@ fn clone_node(gateway: &mut Gateway, id: usize, deep: bool) -> DomResult<Value> 
     let until = Instant::now() + Duration::from_millis(20);
     let mut pending = vec![(id, None, false)];
     let mut plan = Vec::new();
+    let mut script_started = Vec::new();
     let mut bytes = 0usize;
     while let Some((source, parent, template_root)) = pending.pop() {
         if plan.len() + pending.len() >= super::MAX_ADDED_NODES || Instant::now() >= until {
@@ -366,6 +367,7 @@ fn clone_node(gateway: &mut Gateway, id: usize, deep: bool) -> DomResult<Value> 
             None
         };
         let index = plan.len();
+        script_started.push(gateway.script_state.borrow().started.contains(&source));
         plan.push((kind, parent, template_root));
         if let Some(fragment) = fragment {
             pending.push((fragment, Some(index), true));
@@ -389,8 +391,9 @@ fn clone_node(gateway: &mut Gateway, id: usize, deep: bool) -> DomResult<Value> 
     gateway.charge_nodes(bytes, plan.len())?;
     let mut doc = gateway.document.borrow_mut();
     let mut ids: Vec<usize> = Vec::with_capacity(plan.len());
-    for (kind, parent, template_root) in plan {
+    for (index, (kind, parent, template_root)) in plan.into_iter().enumerate() {
         let new_id = doc.add(kind);
+        if script_started[index] { gateway.script_state.borrow_mut().started.insert(new_id); }
         if let Some(parent) = parent {
             let parent = ids[parent];
             if template_root {

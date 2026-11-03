@@ -229,3 +229,45 @@ fn detached_html_documents_have_own_roots_and_ten_document_cap() {
     assert_eq!(output.messages.len(),1);
     assert!(output.messages[0].text.contains("document soft cap exceeded"));
 }
+
+#[test]
+fn legacy_create_event_reuses_real_event_dispatch_and_initialization() {
+    let mut engine=fixture();
+    run(&mut engine,r#"
+      const e=document.createEvent('HTMLEvents');
+      if(!(e instanceof Event)||e.type!=='')throw Error('event brand');
+      try{document.dispatchEvent(e);throw Error('uninitialized event accepted')}catch(e){if(e.name!=='InvalidStateError')throw e}
+      e.initEvent('legacy',true,true);
+      let count=0;document.body.addEventListener('legacy',event=>{count++;event.preventDefault()});
+      if(document.querySelector('button').dispatchEvent(e)!==false||count!==1||!e.defaultPrevented)throw Error('legacy event dispatch');
+      e.initEvent('fresh',false,false);
+      if(e.defaultPrevented||e.target!==null||e.bubbles||e.cancelable)throw Error('event reinitialization');
+      const custom=document.createEvent('CustomEvent');custom.initCustomEvent('detail',false,false,42);
+      if(custom.detail!==42)throw Error('custom detail');
+      try{document.createEvent('NonexistentEvents');throw Error('invented interface')}catch(e){if(e.name!=='NotSupportedError')throw e}
+    "#);
+}
+
+#[test]
+fn inner_html_parses_real_fragments_and_child_nodes_remain_live() {
+    let mut engine=fixture();
+    run(&mut engine,r#"
+      const d=document.implementation.createHTMLDocument('probe'), body=d.body, live=body.childNodes;
+      if(live!==body.childNodes||!(live instanceof NodeList))throw Error('live list identity');
+      body.innerHTML='<form></form><form></form>';
+      if(live.length!==2||live[0].nodeName!=='FORM'||live.item(2)!==null||live[2]!==undefined)throw Error('jquery probe');
+      const old=live[0], snapshot=body.querySelectorAll('form');
+      body.innerHTML='a &amp; b<!--comment--><span title="&quot;">&lt;x&gt;</span>';
+      if(old.parentNode!==null||snapshot.length!==2||live.length!==3)throw Error('replace and static lists');
+      if(live[0].nodeValue!=='a & b'||live[1].nodeType!==8||live[2].ownerDocument!==d)throw Error('fragment nodes');
+      if(Object.keys(live).join(',')!=='0,1,2'||[...live].length!==3)throw Error('live enumeration');
+      if(body.innerHTML!=='a &amp; b<!--comment--><span title="&quot;">&lt;x&gt;</span>')throw Error('html serialization: '+body.innerHTML);
+      const table=d.createElement('table');table.innerHTML='<tr><td>cell</td></tr>';
+      if(table.firstChild.nodeName!=='TBODY'||table.querySelector('td').textContent!=='cell')throw Error('fragment context');
+      const template=d.createElement('template');template.innerHTML='<b>inert</b>';
+      if(template.childNodes.length||template.content.childNodes.length!==1||template.innerHTML!=='<b>inert</b>')throw Error('template contents');
+      const saved=body.innerHTML;
+      try{body.innerHTML='x'.repeat(256*1024+1);throw Error('quota bypass')}catch(e){if(e.name!=='QuotaExceededError')throw e}
+      if(body.innerHTML!==saved||live.length!==3)throw Error('rejected parse changed tree');
+    "#);
+}

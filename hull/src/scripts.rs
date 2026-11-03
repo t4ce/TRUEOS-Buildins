@@ -19,6 +19,10 @@ pub(super) struct ScriptSource {
 
 impl Scripts {
     pub fn extract(&mut self, document: &Document, page_url: &str) {
+        self.extract_quiet(document,page_url);
+        self.report_counts();
+    }
+    pub fn extract_quiet(&mut self, document: &Document, page_url: &str) {
         let Ok(mut base) = Url::parse(page_url) else {
             return;
         };
@@ -84,7 +88,6 @@ impl Scripts {
                 });
             }
         }
-        self.report_counts();
     }
 
     fn report_counts(&self) {

@@ -24,6 +24,8 @@ use crate::javascript_dom::{
 use crate::scripts::ScriptSource;
 #[path = "module_loader.rs"]
 pub(super) mod module_loader;
+#[path = "javascript_media_resolver.rs"]
+mod media_resolver;
 use crate::javascript_dom::timers;
 use module_loader::{Loader, Prepared};
 
@@ -149,6 +151,8 @@ struct LocalPage {
     current_script: SharedCurrentScript,
     cookies: javascript_dom::cookies::SharedCookies,
     media: javascript_dom::media::SharedMedia,
+    script_state: javascript_dom::SharedScriptState,
+    media_resolver: Rc<RefCell<media_resolver::Resolver>>,
     load_resources: bool,
     window: Option<SharedWindowMetrics>,
     initial_started: Option<Instant>,
@@ -506,6 +510,7 @@ async fn worker(
     let mut page: Option<LocalPage> = None;
     let mut engine: Option<Engine> = None;
     let mut resources: Option<Loader> = None;
+    let mut dynamic_sources: VecDeque<ScriptSource> = VecDeque::new();
     let mut timers: Option<timers::SharedTimers> = None;
     let mut started = false;
     let mut dom_ready_sent = false;
@@ -539,6 +544,8 @@ async fn worker(
                 || page
                     .as_ref()
                     .is_some_and(|page| initial_pending(&initial, page.revision))
+                || !dynamic_sources.is_empty()
+                || page.as_ref().is_some_and(|p|p.script_state.borrow().dirty)
                 || !pasted.lock().unwrap().is_empty()
                 || deferred_input.is_some()
                 || !inputs.is_empty()
@@ -589,6 +596,7 @@ async fn worker(
             let incoming = pages.borrow_and_update().clone();
             if incoming.as_ref().map(|p| p.revision) != page.as_ref().map(|p| p.revision) {
                 resources = None; // Cancels tickets before replacing the realm.
+                dynamic_sources.clear();
                 engine = None; // Context, globals, pending promises and limits all go together.
                 timers = None;
                 next = 0;
@@ -615,6 +623,8 @@ async fn worker(
                     current_script: Rc::new(Cell::new(None)),
                     cookies: Rc::new(RefCell::new(Default::default())),
                     media: Rc::new(RefCell::new(Default::default())),
+                    script_state: Rc::new(RefCell::new(Default::default())),
+                    media_resolver: Default::default(),
                     window: window
                         .lock()
                         .unwrap()
@@ -677,6 +687,7 @@ async fn worker(
                     });
                     let initialized = initialized.and_then(|_| {
                         if let Some(document) = &page.document {
+                            page.script_state.borrow_mut().started.extend(page.sources.iter().flat_map(|s|s.nodes.iter().copied()));
                             javascript_dom::install_for_page_with_cookies(
                                 &mut value,
                                 document.clone(),
@@ -686,6 +697,7 @@ async fn worker(
                                 page.cookies.clone(),
                                 timers.clone(),
                                 Some(page.media.clone()),
+                                page.script_state.clone(),
                             )
                         } else {
                             javascript_dom::install_url_with_timers(&mut value, timers.clone())
@@ -711,6 +723,7 @@ async fn worker(
                                             .filter(|s| s.bytes.is_none())
                                             .take(module_loader::MAX_FILES)
                                         {
+                                            if javascript_dom::media::player_adapter(&source.origin).is_some() || javascript_dom::media::ignored_script(&source.origin) { continue; }
                                             let kind =
                                                 source.kind.split(';').next().unwrap_or("").trim();
                                             if kind.eq_ignore_ascii_case("module")
@@ -812,6 +825,8 @@ async fn worker(
         }
         if let Some(loader) = &mut resources {
             loader.poll(engine);
+            page.media_resolver.borrow_mut().poll(loader,engine,page);
+            publish(page,&published);
             for event in loader.events.drain(..) {
                 let _ = reports.try_send(Report::Resource {
                     generation: page.generation,
@@ -819,6 +834,26 @@ async fn worker(
                     status: event.status,
                     detail: event.detail,
                 });
+            }
+        }
+        if page.script_state.borrow().dirty {
+            page.script_state.borrow_mut().dirty = false;
+            if let Some(document) = &page.document {
+                let mut discovered = crate::scripts::Scripts::default();
+                discovered.extract_quiet(&document.borrow(), &page.url);
+                let mut state = page.script_state.borrow_mut();
+                for source in discovered.sources {
+                    let node = source.nodes[0];
+                    if state.started.contains(&node) || source.bytes.as_ref().is_some_and(|b|b.is_empty()) { continue; }
+                    state.started.insert(node);
+                    if let Some(loader) = &mut resources {
+                        let kind=source.kind.split(';').next().unwrap_or("").trim();
+                        if javascript_dom::media::player_adapter(&source.origin).is_none() && !javascript_dom::media::ignored_script(&source.origin) && source.bytes.is_none() && (kind.is_empty() || ["module","text/javascript","application/javascript","text/ecmascript","application/ecmascript"].iter().any(|mime|kind.eq_ignore_ascii_case(mime))) {
+                            loader.prefetch(&source.origin,kind.eq_ignore_ascii_case("module"));
+                        }
+                    }
+                    dynamic_sources.push_back(source);
+                }
             }
         }
         if initial_pending(&initial, page.revision)
@@ -829,7 +864,6 @@ async fn worker(
             })
         {
             finish_initial(page, &initial, &published, &reports, true, next);
-            next = page.sources.len();
         }
         if engine.has_pending_jobs() {
             let until = Instant::now() + Duration::from_millis(25);
@@ -853,7 +887,9 @@ async fn worker(
             flush_console(engine, page.generation, &reports);
             continue;
         }
-        let source = if page.requested {
+        let dynamic_source = if page.requested && next >= page.sources.len() { dynamic_sources.pop_front() } else { None };
+        let is_dynamic = dynamic_source.is_some();
+        let source = if is_dynamic { dynamic_source.as_ref() } else if page.requested {
             page.sources.get(next)
         } else {
             None
@@ -989,7 +1025,7 @@ async fn worker(
             flush_console(engine, page.generation, &reports);
             continue;
         };
-        next += 1;
+        if !is_dynamic { next += 1; }
         let kind = source.kind.split(';').next().unwrap_or("").trim();
         let module = kind.eq_ignore_ascii_case("module");
         let javascript = module
@@ -1010,6 +1046,10 @@ async fn worker(
             });
             continue;
         }
+        if javascript_dom::media::ignored_script(&source.origin) {
+            let _ = reports.try_send(Report::Skipped { generation:page.generation,origin:source.origin.clone(),reason:"CAPTCHA scripts are inert; no success is fabricated" });
+            continue;
+        }
         let node = source.nodes.first().copied().unwrap_or(0);
         let external = source.bytes.is_none()
             || page.document.as_ref().is_some_and(|doc| {
@@ -1028,6 +1068,8 @@ async fn worker(
         let mut prepared_module = false;
         let bytes = if let Some(bytes) = &source.bytes {
             bytes.as_slice()
+        } else if let Some(adapter) = javascript_dom::media::player_adapter(&source.origin) {
+            adapter
         } else if let Some(loader) = &mut resources {
             let state = if module {
                 match loader.module_source(engine, &source.origin) {
@@ -1044,7 +1086,7 @@ async fn worker(
             };
             match state {
                 Prepared::Pending => {
-                    next -= 1;
+                    if is_dynamic { dynamic_sources.push_front(source.clone()); } else { next -= 1; }
                     dispatch_due_timer(engine, page, &timers, &published, &reports);
                     continue;
                 }
@@ -1053,6 +1095,7 @@ async fn worker(
                     downloaded.as_ref()
                 }
                 Prepared::Failed(error) => {
+                    if is_dynamic { dispatch_script_event(engine,node,true,page,&reports); }
                     let _ = reports.try_send(Report::Evaluated {
                         generation: page.generation,
                         origin,
@@ -1074,11 +1117,12 @@ async fn worker(
             if let Some(loader) = &mut resources {
                 match loader.inline(engine, &origin, bytes) {
                     Prepared::Pending => {
-                        next -= 1;
+                        if is_dynamic { dynamic_sources.push_front(source.clone()); } else { next -= 1; }
                         dispatch_due_timer(engine, page, &timers, &published, &reports);
                         continue;
                     }
                     Prepared::Failed(error) => {
+                        if is_dynamic { dispatch_script_event(engine,node,true,page,&reports); }
                         let _ = reports.try_send(Report::Evaluated {
                             generation: page.generation,
                             origin,
@@ -1114,6 +1158,7 @@ async fn worker(
         // Clear even on syntax errors or interruption, before any queued jobs,
         // console delivery, pasted code or input callbacks are admitted.
         page.current_script.set(None);
+        if is_dynamic && external { dispatch_script_event(engine,node,module && result.is_err(),page,&reports); }
         publish(page, &published);
         flush_console(engine, page.generation, &reports);
         let _ = reports.try_send(Report::Evaluated {
@@ -1122,6 +1167,12 @@ async fn worker(
             node,
             result,
         });
+    }
+}
+
+fn dispatch_script_event(engine: &mut Engine, node: usize, error: bool, page: &LocalPage, reports: &mpsc::Sender<Report>) {
+    if let Err(error) = engine.dispatch_json(json!({"kind":"__hull_script_event","node":node,"error":error}).to_string().as_bytes()) {
+        let _ = reports.try_send(Report::JobError { generation:page.generation,error });
     }
 }
 
