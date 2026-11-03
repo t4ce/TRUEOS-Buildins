@@ -22,6 +22,7 @@ use crate::scripts::ScriptSource;
 #[path = "module_loader.rs"]
 pub(super) mod module_loader;
 use module_loader::{Loader, Prepared};
+use crate::javascript_dom::timers;
 
 const PAGE_EXECUTION_BUDGET: Duration = Duration::from_millis(250);
 const INITIAL_RENDER_WAIT: Duration = Duration::from_millis(250);
@@ -454,6 +455,7 @@ async fn worker(
     let mut page: Option<Page> = None;
     let mut engine: Option<Engine> = None;
     let mut resources: Option<Loader> = None;
+    let mut timers=None;
     let mut started = false;
     let mut dom_ready_sent = false;
     let mut next = 0;
@@ -465,6 +467,7 @@ async fn worker(
             if incoming.as_ref().map(|p| p.revision) != page.as_ref().map(|p| p.revision) {
                 resources = None; // Cancels tickets before replacing the realm.
                 engine = None; // Context, globals, pending promises and limits all go together.
+                timers=None;
                 next = 0;
                 started = false;
                 dom_ready_sent = false;
@@ -515,6 +518,9 @@ async fn worker(
                                 false,
                             )
                         });
+                    let initialized=initialized.and_then(|_| {
+                        timers=Some(Rc::new(RefCell::new(timers::Timers::default())));Ok(())
+                    });
                     let initialized = initialized.and_then(|_| {
                         if let Some(document) = &page.document {
                             javascript_dom::install_for_page_with_cookies(
@@ -524,9 +530,10 @@ async fn worker(
                                 page.current_script.clone(),
                                 &page.url,
                                 page.cookies.clone(),
+                                timers.clone(),
                             )
                         } else {
-                            javascript_dom::install_url_only(&mut value)
+                            javascript_dom::install_url_with_timers(&mut value,timers.clone())
                                 .and_then(|_| {
                                     value.eval(
                                         include_bytes!("javascript_events.js"),
@@ -669,6 +676,13 @@ async fn worker(
             None
         };
         let Some(source) = source else {
+            let due=timers.as_ref().and_then(|timers|timers.borrow_mut().take_due());
+            if let Some(id)=due {
+                let result=engine.dispatch_json(json!({"kind":"__hull_timer","id":id}).to_string().as_bytes());
+                if let Err(error)=result {let _=reports.try_send(Report::JobError{generation:page.generation,error});}
+                flush_console(engine,page.generation,&reports);
+                continue;
+            }
             if resources.as_ref().is_some_and(Loader::pending) {
                 continue;
             }

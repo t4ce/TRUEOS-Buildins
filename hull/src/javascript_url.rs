@@ -125,12 +125,19 @@ pub(super) fn call(args: &[Value]) -> DomResult<Value> {
 
 /// Console-only realms also get URL; only the URL router is installed there.
 pub(super) fn install(engine: &mut Engine) -> Result<(), String> {
-    engine.bind_host_handler("__hullUrl", |bytes| {
+    install_with_timers(engine,None)
+}
+pub(super) fn install_with_timers(engine:&mut Engine,timers:Option<super::timers::SharedTimers>)->Result<(),String>{
+    let enabled=timers.is_some();
+    engine.bind_host_handler("__hullUrl", move |bytes| {
         let request: Value = serde_json::from_slice(bytes).map_err(|e| e.to_string())?;
         let result = request
             .as_array()
             .ok_or_else(|| failure("TypeError", "Expected URL request"))
             .and_then(|args| {
+                if input(args,0)?=="timer" {
+                    return timers.as_ref().map(|state|super::timers::call(state,&args[1..])).ok_or_else(||failure("NotSupportedError","Timers absent"));
+                }
                 if input(args, 0)? != "url" {
                     return Err(failure("TypeError", "Unsupported host operation"));
                 }
@@ -144,6 +151,6 @@ pub(super) fn install(engine: &mut Engine) -> Result<(), String> {
     })?;
     let source=[r#"(()=>{'use strict';const native=globalThis.__hullUrl;delete globalThis.__hullUrl;const proto=Object.setPrototypeOf;function request(...args){proto(args,null);const r=native(args);if(!r.ok){if(r.name==='RangeError')throw new RangeError(r.message);throw new TypeError(r.message);}return r.value;} ("#,
         include_str!("javascript_url.js"),
-        ")(request);})();"].concat();
+        ")(request);",if enabled {"Object.defineProperty(globalThis,'__hullTimerSchedule',{value:args=>request('timer',args[0],args[1]),configurable:true});"}else{""},"})();"].concat();
     engine.eval(source.as_bytes(), "hull:url", false)
 }

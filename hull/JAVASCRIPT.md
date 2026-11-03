@@ -193,7 +193,24 @@ Small synchronous helpers are `performance.now()` (monotonic milliseconds since
 VM creation), `atob()` and `btoa()` (Base64 and binary byte strings, with invalid
 input errors named `InvalidCharacterError`). They add no DOM objects. QuickJS
 already provides `Date`/`Date.now()`, JSON, URI helpers and standard language
-builtins. There is no timer scheduler.
+builtins.
+
+`setTimeout(callback, delay, ...args)` and `clearTimeout(id)` use monotonic Rust
+Instant deadlines checked by the existing actor on UI turns. Callbacks retain
+arguments in QuickJS, receive the page global as `this`, and run one per turn
+with a Promise checkpoint before the next callback. Collected scripts have
+priority. Delays are minimum waits, converted to signed 32-bit milliseconds;
+negative results become zero, and nested chains use the HTML 4 ms clamp
+once nesting exceeds five. Timing is limited by the actor's polling cadence.
+
+Each realm admits at most 256 pending timers. Full queues throw
+QuotaExceededError. String/eval handlers are explicitly unsupported and throw
+TypeError; setInterval is not exposed. Cancellation removes the deadline and
+callback. Navigation discards the whole queue. Callback faults are reported
+without discarding other timers. All callback work spends the same 250 ms page
+budget; timers never renew it or extend the first-render cutoff. Future timers
+do not hold the initial snapshot open; subsequent changes stay in the live DOM
+without requesting another layout or updating saved artifacts.
 
 ## Native input bridge
 
@@ -259,7 +276,7 @@ rejected explicitly; Hull logs the rejection without logging typed text.
 Execution evaluates one source per turn; data MIME types are skipped,
 external references remain unfetched, and modules have no import loader. Jobs
 run before the following source, at most sixteen per batch. There are no
-filesystem, network or timer bindings. Unhandled Promise rejection tracking is
+filesystem or general-purpose network bindings. Unhandled Promise rejection tracking is
 not installed yet.
 
 The engine defaults to a 32 MiB heap and 1 MiB stack. Its optional cumulative

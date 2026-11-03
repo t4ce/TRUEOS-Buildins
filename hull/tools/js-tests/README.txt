@@ -97,3 +97,9 @@ Input throughput regressions admit at most 32 messages per UI turn and verify a
 callbacks. Separate fixtures cover two initialization-time queue overflows
 without losing accumulated reset counts, a page overriding Object.isFrozen,
 and native keyboard records preceding translated modifier-state callbacks.
+
+Timer fixtures cover actor-owned setTimeout/clearTimeout deadlines, callback
+arguments/context, cancellation, Promise checkpoints, navigation isolation,
+future timers leaving the frozen snapshot untouched, queue quotas and interrupts.
+The native engine alone and direct DOM-only fixtures do not install timers;
+the production page actor supplies the scheduling state.

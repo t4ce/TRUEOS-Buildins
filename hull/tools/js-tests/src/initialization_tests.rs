@@ -311,7 +311,7 @@ fn missing_host_api_fault_does_not_prevent_later_sources_or_layout() {
     begin(
         &mut runtime,
         3,
-        "<p>before</p><script>fetch('/data')</script><script>document.querySelector('p').textContent='after error';for(const name of ['window','fetch','XMLHttpRequest','require','process','std','os','setTimeout'])if(typeof globalThis[name]!=='undefined')throw Error('host API leak')</script>",
+        "<p>before</p><script>fetch('/data')</script><script>document.querySelector('p').textContent='after error';for(const name of ['window','fetch','XMLHttpRequest','require','process','std','os'])if(typeof globalThis[name]!=='undefined')throw Error('host API leak')</script>",
     );
     let (document, reports) = snapshot(&mut runtime, 3);
     let p = document

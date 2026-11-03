@@ -102,7 +102,7 @@ elapsed window (downloads/preparation up to 5 s, 5.25 s overall initial cap). Th
 process additionally has a 30 s host
 timeout, 15 s CPU limit, 1 GiB address-space limit and 64 MiB per-file limit on POSIX.
 These are practical exploration limits, not a general OS security boundary.
-There is no general-purpose guest fetch/XHR, filesystem, shell, timer or process
+There is no general-purpose guest fetch/XHR, filesystem, shell or process
 API. Imports request host-managed HTTPS JavaScript sources; replay fulfills them
 only from captured files and never contacts the live CDN.
 
@@ -136,3 +136,8 @@ change the live jar; those changes do not rewrite the saved initial snapshot.
 Cookies and localStorage use one bounded navigation-local box, with internal
 cookie: and localStorage: key prefixes and one cumulative 1 MiB write allowance.
 The storage.json artifact contains both namespaces and is never restored.
+
+setTimeout/clearTimeout use production actor deadlines and the page's existing
+execution budget (256 pending timers, function callbacks only). Future timers
+do not delay the frozen initial snapshot. Replay stops at initial completion;
+it does not keep running merely to wait for future timers.

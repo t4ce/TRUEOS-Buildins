@@ -17,7 +17,10 @@ mod mutation;
 mod url_api;
 #[path = "javascript_cookies.rs"]
 pub(super) mod cookies;
+#[path="javascript_timers.rs"]
+pub(super) mod timers;
 
+pub(super) fn install_url_with_timers(engine: &mut Engine, timers:Option<timers::SharedTimers>)->Result<(),String>{url_api::install_with_timers(engine,timers)}
 pub(super) fn install_url_only(engine: &mut Engine) -> Result<(), String> {
     url_api::install(engine)
 }
@@ -43,6 +46,7 @@ pub(super) fn install(engine: &mut Engine, document: SharedDocument) -> Result<(
         Rc::new(Cell::new(None)),
         "about:blank",
         Rc::new(RefCell::new(cookies::CookieJar::default())),
+        None,
     )
 }
 
@@ -59,6 +63,7 @@ pub(super) fn install_with_window(
         Rc::new(Cell::new(None)),
         "about:blank",
         Rc::new(RefCell::new(cookies::CookieJar::default())),
+        None,
     )
 }
 
@@ -70,7 +75,7 @@ pub(super) fn install_for_page(
     current_script: SharedCurrentScript,
     page_url: &str,
 ) -> Result<(), String> {
-    install_gateway(engine, document, window, current_script, page_url, Rc::new(RefCell::new(cookies::CookieJar::default())))
+    install_gateway(engine, document, window, current_script, page_url, Rc::new(RefCell::new(cookies::CookieJar::default())),None)
 }
 
 pub(super) fn install_for_page_with_cookies(
@@ -80,8 +85,9 @@ pub(super) fn install_for_page_with_cookies(
     current_script: SharedCurrentScript,
     page_url: &str,
     cookies: cookies::SharedCookies,
+    timers:Option<timers::SharedTimers>,
 ) -> Result<(), String> {
-    install_gateway(engine, document, window, current_script, page_url, cookies)
+    install_gateway(engine, document, window, current_script, page_url, cookies,timers)
 }
 
 fn install_gateway(
@@ -91,6 +97,7 @@ fn install_gateway(
     current_script: SharedCurrentScript,
     page_url: &str,
     cookies: cookies::SharedCookies,
+    timers:Option<timers::SharedTimers>,
 ) -> Result<(), String> {
     let initial_nodes = document.borrow().nodes.len();
     let mut gateway = Gateway {
@@ -99,6 +106,7 @@ fn install_gateway(
         current_script,
         page_url: page_url.to_owned(),
         cookies,
+        timers,
         initial_nodes,
         mutation_bytes: 0,
     };
@@ -145,6 +153,7 @@ fn input<'a>(request: &'a [Value], index: usize) -> DomResult<&'a str> {
 }
 
 struct Gateway {
+    timers:Option<timers::SharedTimers>,
     cookies: cookies::SharedCookies,
     document: SharedDocument,
     window: Option<SharedWindowMetrics>,
@@ -184,6 +193,10 @@ impl Gateway {
             .as_array()
             .ok_or_else(|| failure("TypeError", "Expected a DOM request"))?;
         let operation = input(args, 0)?;
+        if operation=="timers" {return Ok(json!(self.timers.is_some()));}
+        if operation=="timer" {
+            return self.timers.as_ref().map(|state|timers::call(state,&args[1..])).ok_or_else(||failure("NotSupportedError","Timers are not installed"));
+        }
         if operation == "url" {
             return url_api::call(args);
         }

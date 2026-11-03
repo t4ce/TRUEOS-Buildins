@@ -55,6 +55,8 @@ mod dom_mutation_tests;
 #[cfg(test)]
 mod navigation_tests;
 #[cfg(test)]
+mod timer_tests;
+#[cfg(test)]
 mod dom_tag_collection_tests;
 #[cfg(test)]
 mod jquery_event_bridge_tests;
@@ -316,7 +318,7 @@ mod tests {
     #[test]
     fn bare_engine_exposes_no_browser_or_filesystem_functions() {
         let mut runtime = Runtime::start().unwrap();
-        runtime.replace_page(51,"https://fixture.test/",sources("<script>for(const name of ['window','document','fetch','XMLHttpRequest','require','process','std','os','setTimeout'])if(typeof globalThis[name]!=='undefined')throw Error('unexpected host API: '+name);</script>"));
+        runtime.replace_page(51,"https://fixture.test/",sources("<script>for(const name of ['window','document','fetch','XMLHttpRequest','require','process','std','os'])if(typeof globalThis[name]!=='undefined')throw Error('unexpected host API: '+name);</script>"));
         runtime.run().unwrap();
         assert_success(&until(&mut runtime, |reports| completed(reports) == 1), 1);
     }
