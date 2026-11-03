@@ -366,6 +366,6 @@
     /* HULL_NATIVE_URL */
     /* HULL_NAVIGATION */
     /* HULL_NAVIGATOR */
-    if(request('timers'))Object.defineProperty(globalThis,'__hullTimerSchedule',{value:args=>request('timer',args[0],args[1]),configurable:true});
+    if(request('timers'))Object.defineProperty(globalThis,'__hullTimerSchedule',{value:args=>request('timer',args[0],args[1],args[2]??0),configurable:true});
     /* HULL_INPUT_EVENTS */
 })();

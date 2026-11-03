@@ -19,8 +19,12 @@ fn snapshot(runtime: &mut Runtime, generation: u64) -> (rp5::Document, Vec<Repor
     let started = Instant::now();
     let mut reports = Vec::new();
     loop {
-        reports.extend(runtime.poll());
+        reports.extend({
+            std::thread::sleep(Duration::from_millis(1));
+            runtime.poll()
+        });
         if let Some(document) = runtime.take_initial_document(generation) {
+            reports.extend(runtime.poll());
             return (document, reports);
         }
         assert!(
@@ -82,7 +86,10 @@ fn dom_ready_runs_after_sources_and_their_jobs_before_render_capture() {
         )
         .unwrap();
     for _ in 0..16 {
-        for report in runtime.poll() {
+        for report in {
+            std::thread::sleep(Duration::from_millis(1));
+            runtime.poll()
+        } {
             if let Report::Pasted { result, .. } = report {
                 result.unwrap();
                 return;
@@ -163,7 +170,10 @@ fn current_script_tracks_classic_identity_and_parent_but_not_jobs_modules_or_pas
         .unwrap();
     let mut pasted = false;
     for _ in 0..32 {
-        for report in runtime.poll() {
+        for report in {
+            std::thread::sleep(Duration::from_millis(1));
+            runtime.poll()
+        } {
             if let Report::Pasted { result, .. } = report {
                 result.unwrap();
                 pasted = true;
@@ -247,7 +257,10 @@ fn frozen_document_does_not_follow_later_live_dom_changes() {
     runtime.execute_pasted("const live=document.querySelector('p');live.textContent='later';live.setAttribute('style','color:red');live.setAttribute('data-late','yes');console.log(live.textContent)".into()).unwrap();
     let mut output = Vec::new();
     for _ in 0..32 {
-        for report in runtime.poll() {
+        for report in {
+            std::thread::sleep(Duration::from_millis(1));
+            runtime.poll()
+        } {
             if let Report::Console { batch, .. } = report {
                 output.extend(batch.messages.into_iter().map(|m| m.text));
             }
@@ -393,8 +406,20 @@ fn one_total_execution_budget_stops_many_infinite_sources_and_keeps_completed_mu
     // If the wall cap precedes the last fraction of active budget, one more
     // bounded invocation spends it; a new source never resets the allowance.
     if runtime.execute_pasted("while(true){}".into()).is_ok() {
-        for _ in 0..8 {
-            runtime.poll();
+        let until = Instant::now() + Duration::from_secs(2);
+        loop {
+            if runtime
+                .poll()
+                .iter()
+                .any(|report| matches!(report, Report::BudgetExhausted { .. }))
+            {
+                break;
+            }
+            assert!(
+                Instant::now() < until,
+                "execution allowance did not exhaust"
+            );
+            std::thread::sleep(Duration::from_millis(1));
         }
     }
     assert!(
@@ -415,8 +440,12 @@ fn endless_microtasks_cannot_hold_the_initial_render_snapshot() {
     let started = Instant::now();
     let mut reports = Vec::new();
     let document = loop {
-        reports.extend(runtime.poll());
+        reports.extend({
+            std::thread::sleep(Duration::from_millis(1));
+            runtime.poll()
+        });
         if let Some(document) = runtime.take_initial_document(7) {
+            reports.extend(runtime.poll());
             break document;
         }
         assert!(started.elapsed() < Duration::from_secs(2));
@@ -440,33 +469,77 @@ fn endless_microtasks_cannot_hold_the_initial_render_snapshot() {
 #[test]
 fn ide_html_template_logs_once_per_full_page_load() {
     let mut runtime = Runtime::start().unwrap();
-    let html = format!("<!doctype html><html><head><script>{}</script></head><body></body></html>", trueos_ide::html_preview::JS);
+    let html = format!(
+        "<!doctype html><html><head><script>{}</script></head><body></body></html>",
+        trueos_ide::html_preview::JS
+    );
     for generation in [901, 902] {
         begin(&mut runtime, generation, &html);
         let (_, mut reports) = snapshot(&mut runtime, generation);
-        for _ in 0..16 { reports.extend(runtime.poll()); }
-        let logs: Vec<_> = reports.iter().filter_map(|r| match r { Report::Console { batch, .. } => Some(&batch.messages), _ => None }).flatten().map(|m| m.text.as_str()).collect();
+        for _ in 0..16 {
+            reports.extend({
+                std::thread::sleep(Duration::from_millis(1));
+                runtime.poll()
+            });
+        }
+        let logs: Vec<_> = reports
+            .iter()
+            .filter_map(|r| match r {
+                Report::Console { batch, .. } => Some(&batch.messages),
+                _ => None,
+            })
+            .flatten()
+            .map(|m| m.text.as_str())
+            .collect();
         assert_eq!(logs, ["template console log"]);
-        assert!(!reports.iter().any(|r| matches!(r, Report::Evaluated { result: Err(_), .. } | Report::JobError { .. })), "{reports:?}");
+        assert!(
+            !reports.iter().any(|r| matches!(
+                r,
+                Report::Evaluated { result: Err(_), .. } | Report::JobError { .. }
+            )),
+            "{reports:?}"
+        );
     }
 }
 
 #[test]
 fn cookie_snapshot_resets_on_every_navigation_and_includes_ready_jobs() {
     let mut runtime = Runtime::start().unwrap();
-    begin(&mut runtime, 91, r#"<script>
+    begin(
+        &mut runtime,
+        91,
+        r#"<script>
         document.cookie='before=one';
         localStorage.setItem('before','local');
         document.addEventListener('DOMContentLoaded',()=>Promise.resolve().then(()=>document.cookie='ready=two'));
-    </script>"#);
-    snapshot(&mut runtime,91);
-    assert_eq!(runtime.cookie_snapshot(),"before=one; ready=two");
+    </script>"#,
+    );
+    snapshot(&mut runtime, 91);
+    assert_eq!(runtime.cookie_snapshot(), "before=one; ready=two");
     assert!(runtime.storage_snapshot().contains("localStorage:before"));
-    runtime.execute_pasted("document.cookie='late=three'".into()).unwrap();
-    for _ in 0..16 { runtime.poll(); }
-    assert_eq!(runtime.cookie_snapshot(),"before=one; ready=two; late=three");
-    begin(&mut runtime,92,"<script>if(document.cookie!==''||localStorage.length!==0)throw Error('old jar');document.cookie='fresh=yes'</script>");
-    let (_,reports)=snapshot(&mut runtime,92);
-    assert!(!reports.iter().any(|r|matches!(r,Report::Evaluated{result:Err(_),..})));
-    assert_eq!(runtime.cookie_snapshot(),"fresh=yes");
+    runtime
+        .execute_pasted("document.cookie='late=three'".into())
+        .unwrap();
+    for _ in 0..16 {
+        {
+            std::thread::sleep(Duration::from_millis(1));
+            runtime.poll()
+        };
+    }
+    assert_eq!(
+        runtime.cookie_snapshot(),
+        "before=one; ready=two; late=three"
+    );
+    begin(
+        &mut runtime,
+        92,
+        "<script>if(document.cookie!==''||localStorage.length!==0)throw Error('old jar');document.cookie='fresh=yes'</script>",
+    );
+    let (_, reports) = snapshot(&mut runtime, 92);
+    assert!(
+        !reports
+            .iter()
+            .any(|r| matches!(r, Report::Evaluated { result: Err(_), .. }))
+    );
+    assert_eq!(runtime.cookie_snapshot(), "fresh=yes");
 }

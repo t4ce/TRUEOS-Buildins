@@ -151,6 +151,6 @@ pub(super) fn install_with_timers(engine:&mut Engine,timers:Option<super::timers
     })?;
     let source=[r#"(()=>{'use strict';const native=globalThis.__hullUrl;delete globalThis.__hullUrl;const proto=Object.setPrototypeOf;function request(...args){proto(args,null);const r=native(args);if(!r.ok){if(r.name==='RangeError')throw new RangeError(r.message);throw new TypeError(r.message);}return r.value;} ("#,
         include_str!("javascript_url.js"),
-        ")(request);",if enabled {"Object.defineProperty(globalThis,'__hullTimerSchedule',{value:args=>request('timer',args[0],args[1]),configurable:true});"}else{""},"})();"].concat();
+        ")(request);",if enabled {"Object.defineProperty(globalThis,'__hullTimerSchedule',{value:args=>request('timer',args[0],args[1],args[2]??0),configurable:true});"}else{""},"})();"].concat();
     engine.eval(source.as_bytes(), "hull:url", false)
 }

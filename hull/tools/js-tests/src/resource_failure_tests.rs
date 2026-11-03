@@ -99,7 +99,8 @@ fn late_pasted_import_can_finish_without_another_render_snapshot() {
     r.execute_pasted("import('./late.js').then(m=>console.log(m.answer))".into())
         .unwrap();
     let mut logged = false;
-    for _ in 0..100 {
+    let waiting=std::time::Instant::now();
+    while waiting.elapsed()<std::time::Duration::from_secs(3) {
         for report in r.poll() {
             if let Report::Console { batch, .. } = report {
                 logged |= batch.messages.iter().any(|m| m.text == "late");

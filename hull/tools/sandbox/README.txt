@@ -77,8 +77,8 @@ Useful comparisons:
 
   --no-js          Static HTML/CSS baseline, including SVG.
   --no-svg         JavaScript diagnostics only; skip layout/SVG.
-  --turn-ms 20     Default: Hull's current idle delay between actor turns.
-  --turn-ms 0      Fast headless scheduling; exposes elapsed-wait effects.
+  --turn-ms 20     Default: delay between UI-side report/snapshot polls.
+  --turn-ms 0      Poll promptly; native JavaScript runs independently either way.
   --no-window      Reproduce an environment without window globals.
   --external       Legacy experiment: admit captured external bodies without graph loading.
   --modules        Enable production source/module loading from captured tickets only.

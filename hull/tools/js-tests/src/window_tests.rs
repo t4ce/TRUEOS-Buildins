@@ -71,10 +71,12 @@ fn begin(runtime: &mut Runtime, generation: u64, html: &str) {
 }
 fn snapshot(runtime: &mut Runtime, generation: u64) -> (rp5::Document, Vec<Report>) {
     let mut reports = Vec::new();
-    for _ in 0..256 {
+    let waiting=std::time::Instant::now();
+        while waiting.elapsed()<std::time::Duration::from_secs(3) {
+            std::thread::yield_now();
         reports.extend(runtime.poll());
         if let Some(document) = runtime.take_initial_document(generation) {
-            return (document, reports);
+            reports.extend(runtime.poll());return (document, reports);
         }
     }
     panic!("window-backed page did not initialize: {reports:?}");
@@ -173,7 +175,9 @@ fn actor_uses_native_viewport_updates_without_redraw_and_resets_globals_on_navig
     runtime.execute_pasted("if(window.innerWidth!==640||self.innerHeight!==368)throw Error('resize');document.querySelector('p').textContent='live only';console.log(`${innerWidth}x${innerHeight}`)".into()).unwrap();
     let mut output = Vec::new();
     let mut reports = Vec::new();
-    for _ in 0..32 {
+    let waiting=std::time::Instant::now();
+    while waiting.elapsed()<std::time::Duration::from_secs(2) {
+        std::thread::yield_now();
         let turn = runtime.poll();
         for report in &turn {
             if let Report::Console { batch, .. } = report {

@@ -1,9 +1,12 @@
-//! Cooperative page initialization and explicit console execution on one local task.
+//! Page JavaScript owned and serialized by one native service lane.
 use std::{
     cell::{Cell, RefCell},
     collections::VecDeque,
     rc::Rc,
-    sync::Arc,
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, AtomicU64, Ordering},
+    },
     time::{Duration, Instant},
 };
 
@@ -11,8 +14,8 @@ use hull_quickjs::{ConsoleBatch, Engine};
 use serde_json::{Value, json};
 use trueos::tokio::{
     runtime,
-    sync::{mpsc, watch},
-    task::{self, JoinHandle, LocalSet},
+    sync::{Notify, mpsc, watch},
+    task::{self, LocalSet},
 };
 
 use crate::javascript_dom::{
@@ -21,8 +24,8 @@ use crate::javascript_dom::{
 use crate::scripts::ScriptSource;
 #[path = "module_loader.rs"]
 pub(super) mod module_loader;
-use module_loader::{Loader, Prepared};
 use crate::javascript_dom::timers;
+use module_loader::{Loader, Prepared};
 
 const PAGE_EXECUTION_BUDGET: Duration = Duration::from_millis(250);
 const INITIAL_RENDER_WAIT: Duration = Duration::from_millis(250);
@@ -109,8 +112,31 @@ struct PastedScript {
     source: String,
 }
 
+// Only owned data crosses the native lane boundary. Rc DOM and QuickJS state
+// are constructed and destroyed exclusively inside that lane.
 #[derive(Clone)]
 struct Page {
+    revision: u64,
+    generation: u64,
+    url: String,
+    sources: Arc<[ScriptSource]>,
+    requested: bool,
+    active: bool,
+    document: Option<Arc<rp5::Document>>,
+    load_resources: bool,
+    initial_started: Option<Instant>,
+}
+#[derive(Default)]
+struct Published {
+    revision: u64,
+    cookies: String,
+    storage: String,
+    media: Option<(u64, javascript_dom::media::Request)>,
+    receipt: Option<(u64, u32, i32)>,
+}
+
+#[derive(Clone)]
+struct LocalPage {
     revision: u64,
     generation: u64,
     url: String,
@@ -120,7 +146,7 @@ struct Page {
     document: Option<SharedDocument>,
     current_script: SharedCurrentScript,
     cookies: javascript_dom::cookies::SharedCookies,
-    media:javascript_dom::media::SharedMedia,
+    media: javascript_dom::media::SharedMedia,
     load_resources: bool,
     window: Option<SharedWindowMetrics>,
     initial_started: Option<Instant>,
@@ -128,6 +154,7 @@ struct Page {
 
 #[derive(Default)]
 struct InitialRender {
+    revision: u64,
     generation: u64,
     pending: bool,
     snapshot: Option<rp5::Document>,
@@ -135,67 +162,76 @@ struct InitialRender {
 
 pub(super) struct Runtime {
     load_resources: bool,
-    local: LocalSet,
-    runtime: runtime::Runtime,
-    task: JoinHandle<()>,
+    _task: trueos::worker::JoinHandle<()>,
+    wake: Arc<Notify>,
+    stopped: Arc<AtomicBool>,
+    published: Arc<Mutex<Published>>,
     pages: watch::Sender<Option<Page>>,
-    ticks: watch::Sender<u64>,
     reports: mpsc::Receiver<Report>,
     input: mpsc::Sender<InputPacket>,
-    pasted: Rc<RefCell<VecDeque<PastedScript>>>,
+    pasted: Arc<Mutex<VecDeque<PastedScript>>>,
     losses: watch::Sender<InputLoss>,
     sequence: u64,
     revision: u64,
-    tick: u64,
-    initial: Rc<RefCell<InitialRender>>,
-    exhausted: Rc<Cell<bool>>,
-    window: Option<SharedWindowMetrics>,
+    initial: Arc<Mutex<InitialRender>>,
+    exhausted: Arc<AtomicU64>,
+    window: Arc<Mutex<Option<WindowMetrics>>>,
 }
 
 impl Runtime {
     pub fn start() -> Result<Self, String> {
-        let runtime = runtime::Builder::new_current_thread()
-            .build()
-            .map_err(|e| e.to_string())?;
-        let local = LocalSet::new();
         let (pages, page_rx) = watch::channel(None);
-        let (ticks, tick_rx) = watch::channel(0);
         let (reports_tx, reports) = mpsc::channel(128);
         let (input, input_rx) = mpsc::channel(INPUT_CAPACITY);
-        let pasted = Rc::new(RefCell::new(VecDeque::new()));
+        let pasted = Arc::new(Mutex::new(VecDeque::new()));
         let (losses, loss_rx) = watch::channel(InputLoss::default());
-        let initial = Rc::new(RefCell::new(InitialRender::default()));
-        let exhausted = Rc::new(Cell::new(false));
-        let task = local.spawn_local(worker(
-            page_rx,
-            tick_rx,
-            reports_tx,
-            input_rx,
-            loss_rx,
-            pasted.clone(),
-            initial.clone(),
-            exhausted.clone(),
-        ));
-        let mut service = Self {
+        let initial = Arc::new(Mutex::new(InitialRender::default()));
+        let exhausted = Arc::new(AtomicU64::new(0));
+        let wake = Arc::new(Notify::new());
+        let stopped = Arc::new(AtomicBool::new(false));
+        let published = Arc::new(Mutex::new(Published::default()));
+        let window = Arc::new(Mutex::new(None));
+        let task = {
+            let pasted = pasted.clone();
+            let initial = initial.clone();
+            let exhausted = exhausted.clone();
+            let wake = wake.clone();
+            let stopped = stopped.clone();
+            let published = published.clone();
+            let window = window.clone();
+            trueos::worker::spawn(move || {
+                let runtime = runtime::Builder::new_current_thread()
+                    .enable_time()
+                    .build()
+                    .expect("JavaScript lane runtime");
+                let local = LocalSet::new();
+                local.block_on(
+                    &runtime,
+                    worker(
+                        page_rx, reports_tx, input_rx, loss_rx, pasted, initial, exhausted, wake,
+                        stopped, published, window,
+                    ),
+                );
+            })
+            .map_err(|error| error.to_string())?
+        };
+        Ok(Self {
             load_resources: false,
-            local,
-            runtime,
-            task,
+            _task: task,
             pages,
-            ticks,
             reports,
             input,
             pasted,
             losses,
             sequence: 0,
             revision: 0,
-            tick: 0,
             initial,
             exhausted,
-            window: None,
-        };
-        service.drive();
-        Ok(service)
+            wake,
+            stopped,
+            published,
+            window,
+        })
     }
 
     /// Applies to subsequent pages. Production enables this; offline callers
@@ -204,7 +240,8 @@ impl Runtime {
         self.load_resources = true;
     }
 
-    /// Store an inert page batch. Replacing a page also drops its VM immediately.
+    /// Store an inert page batch. The lane drops the previous realm before
+    /// admitting any work for the new revision.
     pub fn replace_page(
         &mut self,
         generation: u64,
@@ -224,12 +261,7 @@ impl Runtime {
         sources: Vec<ScriptSource>,
         document: rp5::Document,
     ) {
-        self.store_page(
-            generation,
-            url.into(),
-            sources,
-            Some(Rc::new(RefCell::new(document))),
-        );
+        self.store_page(generation, url.into(), sources, Some(document));
     }
 
     fn store_page(
@@ -237,16 +269,21 @@ impl Runtime {
         generation: u64,
         url: String,
         sources: Vec<ScriptSource>,
-        document: Option<SharedDocument>,
+        document: Option<rp5::Document>,
     ) {
         self.revision = self.revision.wrapping_add(1).max(1);
-        self.pasted.borrow_mut().clear();
+        self.pasted.lock().unwrap().clear();
         let automatic = document.is_some();
-        self.exhausted.set(false);
-        *self.initial.borrow_mut() = InitialRender {
+        self.exhausted.store(0, Ordering::Release);
+        *self.initial.lock().unwrap() = InitialRender {
+            revision: self.revision,
             generation,
             pending: automatic,
             snapshot: None,
+        };
+        *self.published.lock().unwrap() = Published {
+            revision: self.revision,
+            ..Default::default()
         };
         self.pages.send_replace(Some(Page {
             revision: self.revision,
@@ -255,17 +292,11 @@ impl Runtime {
             sources: sources.into(),
             requested: automatic,
             active: automatic,
-            document,
-            current_script: Rc::new(Cell::new(None)),
-            cookies: Rc::new(RefCell::new(Default::default())),
-            media:Rc::new(RefCell::new(Default::default())),
+            document: document.map(Arc::new),
             load_resources: self.load_resources,
-            window: if automatic { self.window.clone() } else { None },
             initial_started: automatic.then(Instant::now),
         }));
-        // The local task shares this thread. It processes the reset before any
-        // other evaluation and cannot race the caller's navigation state.
-        self.drive();
+        self.wake.notify_one();
     }
 
     /// Called after native creation/resize has updated the very same content
@@ -275,34 +306,36 @@ impl Runtime {
             inner_width,
             inner_height,
         };
-        if let Some(window) = &self.window {
-            window.set(metrics);
+        *self.window.lock().unwrap() = Some(metrics);
+        self.wake.notify_one();
+    }
+
+    pub fn take_video_request(&self) -> Option<(u64, javascript_dom::media::Request)> {
+        self.published.lock().unwrap().media.take()
+    }
+    pub fn video_status(&self, generation: u64, id: u32, status: i32) {
+        self.published.lock().unwrap().receipt = Some((generation, id, status));
+        self.wake.notify_one();
+    }
+    pub fn cookie_snapshot(&self) -> String {
+        self.published.lock().unwrap().cookies.clone()
+    }
+    pub fn storage_snapshot(&self) -> String {
+        let state = self.published.lock().unwrap();
+        if state.storage.is_empty() {
+            "[]".into()
         } else {
-            self.window = Some(Rc::new(Cell::new(metrics)));
+            state.storage.clone()
         }
     }
 
-    pub fn take_video_request(&self)->Option<(u64,javascript_dom::media::Request)> {
-        let pages=self.pages.borrow();let page=pages.as_ref()?;
-        let request=page.media.borrow_mut().pending.take()?;Some((page.generation,request))
-    }
-    pub fn video_status(&self,generation:u64,id:u32,status:i32){
-        if let Some(page)=self.pages.borrow().as_ref().filter(|page|page.generation==generation){page.media.borrow_mut().receipt=Some((id,status));}
-    }
-    pub fn cookie_snapshot(&self) -> String {
-        self.pages.borrow().as_ref().map_or_else(String::new, |page| page.cookies.borrow().get())
-    }
-    pub fn storage_snapshot(&self) -> String {
-        self.pages.borrow().as_ref().map_or_else(||"[]".into(), |page| page.cookies.borrow().snapshot())
-    }
-
     pub fn is_initializing(&self, generation: u64) -> bool {
-        let initial = self.initial.borrow();
+        let initial = self.initial.lock().unwrap();
         initial.generation == generation && initial.pending
     }
 
     pub fn take_initial_document(&mut self, generation: u64) -> Option<rp5::Document> {
-        let mut initial = self.initial.borrow_mut();
+        let mut initial = self.initial.lock().unwrap();
         if initial.generation != generation {
             return None;
         }
@@ -311,7 +344,7 @@ impl Runtime {
 
     /// Explicit capability, deliberately not called by Hull's page-loading path.
     pub fn run(&mut self) -> Result<(), &'static str> {
-        if self.exhausted.get() {
+        if self.revision != 0 && self.exhausted.load(Ordering::Acquire) == self.revision {
             return Err("page JavaScript execution budget exhausted");
         }
         let Some(mut page) = self.pages.borrow().clone() else {
@@ -323,13 +356,14 @@ impl Runtime {
         page.requested = true;
         page.active = true;
         self.pages.send_replace(Some(page));
+        self.wake.notify_one();
         Ok(())
     }
 
     /// Explicit console execution shares this page's VM without requesting its
     /// collected scripts. Navigation discards queued pastes along with the VM.
     pub fn execute_pasted(&mut self, source: String) -> Result<(), &'static str> {
-        if self.exhausted.get() {
+        if self.revision != 0 && self.exhausted.load(Ordering::Acquire) == self.revision {
             return Err("page JavaScript execution budget exhausted");
         }
         if source.len() > 64 * 1024 {
@@ -338,7 +372,7 @@ impl Runtime {
         let Some(mut page) = self.pages.borrow().clone() else {
             return Err("load a page before running a script");
         };
-        let mut pasted = self.pasted.borrow_mut();
+        let mut pasted = self.pasted.lock().unwrap();
         if pasted.len() >= 8 {
             return Err("script queue is full");
         }
@@ -349,12 +383,13 @@ impl Runtime {
         });
         page.active = true;
         self.pages.send_replace(Some(page));
+        self.wake.notify_one();
         Ok(())
     }
 
     /// Input is data only; it never creates a VM or authorizes page scripts.
     pub fn enqueue_input(&mut self, generation: u64, mut event: Value) -> EnqueueResult {
-        if self.exhausted.get() {
+        if self.revision != 0 && self.exhausted.load(Ordering::Acquire) == self.revision {
             return EnqueueResult::Dormant;
         }
         let (revision, active) = {
@@ -410,7 +445,10 @@ impl Runtime {
             bytes,
         };
         match self.input.try_send(packet) {
-            Ok(()) => EnqueueResult::Accepted,
+            Ok(()) => {
+                self.wake.notify_one();
+                EnqueueResult::Accepted
+            }
             Err(mpsc::error::TrySendError::Full(_)) => {
                 let count = self.losses.borrow().count.saturating_add(1);
                 self.losses.send_replace(InputLoss {
@@ -424,64 +462,128 @@ impl Runtime {
     }
 
     pub fn poll(&mut self) -> Vec<Report> {
-        self.drive();
         let mut reports = Vec::new();
         while let Ok(report) = self.reports.try_recv() {
             reports.push(report);
         }
         reports
     }
-
-    fn drive(&mut self) {
-        self.tick = self.tick.wrapping_add(1);
-        self.ticks.send_replace(self.tick);
-        // An immediately-ready future would never poll the LocalSet. The tick
-        // token, rather than yield_now alone, bounds the actor to one step.
-        self.local
-            .block_on(&self.runtime, async { task::yield_now().await });
-    }
 }
 
 impl Drop for Runtime {
     fn drop(&mut self) {
-        self.task.abort();
-        self.local
-            .block_on(&self.runtime, async { task::yield_now().await });
+        self.stopped.store(true, Ordering::Release);
+        self.wake.notify_one();
     }
 }
 
 async fn worker(
     mut pages: watch::Receiver<Option<Page>>,
-    mut ticks: watch::Receiver<u64>,
     reports: mpsc::Sender<Report>,
     mut inputs: mpsc::Receiver<InputPacket>,
     mut losses: watch::Receiver<InputLoss>,
-    pasted: Rc<RefCell<VecDeque<PastedScript>>>,
-    initial: Rc<RefCell<InitialRender>>,
-    exhausted: Rc<Cell<bool>>,
+    pasted: Arc<Mutex<VecDeque<PastedScript>>>,
+    initial: Arc<Mutex<InitialRender>>,
+    exhausted: Arc<AtomicU64>,
+    wake: Arc<Notify>,
+    stopped: Arc<AtomicBool>,
+    published: Arc<Mutex<Published>>,
+    window: Arc<Mutex<Option<WindowMetrics>>>,
 ) {
     let _ = reports.try_send(Report::Online);
-    let mut page: Option<Page> = None;
+    let mut page: Option<LocalPage> = None;
     let mut engine: Option<Engine> = None;
     let mut resources: Option<Loader> = None;
-    let mut timers=None;
+    let mut timers: Option<timers::SharedTimers> = None;
     let mut started = false;
     let mut dom_ready_sent = false;
     let mut next = 0;
     let mut seen_loss = 0;
     let mut reset: Option<PendingReset> = None;
-    while ticks.changed().await.is_ok() {
+    let mut deferred_input: Option<InputPacket> = None;
+    loop {
+        if stopped.load(Ordering::Acquire) || trueos::worker::cancellation_requested() {
+            break;
+        }
+        let notified = wake.notified();
+        if let Some(page) = &page {
+            if let Some(metrics) = *window.lock().unwrap() {
+                if let Some(window) = &page.window {
+                    window.set(metrics);
+                }
+            }
+            publish(page, &published);
+        }
+        let runnable = page.as_ref().is_some_and(|page| page.active)
+            && page
+                .as_ref()
+                .is_none_or(|page| exhausted.load(Ordering::Acquire) != page.revision)
+            && (engine
+                .as_ref()
+                .is_none_or(|engine| engine.has_pending_jobs())
+                || page
+                    .as_ref()
+                    .is_some_and(|page| page.requested && next < page.sources.len())
+                || page
+                    .as_ref()
+                    .is_some_and(|page| initial_pending(&initial, page.revision))
+                || !pasted.lock().unwrap().is_empty()
+                || deferred_input.is_some()
+                || !inputs.is_empty()
+                || reset.is_some()
+                || page
+                    .as_ref()
+                    .is_some_and(|page| page.media.borrow().receipt.is_some()));
+        let mut delay = if runnable {
+            Duration::ZERO
+        } else {
+            Duration::from_millis(50)
+        };
+        if resources.as_ref().is_some_and(Loader::pending) {
+            delay = Duration::from_millis(2);
+        }
+        if page
+            .as_ref()
+            .is_none_or(|page| exhausted.load(Ordering::Acquire) != page.revision)
+        {
+            if let Some(deadline) = timers
+                .as_ref()
+                .and_then(|timers| timers.borrow().next_deadline())
+                .filter(|_| !resources.as_ref().is_some_and(Loader::pending))
+            {
+                delay = delay.min(deadline);
+            }
+        }
+        if !pages.has_changed().unwrap_or(false) {
+            if delay.is_zero() {
+                task::yield_now().await;
+            } else {
+                let sleep = trueos::tokio::time::sleep(delay);
+                trueos::tokio::pin!(sleep);
+                trueos::tokio::pin!(notified);
+                std::future::poll_fn(|cx| {
+                    use std::future::Future;
+                    if notified.as_mut().poll(cx).is_ready() {
+                        return std::task::Poll::Ready(());
+                    }
+                    sleep.as_mut().poll(cx)
+                })
+                .await;
+            }
+        }
+        if stopped.load(Ordering::Acquire) || trueos::worker::cancellation_requested() {
+            break;
+        }
         if pages.has_changed().unwrap_or(false) {
             let incoming = pages.borrow_and_update().clone();
             if incoming.as_ref().map(|p| p.revision) != page.as_ref().map(|p| p.revision) {
                 resources = None; // Cancels tickets before replacing the realm.
                 engine = None; // Context, globals, pending promises and limits all go together.
-                timers=None;
+                timers = None;
                 next = 0;
                 started = false;
                 dom_ready_sent = false;
                 reset = None;
-                while inputs.try_recv().is_ok() {}
                 seen_loss = losses.borrow_and_update().count;
                 if let Some(p) = &incoming {
                     let _ = reports.try_send(Report::Page {
@@ -490,15 +592,46 @@ async fn worker(
                     });
                 }
             }
-            page = incoming;
+            if incoming.as_ref().map(|p| p.revision) != page.as_ref().map(|p| p.revision) {
+                page = incoming.map(|p| LocalPage {
+                    revision: p.revision,
+                    generation: p.generation,
+                    url: p.url,
+                    sources: p.sources,
+                    requested: p.requested,
+                    active: p.active,
+                    document: p.document.map(|d| Rc::new(RefCell::new((*d).clone()))),
+                    current_script: Rc::new(Cell::new(None)),
+                    cookies: Rc::new(RefCell::new(Default::default())),
+                    media: Rc::new(RefCell::new(Default::default())),
+                    window: window
+                        .lock()
+                        .unwrap()
+                        .map(|metrics| Rc::new(Cell::new(metrics))),
+                    load_resources: p.load_resources,
+                    initial_started: p.initial_started,
+                });
+            } else if let (Some(local), Some(incoming)) = (&mut page, incoming) {
+                local.requested = incoming.requested;
+                local.active = incoming.active;
+            }
         }
         let Some(page) = &page else {
             continue;
         };
+        // Commands may have arrived while the lane was parked. Refresh before
+        // dispatching callbacks from that wake, including pasted scripts.
+        if let (Some(metrics), Some(window)) = (*window.lock().unwrap(), &page.window) {
+            window.set(metrics);
+        }
         if losses.has_changed().unwrap_or(false) {
             let loss = *losses.borrow_and_update();
             let mut discarded = loss.count.saturating_sub(seen_loss);
-            while inputs.try_recv().is_ok() {
+            while let Some(packet) = deferred_input.take().or_else(|| inputs.try_recv().ok()) {
+                if packet.revision > page.revision {
+                    deferred_input = Some(packet);
+                    break;
+                }
                 discarded = discarded.saturating_add(1);
             }
             seen_loss = loss.count;
@@ -527,8 +660,9 @@ async fn worker(
                                 false,
                             )
                         });
-                    let initialized=initialized.and_then(|_| {
-                        timers=Some(Rc::new(RefCell::new(timers::Timers::default())));Ok(())
+                    let initialized = initialized.and_then(|_| {
+                        timers = Some(Rc::new(RefCell::new(timers::Timers::default())));
+                        Ok(())
                     });
                     let initialized = initialized.and_then(|_| {
                         if let Some(document) = &page.document {
@@ -543,7 +677,7 @@ async fn worker(
                                 Some(page.media.clone()),
                             )
                         } else {
-                            javascript_dom::install_url_with_timers(&mut value,timers.clone())
+                            javascript_dom::install_url_with_timers(&mut value, timers.clone())
                                 .and_then(|_| {
                                     value.eval(
                                         include_bytes!("javascript_events.js"),
@@ -604,8 +738,8 @@ async fn worker(
                                 generation: page.generation,
                                 error,
                             });
-                            finish_initial(page, &initial, &reports, true, next);
-                            exhausted.set(true);
+                            finish_initial(page, &initial, &published, &reports, true, next);
+                            exhausted.store(page.revision, Ordering::Release);
                             continue;
                         }
                     }
@@ -615,8 +749,8 @@ async fn worker(
                         generation: page.generation,
                         error,
                     });
-                    finish_initial(page, &initial, &reports, true, next);
-                    exhausted.set(true);
+                    finish_initial(page, &initial, &published, &reports, true, next);
+                    exhausted.store(page.revision, Ordering::Release);
                     continue;
                 }
             }
@@ -624,25 +758,46 @@ async fn worker(
         let Some(engine) = &mut engine else {
             continue;
         };
-        if engine.execution_budget_exhausted() || exhausted.get() {
+        if engine.execution_budget_exhausted()
+            || (exhausted.load(Ordering::Acquire) == page.revision)
+        {
             if let Some(loader) = &mut resources {
                 loader.close();
             }
-            if !exhausted.replace(true) {
+            if exhausted.swap(page.revision, Ordering::AcqRel) != page.revision {
                 let _ = reports.try_send(Report::BudgetExhausted {
                     generation: page.generation,
                 });
             }
-            finish_initial(page, &initial, &reports, true, next);
-            while inputs.try_recv().is_ok() {}
-            pasted.borrow_mut().clear();
+            finish_initial(page, &initial, &published, &reports, true, next);
+            while let Some(packet) = deferred_input.take().or_else(|| inputs.try_recv().ok()) {
+                if packet.revision > page.revision {
+                    deferred_input = Some(packet);
+                    break;
+                }
+            }
+            pasted
+                .lock()
+                .unwrap()
+                .retain(|script| script.revision != page.revision);
             continue;
         }
-        let receipt=page.media.borrow_mut().receipt.take();
-        if let Some((id,status))=receipt {
-            let result=engine.dispatch_json(json!({"kind":"__hull_media_receipt","id":id,"status":status}).to_string().as_bytes());
-            if let Err(error)=result{let _=reports.try_send(Report::JobError{generation:page.generation,error});}
-            flush_console(engine,page.generation,&reports);continue;
+        let receipt = page.media.borrow_mut().receipt.take();
+        if let Some((id, status)) = receipt {
+            let result = engine.dispatch_json(
+                json!({"kind":"__hull_media_receipt","id":id,"status":status})
+                    .to_string()
+                    .as_bytes(),
+            );
+            if let Err(error) = result {
+                let _ = reports.try_send(Report::JobError {
+                    generation: page.generation,
+                    error,
+                });
+            }
+            publish(page, &published);
+            flush_console(engine, page.generation, &reports);
+            continue;
         }
         if let Some(loader) = &mut resources {
             loader.poll(engine);
@@ -655,14 +810,14 @@ async fn worker(
                 });
             }
         }
-        if initial.borrow().pending
+        if initial_pending(&initial, page.revision)
             && page.initial_started.is_some_and(|started| {
                 let waited = resources.as_ref().map_or(Duration::ZERO, Loader::waited);
                 started.elapsed().saturating_sub(waited) >= INITIAL_RENDER_WAIT
                     || started.elapsed() >= INITIAL_RENDER_WAIT + module_loader::MAX_WAIT
             })
         {
-            finish_initial(page, &initial, &reports, true, next);
+            finish_initial(page, &initial, &published, &reports, true, next);
             next = page.sources.len();
         }
         if engine.has_pending_jobs() {
@@ -683,6 +838,7 @@ async fn worker(
                     }
                 }
             }
+            publish(page, &published);
             flush_console(engine, page.generation, &reports);
             continue;
         }
@@ -692,11 +848,23 @@ async fn worker(
             None
         };
         let Some(source) = source else {
-            let due=timers.as_ref().and_then(|timers|timers.borrow_mut().take_due());
-            if let Some(id)=due {
-                let result=engine.dispatch_json(json!({"kind":"__hull_timer","id":id}).to_string().as_bytes());
-                if let Err(error)=result {let _=reports.try_send(Report::JobError{generation:page.generation,error});}
-                flush_console(engine,page.generation,&reports);
+            let due = timers
+                .as_ref()
+                .and_then(|timers| timers.borrow_mut().take_due());
+            if let Some(id) = due {
+                let result = engine.dispatch_json(
+                    json!({"kind":"__hull_timer","id":id})
+                        .to_string()
+                        .as_bytes(),
+                );
+                if let Err(error) = result {
+                    let _ = reports.try_send(Report::JobError {
+                        generation: page.generation,
+                        error,
+                    });
+                }
+                publish(page, &published);
+                flush_console(engine, page.generation, &reports);
                 continue;
             }
             if resources.as_ref().is_some_and(Loader::pending) {
@@ -711,6 +879,7 @@ async fn worker(
                         error,
                     });
                 }
+                publish(page, &published);
                 flush_console(engine, page.generation, &reports);
                 // Ready callbacks and their Promise jobs run before capture.
                 continue;
@@ -723,15 +892,25 @@ async fn worker(
                     });
                 }
             }
-            if initial.borrow().pending {
-                finish_initial(page, &initial, &reports, false, next);
+            if initial_pending(&initial, page.revision) {
+                finish_initial(page, &initial, &published, &reports, false, next);
                 continue;
             }
             // Pasted work is explicit and runs one source per turn after any
             // requested page scripts and their Promise checkpoints.
             let mut selected = None;
             for _ in 0..8 {
-                let Some(script) = pasted.borrow_mut().pop_front() else {
+                let script = {
+                    let mut queue = pasted.lock().unwrap();
+                    if queue
+                        .front()
+                        .is_some_and(|script| script.revision > page.revision)
+                    {
+                        break;
+                    }
+                    queue.pop_front()
+                };
+                let Some(script) = script else {
                     break;
                 };
                 if script.revision == page.revision && script.generation == page.generation {
@@ -741,6 +920,7 @@ async fn worker(
             }
             if let Some(script) = selected {
                 let result = engine.eval(script.source.as_bytes(), "hull:console-paste", false);
+                publish(page, &published);
                 flush_console(engine, page.generation, &reports);
                 let _ = reports.try_send(Report::Pasted {
                     generation: page.generation,
@@ -764,9 +944,14 @@ async fn worker(
                 } else {
                     let mut selected = None;
                     for _ in 0..INPUT_CAPACITY {
-                        let Ok(packet) = inputs.try_recv() else {
+                        let Some(packet) = deferred_input.take().or_else(|| inputs.try_recv().ok())
+                        else {
                             break;
                         };
+                        if packet.revision > page.revision {
+                            deferred_input = Some(packet);
+                            break;
+                        }
                         if packet.revision == page.revision && packet.generation == page.generation
                         {
                             selected = Some((packet.kind, packet.bytes));
@@ -779,6 +964,7 @@ async fn worker(
                     break;
                 };
                 let result = engine.dispatch_json(&bytes);
+                publish(page, &published);
                 let _ = reports.try_send(Report::Input {
                     generation: page.generation,
                     kind,
@@ -804,6 +990,7 @@ async fn worker(
                     break;
                 }
             }
+            publish(page, &published);
             flush_console(engine, page.generation, &reports);
             continue;
         };
@@ -930,6 +1117,7 @@ async fn worker(
         // Clear even on syntax errors or interruption, before any queued jobs,
         // console delivery, pasted code or input callbacks are admitted.
         page.current_script.set(None);
+        publish(page, &published);
         flush_console(engine, page.generation, &reports);
         let _ = reports.try_send(Report::Evaluated {
             generation: page.generation,
@@ -940,17 +1128,41 @@ async fn worker(
     }
 }
 
+fn initial_pending(initial: &Mutex<InitialRender>, revision: u64) -> bool {
+    let initial = initial.lock().unwrap();
+    initial.revision == revision && initial.pending
+}
+
+fn publish(page: &LocalPage, published: &Mutex<Published>) {
+    let mut state = published.lock().unwrap();
+    if state.revision != page.revision {
+        return;
+    }
+    state.cookies = page.cookies.borrow().get();
+    state.storage = page.cookies.borrow().snapshot();
+    if let Some(request) = page.media.borrow_mut().pending.take() {
+        state.media = Some((page.generation, request));
+    }
+    if let Some((generation, id, status)) = state.receipt.take() {
+        if generation == page.generation {
+            page.media.borrow_mut().receipt = Some((id, status));
+        }
+    }
+}
+
 fn finish_initial(
-    page: &Page,
-    initial: &RefCell<InitialRender>,
+    page: &LocalPage,
+    initial: &Mutex<InitialRender>,
+    published: &Mutex<Published>,
     reports: &mpsc::Sender<Report>,
     capped: bool,
     next: usize,
 ) {
-    let mut initial = initial.borrow_mut();
-    if !initial.pending || initial.generation != page.generation {
+    let mut initial = initial.lock().unwrap();
+    if !initial.pending || initial.revision != page.revision {
         return;
     }
+    publish(page, published);
     initial.snapshot = page
         .document
         .as_ref()
@@ -967,5 +1179,92 @@ fn flush_console(engine: &mut Engine, generation: u64, reports: &mpsc::Sender<Re
     let batch = engine.take_console();
     if !batch.messages.is_empty() || batch.dropped != 0 {
         let _ = reports.try_send(Report::Console { generation, batch });
+    }
+}
+
+#[cfg(test)]
+mod native_lane_tests {
+    use super::*;
+
+    #[test]
+    fn initialization_and_timers_progress_without_ui_polling() {
+        let mut runtime = Runtime::start().unwrap();
+        let document = rp5::parse(
+            r#"<p>before</p><script>
+            document.querySelector('p').textContent='initialized';
+            setTimeout(()=>{document.cookie='worker=awake';},20);
+            hullInput.addEventListener('focus',()=>{document.cookie='input=awake';});
+        </script>"#,
+        );
+        let mut scripts = crate::scripts::Scripts::default();
+        scripts.extract(&document, "https://fixture.test/native");
+        runtime.begin_page(
+            900,
+            "https://fixture.test/native",
+            scripts.sources,
+            document,
+        );
+        let until = Instant::now() + Duration::from_secs(2);
+        // These snapshot reads neither drive the worker nor notify it.
+        while runtime.is_initializing(900) || runtime.cookie_snapshot() != "worker=awake" {
+            assert!(
+                Instant::now() < until,
+                "native lane did not wake independently"
+            );
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        assert_eq!(
+            runtime.enqueue_input(900, json!({"kind":"focus", "window_id":1})),
+            EnqueueResult::Accepted
+        );
+        while !runtime.cookie_snapshot().contains("input=awake") {
+            assert!(Instant::now() < until, "input did not wake native lane");
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        runtime
+            .execute_pasted("document.cookie='paste=awake'".into())
+            .unwrap();
+        while !runtime.cookie_snapshot().contains("paste=awake") {
+            assert!(Instant::now() < until, "paste did not wake native lane");
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        let document = runtime.take_initial_document(900).unwrap();
+        let p = document
+            .nodes
+            .iter()
+            .enumerate()
+            .find(|(id, _)| document.name(*id) == "p")
+            .unwrap()
+            .0;
+        assert_eq!(document.text_content(p), "initialized");
+    }
+
+    #[test]
+    fn idle_lane_completes_after_shutdown_signal() {
+        let mut runtime = Runtime::start().unwrap();
+        runtime.stopped.store(true, Ordering::Release);
+        runtime.wake.notify_one();
+        let until = Instant::now() + Duration::from_secs(2);
+        loop {
+            if let Some(result) = runtime._task.try_take() {
+                result.unwrap();
+                break;
+            }
+            assert!(
+                Instant::now() < until,
+                "native lane did not release its closure"
+            );
+            std::thread::sleep(Duration::from_millis(1));
+        }
+    }
+
+    #[test]
+    fn dropping_runtime_requests_shutdown_without_waiting_for_guest_code() {
+        let mut runtime = Runtime::start().unwrap();
+        runtime.replace_page(901, "https://fixture.test/native", Vec::new());
+        runtime.execute_pasted("for(;;){}".into()).unwrap();
+        let started = Instant::now();
+        drop(runtime);
+        assert!(started.elapsed() < Duration::from_millis(100));
     }
 }

@@ -1,7 +1,13 @@
 # Hull JavaScript and native input
 
-Hull starts one idle Tokio local task with its event loop. It shares Hull's
-thread; there is no additional OS worker. The standalone QuickJS crate has an
+Hull submits one actor through the existing `trueos::worker::spawn` native
+service lane. Its current-thread Tokio runtime, LocalSet, QuickJS realm and
+Rc-backed DOM are constructed and destroyed inside that lane. Owned commands,
+reports and frozen snapshots cross the UI boundary; QuickJS and Rc handles do
+not. Tokio notifications wake input, navigation, pasted scripts and media
+receipts; timer deadlines wake the lane independently of UI polling. Resource
+tickets are checked at bounded intervals, and idle waits check native worker
+cancellation at least every 50 ms. The standalone QuickJS crate has an
 opaque native value boundary and no dependency on the old workbench/experiments.
 Its C sources and adapter use QuickJS's full-pointer value representation in
 both host tests and TRUEOS. The upstream 47-bit NaN box cannot retain TRUEOS's
@@ -12,7 +18,7 @@ After rp5 completes an HTML parse, Hull admits its collected inline JavaScript
 for a finite initialization pass. External script references remain unfetched;
 there is no guest network or filesystem API. Navigation drops the context,
 document wrappers, Promise jobs, listeners, queued input and queued pastes.
-Closing Hull drops the task. The lower-level `replace_page` path remains inert
+Closing Hull signals cooperative shutdown without waiting on the UI thread. The lower-level `replace_page` path remains inert
 for navigation reset and explicit-execution fixtures.
 
 ## Initial document and rendering
@@ -30,7 +36,7 @@ before the next source (at most sixteen jobs per batch). There are two bounds:
   Idle time between turns does not spend this allowance. It is set once per
   page, not renewed for each script. Exhaustion refuses further guest work.
 - The initial render waits at most a **250 ms wall-time window**, checked when
-  the actor is driven. This also bounds a long collection of tiny sources or a
+  the actor runs. This also bounds a long collection of tiny sources or a
   self-replenishing microtask queue. At the cutoff, unstarted page sources are
   omitted from this pass. Remaining jobs may use the remaining active budget.
 
@@ -41,7 +47,9 @@ saved layout SVG. Later mutations affect the live script-visible document only:
 they do not request layout, redraw, update native hit boxes or rewrite the SVG.
 Native button hover and scrolling continue to operate on the rendered snapshot.
 
-The work is interleaved on Hull's thread, not parallel on another OS thread.
+Guest calls are serialized within the native lane while the UI remains free
+to process input and render. Navigation replaces the lane-owned realm before
+admitting the new page revision; closing the lane discards pending work.
 Each guest call retains its 25 ms cooperative interrupt. Interrupted calls abort
 rather than resume; completed mutations remain. These bounds are cooperative:
 parsing, GC, native operations and cloning can overrun a checkpoint. Rust selector

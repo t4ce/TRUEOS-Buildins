@@ -20,7 +20,7 @@ fn snapshot(runtime: &mut Runtime, generation: u64) -> (rp5::Document, Vec<Repor
     loop {
         reports.extend(runtime.poll());
         if let Some(doc) = runtime.take_initial_document(generation) {
-            return (doc, reports);
+            reports.extend(runtime.poll());return (doc, reports);
         }
         assert!(start.elapsed() < Duration::from_secs(2), "{reports:?}");
         std::thread::yield_now();
@@ -169,4 +169,32 @@ fn infinite_timer_callback_still_spends_the_page_budget() {
             .iter()
             .any(|r| matches!(r,Report::JobError{error,..} if error.contains("interrupted")))
     );
+}
+
+#[test]
+fn intervals_recur_with_arguments_and_promise_checkpoints_without_ui_ticks(){
+    let mut runtime=Runtime::start().unwrap();
+    begin(&mut runtime,31,r#"<script>
+        let count=0;const id=setInterval(function(value){if(this!==globalThis||value!==7)throw Error('context');
+            const n=++count;console.log('tick '+n);Promise.resolve().then(()=>console.log('job '+n));if(count===3)clearInterval(id);
+        },10,7);
+    </script>"#);
+    let (_,mut reports)=snapshot(&mut runtime,31);
+    std::thread::sleep(Duration::from_millis(60));reports.extend(runtime.poll());
+    let start=Instant::now();while output(&reports).len()<6&&start.elapsed()<Duration::from_secs(1){reports.extend(runtime.poll());std::thread::yield_now();}
+    success(&reports);assert_eq!(output(&reports),["tick 1","job 1","tick 2","job 2","tick 3","job 3"]);
+}
+
+#[test]
+fn either_clear_function_cancels_either_timer_kind_and_interval_faults_can_repeat(){
+    let mut runtime=Runtime::start().unwrap();
+    begin(&mut runtime,32,r#"<script>
+        clearTimeout(setInterval(()=>{throw Error('cancelled interval')},0));
+        clearInterval(setTimeout(()=>{throw Error('cancelled timeout')},0));
+        let count=0;const id=setInterval(()=>{if(++count===1)throw Error('interval fault');clearTimeout(id);console.log('recovered');},0);
+    </script>"#);
+    let (_,reports)=snapshot(&mut runtime,32);
+    assert_eq!(output(&reports),["recovered"]);
+    let faults:Vec<_>=reports.iter().filter_map(|r|match r{Report::JobError{error,..}=>Some(error),_=>None}).collect();
+    assert_eq!(faults.len(),1);assert!(faults[0].contains("interval fault"));
 }

@@ -225,15 +225,13 @@ import('/_app/start.js').then(async kit=>{kit.init();const app=await import('/_a
         self.run_page("--no-svg")
         self.assertFalse((self.out / "layout.svg").exists())
 
-    def test_turn_delay_reproduces_cutoff_while_fast_replay_completes(self):
+    def test_ui_poll_delay_does_not_gate_native_worker_progress(self):
         self.page("<p>ready</p>" + "<script>globalThis.count=(globalThis.count||0)+1</script>" * 30)
-        report = self.run_page("--turn-ms", "20", "--no-svg")
-        self.assertTrue(report["initialization"]["capped"])
-        self.assertGreater(report["initialization"]["remaining_sources"], 0)
-        self.assertIn("not-started", [item["status"] for item in report["scripts"]])
-        report = self.run_page("--no-svg")
-        self.assertFalse(report["initialization"]["capped"])
-        self.assertTrue(all(item["status"] == "executed" for item in report["scripts"]))
+        for turn_ms in ("20", "0"):
+            report = self.run_page("--turn-ms", turn_ms, "--no-svg")
+            self.assertFalse(report["initialization"]["capped"])
+            self.assertEqual(report["initialization"]["remaining_sources"], 0)
+            self.assertTrue(all(item["status"] == "executed" for item in report["scripts"]))
 
     def test_import_and_show_need_no_live_network_and_resources_cannot_escape(self):
         html = self.root / "saved.html"

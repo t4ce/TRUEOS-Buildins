@@ -2,6 +2,19 @@
 #![allow(dead_code)]
 extern crate self as trueos;
 pub use tokio;
+extern crate alloc;
+#[allow(unexpected_cfgs)]
+#[path = "../../../../../TRUEOS-Blueprints/api/src/worker.rs"]
+pub mod native_worker;
+pub mod worker {
+    pub use crate::native_worker::{JoinHandle, cancellation_requested};
+    pub fn spawn<F, R>(f: F) -> Result<JoinHandle<R>, crate::native_worker::SpawnError>
+    where F: FnOnce() -> R + Send + 'static, R: Send + 'static {
+        let inherit = crate::netfs::inherit();
+        crate::native_worker::spawn(move || { inherit(); f() })
+    }
+}
+
 
 use serde_json::{Value, json};
 use std::{
@@ -84,19 +97,30 @@ pub mod netfs {
         requested: Vec<String>,
         next: u32,
     }
-    thread_local! { static NET: RefCell<Network> = RefCell::new(Network::default()); }
+    thread_local! { static NETWORK: RefCell<std::sync::Arc<std::sync::Mutex<Network>>> = RefCell::new(Default::default()); }
+    struct NetworkSlot;
+    static NET: NetworkSlot = NetworkSlot;
+    impl NetworkSlot {
+        fn with<R>(&self, f: impl FnOnce(&std::sync::Mutex<Network>) -> R) -> R {
+            NETWORK.with(|slot| f(&slot.borrow()))
+        }
+    }
+    pub(crate) fn inherit() -> impl FnOnce() + Send + 'static {
+        let shared = NETWORK.with(|slot| slot.borrow().clone());
+        move || NETWORK.with(|slot| *slot.borrow_mut() = shared)
+    }
     pub fn install(resources: HashMap<String, Vec<u8>>) {
-        NET.with(|net| {
-            *net.borrow_mut() = Network {
+        NETWORK.with(|slot| {
+            *slot.borrow_mut() = std::sync::Arc::new(std::sync::Mutex::new(Network {
                 resources,
                 ..Network::default()
-            }
+            }));
         });
     }
     pub fn fetch_bytes(url: &[u8]) -> Result<u32, i32> {
         let url = std::str::from_utf8(url).map_err(|_| -1)?.to_owned();
         NET.with(|net| {
-            let mut net = net.borrow_mut();
+            let mut net = net.lock().unwrap();
             net.next += 1;
             let id = net.next;
             net.requested.push(url.clone());
@@ -109,7 +133,7 @@ pub mod netfs {
     }
     pub fn fetch_bytes_result_len(id: u32) -> Result<usize, i32> {
         NET.with(|net| {
-            let net = net.borrow();
+            let net = net.lock().unwrap();
             net.tickets
                 .get(&id)
                 .and_then(|url| net.resources.get(url))
@@ -119,7 +143,7 @@ pub mod netfs {
     }
     pub fn fetch_bytes_read(id: u32) -> Result<Vec<u8>, i32> {
         NET.with(|net| {
-            let net = net.borrow();
+            let net = net.lock().unwrap();
             net.tickets
                 .get(&id)
                 .and_then(|url| net.resources.get(url))
@@ -129,12 +153,12 @@ pub mod netfs {
     }
     pub fn fetch_bytes_discard(id: u32) -> i32 {
         NET.with(|net| {
-            net.borrow_mut().tickets.remove(&id);
+            net.lock().unwrap().tickets.remove(&id);
         });
         0
     }
     pub fn requested() -> Vec<String> {
-        NET.with(|net| net.borrow().requested.clone())
+        NET.with(|net| net.lock().unwrap().requested.clone())
     }
 }
 
@@ -461,13 +485,21 @@ fn run(options: Options) -> Result<(), String> {
             trace.push(json!({"event":"turn","turn":turns,"host_turn_ms":active_turn_ms}));
             turns += 1;
             if let Some(frozen) = runtime.take_initial_document(1) {
+                for report in runtime.poll() {
+                    let mut event = record(report);
+                    event["turn"] = json!(turns);
+                    event["elapsed_ms"] = json!(started.elapsed().as_secs_f64() * 1000.0);
+                    trace.push(event);
+                }
                 break frozen;
             }
-            if turns >= 16384 || started.elapsed() > Duration::from_secs(7) {
+            if started.elapsed() > Duration::from_secs(7) {
                 return Err("initialization did not produce a render snapshot".into());
             }
             if options.turn_ms != 0 {
                 std::thread::sleep(Duration::from_millis(options.turn_ms));
+            } else {
+                std::thread::yield_now();
             }
         };
         for event in &trace {

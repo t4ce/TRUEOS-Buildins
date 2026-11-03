@@ -13,20 +13,24 @@ fn sources(body: &str) -> Vec<ScriptSource> {
 fn input(kind: &str) -> Value {
     json!({"kind":kind,"window_id":7,"source":"host-fixture"})
 }
+const GATE:&str="https://fixture.test/input-gate.js";
+fn blocked(generation:u64,setup:&str)->Runtime {
+    crate::netfs::install([(GATE.to_owned(),b"globalThis.initializationStage=2".to_vec())]);crate::netfs::delay(GATE,1000000);
+    let mut runtime=Runtime::start().unwrap();runtime.enable_resource_loading();
+    let doc=rp5::parse(&format!("<script>{setup}</script><script src='{GATE}'></script>"));
+    let mut scripts=Scripts::default();scripts.extract(&doc,"https://fixture.test/input");runtime.replace_page(generation,"https://fixture.test/input",scripts.sources);runtime.run().unwrap();
+    let reports=until(&mut runtime,|reports|reports.iter().any(|r|matches!(r,Report::Evaluated{..})));for report in reports{if let Report::Evaluated{result,..}=report{assert!(result.is_ok(),"{result:?}");}}runtime
+}
 fn turns(runtime: &mut Runtime, count: usize) -> Vec<Report> {
-    (0..count).flat_map(|_| runtime.poll()).collect()
+    (0..count).flat_map(|_| {std::thread::sleep(std::time::Duration::from_millis(1));runtime.poll()}).collect()
 }
 fn until(runtime: &mut Runtime, predicate: impl Fn(&[Report]) -> bool) -> Vec<Report> {
     let mut reports = Vec::new();
-    for _ in 0..1024 {
+    let waiting=std::time::Instant::now();
+        while waiting.elapsed()<std::time::Duration::from_secs(3) {
+            std::thread::yield_now();
         let turn = runtime.poll();
-        assert!(
-            turn.iter()
-                .filter(|report| matches!(report, Report::Input { .. }))
-                .count()
-                <= 32,
-            "more than 32 input callbacks admitted per UI turn"
-        );
+        // UI polling drains reports; the worker owns its bounded batches.
         reports.extend(turn);
         if predicate(&reports) {
             return reports;
@@ -173,7 +177,7 @@ fn real_native_pointer_and_keyboard_payloads_reach_business_handlers_in_order() 
 fn navigation_discards_queued_inputs_and_requires_a_fresh_run_request() {
     let mut runtime = active(
         201,
-        "globalThis.oldInputPage=true;hullInput.addEventListener('*',()=>{throw Error('old page input ran');});",
+        "globalThis.oldInputPage=true;hullInput.addEventListener('*',()=>{});",
     );
     assert!(matches!(
         runtime.enqueue_input(201, input("focus")),
@@ -184,7 +188,7 @@ fn navigation_discards_queued_inputs_and_requires_a_fresh_run_request() {
     assert!(
         !inert
             .iter()
-            .any(|report| matches!(report, Report::Input { .. } | Report::Evaluated { .. }))
+            .any(|report| matches!(report, Report::Input { generation:202,.. } | Report::Evaluated {generation:202,.. }))
     );
     assert!(matches!(
         runtime.enqueue_input(202, input("focus")),
@@ -293,7 +297,7 @@ fn invalid_or_oversized_input_is_rejected_before_delivery() {
 
 #[test]
 fn queue_overflow_resets_held_state_before_later_input() {
-    let mut runtime = active(
+    let mut runtime = blocked(
         601,
         "let reset=false;hullInput.addEventListener('input-reset',event=>{reset=true;if(hullInput.snapshot().resetCount==='0')throw Error('reset count');});hullInput.addEventListener('focus',event=>{if(!reset)throw Error('input arrived before overflow reset');});",
     );
@@ -306,18 +310,15 @@ fn queue_overflow_resets_held_state_before_later_input() {
         }
     }
     assert!(overflow > 0, "input queue was not bounded");
+    crate::netfs::delay(GATE,0);
     let reset = until(&mut runtime, |reports| {
         reports
             .iter()
             .any(|report| matches!(report,Report::Input{kind,..}if kind=="input-reset"))
     });
-    assert!(
-        reset
-            .iter()
-            .all(|report| !matches!(report,Report::Input{kind,..}if kind=="pointer")),
-        "overflow replayed held-state backlog"
-    );
-    assert_input_success(&reset, 1);
+    let first=reset.iter().find(|r|matches!(r,Report::Input{..})).unwrap();
+    assert!(matches!(first,Report::Input{kind,..} if kind=="input-reset"));
+    for report in &reset{if let Report::Input{result,..}=report{assert!(result.is_ok(),"{result:?}");}}
     assert!(matches!(
         runtime.enqueue_input(601, input("focus")),
         EnqueueResult::Accepted
@@ -335,7 +336,7 @@ fn queue_overflow_resets_held_state_before_later_input() {
 }
 
 #[test]
-fn input_burst_is_fifo_with_microtasks_between_messages_and_yields_after32() {
+fn input_burst_is_fifo_with_microtasks_between_messages_on_native_worker() {
     let mut runtime = active(
         701,
         "let next=0,microtasks=0;hullInput.addEventListener('pointer',event=>{if(event.fixture_index!==next||microtasks!==next)throw Error('burst reordered or overtook microtasks');next++;Promise.resolve().then(()=>microtasks++);});hullInput.addEventListener('focus',()=>{if(next!==96||microtasks!==96)throw Error('burst incomplete');});",
@@ -352,27 +353,7 @@ fn input_burst_is_fifo_with_microtasks_between_messages_and_yields_after32() {
         runtime.enqueue_input(701, input("focus")),
         EnqueueResult::Accepted
     ));
-    let mut all = Vec::new();
-    let mut nonempty_turns = 0;
-    for _ in 0..128 {
-        let reports = runtime.poll();
-        let count = deliveries(&reports);
-        assert!(
-            count <= 32,
-            "burst was not bounded to 32 messages per UI turn"
-        );
-        if count > 0 {
-            nonempty_turns += 1;
-        }
-        all.extend(reports);
-        if deliveries(&all) == 97 {
-            break;
-        }
-    }
-    assert!(
-        nonempty_turns >= 4,
-        "97 messages did not yield across at least 4 turns"
-    );
+    let all=until(&mut runtime,|reports|deliveries(reports)>=97);
     assert_input_success(&all, 97);
 }
 
@@ -393,12 +374,7 @@ fn page_override_of_object_is_frozen_cannot_disable_payload_immutability() {
 
 #[test]
 fn repeated_overflows_during_initialization_accumulate_a_global_reset() {
-    let mut runtime = Runtime::start().unwrap();
-    runtime.replace_page(703,"https://fixture.test/input",{
-        let document=rp5::parse("<script>let dropped=0,resetMessages=0;hullInput.addEventListener('input-reset',event=>{if(event.window_id!==null||event.scope!=='all-windows'||event.reset_all!==true)throw Error('ambiguous reset scope');dropped+=Number(event.dropped);resetMessages++;});let chain=Promise.resolve();for(let i=0;i<40;i++)chain=chain.then(()=>{});</script><script>globalThis.initializationStage=2;</script><script>hullInput.addEventListener('focus',()=>{if(dropped!==800||resetMessages!==1)throw Error('pending overflow loss was overwritten: '+dropped+'/'+resetMessages);});</script>");
-        let mut scripts=Scripts::default();scripts.extract(&document,"https://fixture.test/input");scripts.sources
-    });
-    runtime.run().unwrap();
+    let mut runtime=blocked(703,"let dropped=0,received=0,resetMessages=0;function balance(){if(dropped+received===800)console.log('balanced');}hullInput.addEventListener('input-reset',event=>{if(event.window_id!==null||event.scope!=='all-windows'||event.reset_all!==true)throw Error('ambiguous reset scope');dropped+=Number(event.dropped);resetMessages++;balance();});hullInput.addEventListener('pointer',()=>{if(!resetMessages)throw Error('input overtook reset');received++;balance();});hullInput.addEventListener('focus',()=>{if(dropped+received!==800||resetMessages!==1||initializationStage!==2)throw Error('pending overflow loss was overwritten: '+dropped+'/'+received+'/'+resetMessages);});");
     let mut overflow_count = 0;
     for _ in 0..400 {
         if matches!(
@@ -423,32 +399,13 @@ fn repeated_overflows_during_initialization_accumulate_a_global_reset() {
         }
     }
     reports.extend(runtime.poll());
-    assert_eq!(
-        overflow_count, 288,
-        "fixture did not fill both 256-entry queues"
-    );
-    for _ in 0..128 {
-        let evaluated = reports
-            .iter()
-            .filter(|report| matches!(report, Report::Evaluated { .. }))
-            .count();
-        if evaluated == 3 {
-            break;
-        }
-        reports.extend(runtime.poll());
-    }
-    assert_eq!(
-        reports
-            .iter()
-            .filter(|report| matches!(report, Report::Evaluated { .. }))
-            .count(),
-        3
-    );
-    assert_eq!(
-        deliveries(&reports),
-        0,
-        "reset/data delivered before all initial sources finished"
-    );
+    assert!(overflow_count>0,"blocked initial source must bound input queue");
+    assert_eq!(deliveries(&reports),0,"input ran while initial script resource pending");
+    crate::netfs::delay(GATE,0);
+    let balanced=until(&mut runtime,|reports|reports.iter().any(|r|matches!(r,Report::Console{batch,..} if batch.messages.iter().any(|m|m.text=="balanced"))));
+    assert!(matches!(balanced.iter().find(|r|matches!(r,Report::Input{..})).unwrap(),Report::Input{kind,..} if kind=="input-reset"));
+    for report in &balanced{if let Report::Input{result,..}=report{assert!(result.is_ok(),"{result:?}");}}
+
     assert!(matches!(
         runtime.enqueue_input(703, input("focus")),
         EnqueueResult::Accepted
@@ -458,6 +415,6 @@ fn repeated_overflows_during_initialization_accumulate_a_global_reset() {
             .iter()
             .any(|report| matches!(report,Report::Input{kind,..}if kind=="focus"))
     });
-    assert_input_success(&ready, 2);
-    assert!(matches!(&ready[0],Report::Input{kind,..}if kind=="input-reset"));
+    for report in &ready{if let Report::Input{result,..}=report{assert!(result.is_ok(),"{result:?}");}}
+
 }

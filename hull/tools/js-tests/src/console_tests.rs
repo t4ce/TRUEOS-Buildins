@@ -9,7 +9,9 @@ fn page(runtime: &mut Runtime, generation: u64, html: &str) {
 }
 fn until(runtime: &mut Runtime, predicate: impl Fn(&[Report]) -> bool) -> Vec<Report> {
     let mut reports = Vec::new();
-    for _ in 0..256 {
+    let waiting=std::time::Instant::now();
+        while waiting.elapsed()<std::time::Duration::from_secs(3) {
+            std::thread::yield_now();
         reports.extend(runtime.poll());
         if predicate(&reports) {
             return reports;
@@ -110,12 +112,11 @@ fn logs_from_input_callbacks_and_their_jobs_reach_console() {
 
 #[test]
 fn navigation_discards_pastes_and_context_and_releases_queue_capacity() {
-    let mut runtime = Runtime::start().unwrap();
-    page(&mut runtime, 4, "");
-    runtime
-        .execute_pasted("globalThis.old=true;console.log('old')".into())
-        .unwrap();
-    success(&until(&mut runtime, |r| pastes(r) == 1));
+    let gate="https://fixture.test/paste-gate.js";
+    crate::netfs::install([(gate.to_owned(),b"globalThis.gatePassed=true".to_vec())]);crate::netfs::delay(gate,1000000);
+    let mut runtime=Runtime::start().unwrap();runtime.enable_resource_loading();
+    page(&mut runtime,4,"<script>globalThis.old=true;</script><script src='https://fixture.test/paste-gate.js'></script>");runtime.run().unwrap();
+    success(&until(&mut runtime,|reports|reports.iter().any(|r|matches!(r,Report::Evaluated{..}))));
     for _ in 0..8 {
         runtime
             .execute_pasted("throw Error('stale')".into())
