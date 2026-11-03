@@ -317,6 +317,7 @@ dependencies = [
  "rjqry",
  "rp5",
  "serde_json",
+ "static-self",
  "tokio",
  "trueos-ide",
  "url",

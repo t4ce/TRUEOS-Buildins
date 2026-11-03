@@ -13,6 +13,8 @@ use serde_json::{Value, json};
 mod jquery;
 #[path = "javascript_dom_mutation.rs"]
 mod mutation;
+#[path="javascript_style.rs"]
+mod style;
 #[path = "javascript_url.rs"]
 mod url_api;
 #[path = "javascript_cookies.rs"]
@@ -114,6 +116,7 @@ fn install_gateway(
         cookies,
         timers,
         media,
+        style_locks:Default::default(),
         initial_nodes,
         mutation_bytes: 0,
     };
@@ -127,6 +130,7 @@ fn install_gateway(
     })?;
     let source = include_str!("javascript_dom.js")
         .replace("/* HULL_COOKIES */", include_str!("javascript_cookies.js"))
+        .replace("/* HULL_STYLE */", include_str!("javascript_style.js"))
         .replace("/* HULL_MEDIA */", include_str!("javascript_media.js"))
         .replace(
             "/* HULL_DOM_EVENTS */",
@@ -144,7 +148,8 @@ fn install_gateway(
             "/* HULL_NATIVE_URL */",
             &format!("({})(request);", include_str!("javascript_url.js")),
         )
-        .replace("/* HULL_NAVIGATION */", include_str!("javascript_navigation.js"));
+        .replace("/* HULL_NAVIGATION */", include_str!("javascript_navigation.js"))
+        .replace("/* HULL_NAVIGATOR */", include_str!("javascript_navigator.js"));
     engine.eval(source.as_bytes(), "hull:dom", false)?;
     engine.bind_message_handler("__hullInputReceive")
 }
@@ -161,6 +166,7 @@ fn input<'a>(request: &'a [Value], index: usize) -> DomResult<&'a str> {
 }
 
 struct Gateway {
+    style_locks:style::Locks,
     timers:Option<timers::SharedTimers>,
     media:Option<media::SharedMedia>,
     cookies: cookies::SharedCookies,
@@ -225,6 +231,10 @@ impl Gateway {
             self.cookies.borrow_mut().ignore_further_writes();
             return Ok(Value::Null);
         }
+        if operation=="sessionStorage" {
+            return self.cookies.borrow_mut().session_storage(input(args,1)?,args.get(2).and_then(Value::as_str).unwrap_or(""),args.get(3).and_then(Value::as_str).unwrap_or(""))
+                .ok_or_else(||failure("NotSupportedError","Unsupported storage operation"));
+        }
         if operation == "storage" {
             return self.cookies.borrow_mut().storage(input(args,1)?,args.get(2).and_then(Value::as_str).unwrap_or(""),args.get(3).and_then(Value::as_str).unwrap_or(""))
                 .ok_or_else(||failure("NotSupportedError","Unsupported storage operation"));
@@ -254,6 +264,7 @@ impl Gateway {
         ) {
             return mutation::call(self, operation, id, args);
         }
+        if operation=="style" {return style::call(self,id,input(args,2)?,args.get(3).and_then(Value::as_str).unwrap_or(""),args.get(4).and_then(Value::as_str).unwrap_or(""),args.get(5).and_then(Value::as_str).unwrap_or(""));}
         match operation {
             "describe" => {
                 let doc = self.document.borrow();
@@ -457,7 +468,15 @@ impl Gateway {
                         raw_name.into()
                     }
                 };
-                if action == "set" {
+                if name=="style"&&(action=="set"||action=="remove")&&self.style_locks.borrow().iter().any(|(node,_)|*node==id){
+                    return style::call(self,id,"cssText","",if action=="set"{input(args,4)?}else{""},"");
+                }
+                let style_fields=if name=="style"&&action=="set"{style::attribute_locks(self,id,input(args,4)?)?}
+                    else if name=="style"&&action=="remove"{
+                        let previous=self.document.borrow().element(id).unwrap().2.iter().find(|a|a.name=="style"&&a.namespace.is_none()).map(|a|a.value.clone()).unwrap_or_default();
+                        style::attribute_locks(self,id,&previous)?
+                    }else{Vec::new()};
+                if action == "set" || action=="styleCommit" {
                     if raw_name.is_empty()
                         || raw_name.chars().any(|ch| {
                             matches!(
@@ -486,6 +505,7 @@ impl Gateway {
                             prefix: None,
                         });
                     }
+                    self.style_locks.borrow_mut().extend(style_fields);
                     return Ok(Value::Null);
                 }
                 let mut doc = self.document.borrow_mut();
@@ -499,6 +519,7 @@ impl Gateway {
                     "get" => position.map_or(Value::Null, |index| json!(attrs[index].value)),
                     "has" => json!(position.is_some()),
                     "remove" => {
+                        self.style_locks.borrow_mut().extend(style_fields);
                         if let Some(index) = position {
                             attrs.remove(index);
                         }

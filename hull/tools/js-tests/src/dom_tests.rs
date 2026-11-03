@@ -43,6 +43,23 @@ fn local_storage_shim_shares_prefixed_box_without_cookie_collisions() {
 }
 
 #[test]
+fn session_storage_is_a_read_only_prefixed_view_of_the_same_box() {
+    let (mut engine,_)=fixture("<p>storage</p>");
+    evaluate(&mut engine,r#"
+        document.cookie='theme=cookie';localStorage.setItem('theme','local');
+        if(!(sessionStorage instanceof Storage)||sessionStorage===localStorage||sessionStorage!==globalThis.sessionStorage)throw Error('view');
+        if(sessionStorage.getItem('theme')!==null||sessionStorage.theme!==undefined||sessionStorage.length!==0||sessionStorage.key(0)!==null)throw Error('prefix isolation');
+        sessionStorage.setItem('theme','session');sessionStorage.theme='assigned';
+        Object.defineProperty(sessionStorage,'defined',{value:'ignored',configurable:true});
+        delete sessionStorage.theme;sessionStorage.removeItem('theme');sessionStorage.clear();
+        sessionStorage.setItem('big','x'.repeat(1100000));
+        localStorage.setItem('after','works');document.cookie='after=works';
+        if(sessionStorage.length!==0||sessionStorage.getItem('theme')!==null||Object.keys(sessionStorage).length)throw Error('session write admitted');
+        if(localStorage.getItem('theme')!=='local'||localStorage.getItem('after')!=='works'||document.cookie!=='theme=cookie; after=works')throw Error('shared storage changed or exhausted');
+    "#);
+}
+
+#[test]
 fn cookie_and_storage_writes_use_one_cumulative_quota() {
     let (mut engine, _) = fixture("<p>store</p>");
     evaluate(

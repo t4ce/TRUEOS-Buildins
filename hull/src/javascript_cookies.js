@@ -28,37 +28,40 @@
     // Same Rust box and cumulative quota as cookies; only the public protocol
     // and internal key prefix differ. Never reload persisted diagnostic data.
     (()=>{
-        const instances=new WeakSet();
-        function check(value){if(!instances.has(value))throw new TypeError('Illegal Storage invocation');}
+        const instances=new WeakMap();
+        function check(value){const data=instances.get(value);if(!data)throw new TypeError('Illegal Storage invocation');return data;}
+        function storageCall(value,...args){return request(check(value).operation,...args);}
         function quota(){throw new DOMException('Navigation storage budget exceeded','QuotaExceededError');}
         class Storage {
             constructor(){throw new TypeError('Illegal constructor');}
-            get length(){check(this);return request('storage','length');}
-            key(index){check(this);required(arguments,1);return request('storage','key',`${(+index)>>>0}`);}
-            getItem(key){check(this);required(arguments,1);return request('storage','get',string(key));}
+            get length(){check(this);return storageCall(this,'length');}
+            key(index){check(this);required(arguments,1);return storageCall(this,'key',`${(+index)>>>0}`);}
+            getItem(key){check(this);required(arguments,1);return storageCall(this,'get',string(key));}
             setItem(key,value){
-                check(this);required(arguments,2);key=string(key);value=string(value);
+                const data=check(this);required(arguments,2);key=string(key);value=string(value);
+                if(data.readOnly)return;
                 // Account for JSON escaping before crossing the native transport.
                 if(!cookieInputFits(key)||!cookieInputFits(value)||!cookieInputFits(key+value+'localStorage:')) {
                     request('cookieFull');quota();
                 }
-                if(!request('storage','set',key,value))quota();
+                if(!storageCall(this,'set',key,value))quota();
             }
-            removeItem(key){check(this);required(arguments,1);request('storage','remove',string(key));}
-            clear(){check(this);request('storage','clear');}
+            removeItem(key){check(this);required(arguments,1);storageCall(this,'remove',string(key));}
+            clear(){check(this);storageCall(this,'clear');}
         }
         Object.defineProperty(Storage.prototype,Symbol.toStringTag,{value:'Storage',configurable:true});
+        function createStore(operation,readOnly){
         const target=Object.create(Storage.prototype);
         const store=new Proxy(target,{
-            get(target,key,receiver){return typeof key==='string'&&!Reflect.has(target,key)?request('storage','get',key)??undefined:Reflect.get(target,key,receiver);},
+            get(target,key,receiver){return typeof key==='string'&&!Reflect.has(target,key)?storageCall(store,'get',key)??undefined:Reflect.get(target,key,receiver);},
             set(target,key,value){if(typeof key!=='string')return Reflect.set(target,key,value);Storage.prototype.setItem.call(store,key,value);return true;},
-            deleteProperty(target,key){if(typeof key!=='string')return Reflect.deleteProperty(target,key);request('storage','remove',key);return true;},
-            has(target,key){return Reflect.has(target,key)||(typeof key==='string'&&request('storage','get',key)!==null);},
-            ownKeys(target){return [...request('storage','keys').filter(key=>!Reflect.has(target,key)),...Reflect.ownKeys(target)];},
+            deleteProperty(target,key){if(typeof key!=='string')return Reflect.deleteProperty(target,key);storageCall(store,'remove',key);return true;},
+            has(target,key){return Reflect.has(target,key)||(typeof key==='string'&&storageCall(store,'get',key)!==null);},
+            ownKeys(target){return [...storageCall(store,'keys').filter(key=>!Reflect.has(target,key)),...Reflect.ownKeys(target)];},
             getOwnPropertyDescriptor(target,key){
                 const own=Reflect.getOwnPropertyDescriptor(target,key);if(own)return own;
                 if(typeof key==='string'&&!Reflect.has(target,key)){
-                    const value=request('storage','get',key);if(value!==null)return {value,writable:true,enumerable:true,configurable:true};
+                    const value=storageCall(store,'get',key);if(value!==null)return {value,writable:true,enumerable:true,configurable:true};
                 }
             },
             defineProperty(target,key,descriptor){
@@ -68,7 +71,10 @@
             },
             preventExtensions(){return false;},
         });
-        instances.add(store);
+        instances.set(store,{operation,readOnly});return store;
+        }
+        const store=createStore('storage',false),session=createStore('sessionStorage',true);
         Object.defineProperty(globalThis,'Storage',{value:Storage,writable:true,configurable:true});
         Object.defineProperty(globalThis,'localStorage',{get:()=>store,enumerable:true,configurable:true});
+        Object.defineProperty(globalThis,'sessionStorage',{get:()=>session,enumerable:true,configurable:true});
     })();

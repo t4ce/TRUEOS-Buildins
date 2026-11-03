@@ -59,6 +59,8 @@ mod timer_tests;
 #[cfg(test)]
 mod video_tests;
 #[cfg(test)]
+mod style_tests;
+#[cfg(test)]
 #[path="../../../src/video.rs"]
 mod video;
 #[cfg(test)]

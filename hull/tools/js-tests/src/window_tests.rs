@@ -31,6 +31,33 @@ fn evaluate(engine: &mut Engine, source: &str) {
         .eval(source.as_bytes(), "window-fixture.js", false)
         .unwrap();
 }
+
+#[test]
+fn navigator_has_virtual_identity_and_lazy_empty_plugin_collections() {
+    let (mut engine,_)=fixture();
+    evaluate(&mut engine,r#"
+        if(window.navigator!==navigator||clientInformation!==navigator||!(navigator instanceof Navigator))throw Error('navigator identity');
+        if(navigator.userAgent!=='TRUEOS net-fetch'||navigator.platform!=='TRUEOS'||navigator.pdfViewerEnabled!==false)throw Error('virtual identity');
+        const plugins=navigator.plugins,mimes=navigator.mimeTypes;
+        if(plugins!==navigator.plugins||mimes!==navigator.mimeTypes||!(plugins instanceof PluginArray)||!(mimes instanceof MimeTypeArray))throw Error('collection identity');
+        if(plugins.length!==0||mimes.length!==0||plugins[0]!==undefined||plugins['Shockwave Flash']!==undefined)throw Error('phantom plugin');
+        if(plugins.item(0)!==null||plugins.namedItem('Shockwave Flash')!==null||mimes.namedItem('video/mp4')!==null||[...plugins].length||[...mimes].length)throw Error('empty collection');
+        plugins.refresh();
+        for(const name of ['serviceWorker','userAgentData','mediaDevices','gpu','geolocation','hardwareConcurrency','onLine'])if(name in navigator)throw Error('invented capability '+name);
+        let failed=false;try{Object.getOwnPropertyDescriptor(Navigator.prototype,'userAgent').get.call({})}catch(e){failed=e instanceof TypeError}if(!failed)throw Error('brand');
+        failed=false;try{plugins.namedItem()}catch(e){failed=e instanceof TypeError}if(!failed)throw Error('required argument');
+        failed=false;try{new Navigator()}catch(e){failed=e instanceof TypeError}if(!failed)throw Error('constructor');
+    "#);
+}
+
+#[test]
+fn virtual_navigator_is_fresh_on_navigation() {
+    let mut runtime=Runtime::start().unwrap();runtime.update_viewport(1280,720);
+    begin(&mut runtime,301,"<script>navigator.previousPage=1;navigator.plugins.previousPage=1;</script>");
+    let (_,reports)=snapshot(&mut runtime,301);assert_success(&reports);
+    begin(&mut runtime,302,"<script>if(navigator.previousPage!==undefined||navigator.plugins.previousPage!==undefined)throw Error('old navigator');</script>");
+    let (_,reports)=snapshot(&mut runtime,302);assert_success(&reports);
+}
 fn begin(runtime: &mut Runtime, generation: u64, html: &str) {
     let document = rp5::parse(html);
     let mut scripts = Scripts::default();
@@ -182,7 +209,7 @@ fn dom_without_a_native_window_producer_keeps_window_capabilities_absent() {
     javascript_dom::install(&mut engine, document).unwrap();
     evaluate(
         &mut engine,
-        "if(typeof document==='undefined')throw Error('DOM missing');for(const name of ['window','self','innerWidth','innerHeight'])if(typeof globalThis[name]!=='undefined')throw Error('fabricated window state: '+name)",
+        "if(typeof document==='undefined')throw Error('DOM missing');for(const name of ['window','self','innerWidth','innerHeight','navigator','Navigator'])if(typeof globalThis[name]!=='undefined')throw Error('fabricated window state: '+name)",
     );
 
     let mut runtime = Runtime::start().unwrap();

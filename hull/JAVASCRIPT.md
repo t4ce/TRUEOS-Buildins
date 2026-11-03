@@ -126,7 +126,18 @@ URLs use the document base. The first three attempts per navigation are logged,
 the fourth emits one "navigation log exceeded" message, and further attempts
 are silent. No URL is fetched or executed, no window opens, and no document URL
 changes. `window.open` returns null. `navigator` is a separate browser-information
-API and remains absent; it is not a navigation operation.
+API; it is not a navigation operation.
+
+Window-backed realms expose a virtual Navigator, also available through
+clientInformation. Its userAgent is `TRUEOS net-fetch`, matching the current
+kernel HTTP page/media identity, and platform is `TRUEOS`. PluginArray and
+MimeTypeArray are allocated lazily on first access and retain their identity.
+Both collections are empty, with length/item/namedItem/iteration and the legacy
+plugins.refresh method. pdfViewerEnabled is false. These values advertise no
+Flash, PDF viewer, decoder or MIME capability. serviceWorker, userAgentData,
+mediaDevices, hardware concurrency, online state and other unimplemented
+Navigator services remain absent. Navigation creates a fresh virtual object;
+DOM-only fixtures without a window producer do not acquire a Navigator.
 
 This does not add a general Window implementation or child browsing contexts.
 DPI, outer/screen geometry and focus bindings
@@ -211,6 +222,30 @@ without discarding other timers. All callback work spends the same 250 ms page
 budget; timers never renew it or extend the first-render cutoff. Future timers
 do not hold the initial snapshot open; subsequent changes stay in the live DOM
 without requesting another layout or updating saved artifacts.
+
+## Inline style admission
+
+Elements expose a lazy, same-object CSSStyleDeclaration through style. Camel-case
+properties (backgroundColor, cssFloat), hyphenated names, cssText,
+getPropertyValue/getPropertyPriority/setProperty/removeProperty and
+length/item/iteration use the existing Lightning CSS parser and real rp5 style
+attribute. Reads are inline declarations, not computed layout or computed style.
+
+The first valid script write to a CSS field on an element commits for that
+navigation. Later assignments/removals of that field are silent no-ops; each
+element has independent locks. Existing HTML declarations remain editable until
+the first script write. Invalid values/priorities do not latch a field.
+Shorthands lock their longhands; a shorthand touching any locked longhand is
+ignored in full. cssText, style attribute changes and jQuery attribute writes
+preserve frozen fields while admitting new ones. Custom property names retain
+their case and use setProperty/getPropertyValue. all is conservatively blocked
+after any field is frozen and, when admitted first, locks subsequent CSS writes.
+These write-once semantics deliberately restrict ordinary mutable CSSOM behavior.
+
+Fields share the existing DOM byte quotas, plus a 4,096-field lock allowance
+per navigation and 256 declarations per inline block. Navigation resets locks;
+clones are separate nodes. Accepted changes before the initial snapshot reach
+layout/SVG. Later live changes do not trigger another layout or rewrite the SVG.
 
 ## Separate video playback
 
@@ -334,8 +369,9 @@ charges its JSON-encoded UTF-8 input bytes (including quotes/escapes) plus 32
 bytes for entry overhead, including
 replacements, deletions and invalid inputs. A write exceeding the remaining
 budget latches the jar against all further writes. Reads remain available.
-Cookies and `localStorage` share one Rust-owned navigation-local key/value box.
-Internal keys are prefixed `cookie:` and `localStorage:`; scripts never see
+Cookies, `localStorage` and the read-only `sessionStorage` view share one
+Rust-owned navigation-local key/value box. Internal keys are prefixed
+`cookie:`, `localStorage:` and `sessionStorage:`; scripts never see
 those prefixes, and identical public names do not overwrite each other.
 `localStorage` provides getItem/setItem/removeItem/clear/key/length and named
 property reads, writes and deletion. Missing getItem returns null. Web Storage
@@ -347,3 +383,11 @@ Storage strings retain the gateway's Unicode scalar limitation.
 as prefixed key/value pairs captured when that SVG is prepared. It replaces the
 previous cookie-only diagnostic file. No saved data is restored. Later scripts
 can change live entries without refreshing this initial snapshot.
+
+`sessionStorage` uses the same Storage interface and native box with its own
+prefix, but is read-only by Hull policy: setItem, property assignment,
+defineProperty, removeItem, deletion and clear silently leave stored values
+unchanged and do not spend the write budget. Missing entries read as null through
+getItem or undefined through named access. The fresh navigation box supplies no
+prior-session or other-tab entries. Reading this view performs no navigation,
+network requests or tab operations.

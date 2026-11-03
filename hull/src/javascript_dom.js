@@ -102,7 +102,10 @@
             super(key,id,description);
         }
     }
+    /* HULL_STYLE */
     class Element extends Node {
+        get style(){return inlineStyle(this);}
+        set style(value){inlineStyle(this).cssText=value;}
         get tagName() { return state(this).name; }
         get localName() { return get(this, 'localName'); }
         get namespaceURI() { return get(this, 'namespaceURI'); }
@@ -362,6 +365,7 @@
     /* HULL_NATIVE_JQUERY */
     /* HULL_NATIVE_URL */
     /* HULL_NAVIGATION */
+    /* HULL_NAVIGATOR */
     if(request('timers'))Object.defineProperty(globalThis,'__hullTimerSchedule',{value:args=>request('timer',args[0],args[1]),configurable:true});
     /* HULL_INPUT_EVENTS */
 })();

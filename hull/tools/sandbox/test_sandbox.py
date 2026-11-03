@@ -66,6 +66,19 @@ class SandboxWorkflow(unittest.TestCase):
         self.assertEqual(len(report['video_requests']), 1)
         self.assertTrue(report['video_requests'][0]['url'].endswith('/new.mp4'))
 
+    def test_first_style_write_reaches_svg_and_later_assignment_is_ignored(self):
+        self.page("""<p>styled</p><script>
+          const s=document.querySelector('p').style;
+          s.color='#123456'; s.color='#abcdef';
+          s.width='100px'; s.width='200px';
+          if(s.width!=='100px')throw Error('write not frozen');
+        </script>""")
+        report = self.run_page()
+        self.assertEqual(report['scripts'][0]['status'], 'executed')
+        svg = (self.out / 'layout.svg').read_text()
+        self.assertIn('#123456', svg)
+        self.assertNotIn('#abcdef', svg)
+
     def test_real_dom_css_and_svg_with_independent_script_failures(self):
         (self.capture / "style.css").write_text("#message{color:#123456}")
         self.page("""<link rel=stylesheet href=style.css><p id=message>before</p>

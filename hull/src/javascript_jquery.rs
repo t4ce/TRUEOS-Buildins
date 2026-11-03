@@ -47,6 +47,7 @@ impl Adapter<'_> {
         // Reads need no mutable accounting; this gateway clone shares the actual
         // arena. Mutations always use the original counters below.
         let mut reader = Gateway {
+            style_locks:self.gateway.style_locks.clone(),
             timers:self.gateway.timers.clone(),
             media:self.gateway.media.clone(),
             cookies: self.gateway.cookies.clone(),

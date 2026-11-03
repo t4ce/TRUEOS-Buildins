@@ -22,8 +22,33 @@ impl CookieJar {
         serde_json::to_string(&self.pairs).expect("string pairs serialize")
     }
     pub fn storage(&mut self, action: &str, key: &str, value: &str) -> Option<serde_json::Value> {
+        self.storage_namespace("localStorage:", false, action, key, value)
+    }
+    pub fn session_storage(
+        &mut self,
+        action: &str,
+        key: &str,
+        value: &str,
+    ) -> Option<serde_json::Value> {
+        self.storage_namespace("sessionStorage:", true, action, key, value)
+    }
+    fn storage_namespace(
+        &mut self,
+        prefix: &str,
+        read_only: bool,
+        action: &str,
+        key: &str,
+        value: &str,
+    ) -> Option<serde_json::Value> {
         use serde_json::json;
-        let internal = format!("localStorage:{key}");
+        if read_only && matches!(action, "set" | "remove" | "clear") {
+            return Some(if action == "set" {
+                json!(true)
+            } else {
+                serde_json::Value::Null
+            });
+        }
+        let internal = format!("{prefix}{key}");
         Some(match action {
             "get" => json!(
                 self.pairs
@@ -34,19 +59,19 @@ impl CookieJar {
             "keys" => json!(
                 self.pairs
                     .iter()
-                    .filter_map(|(key, _)| key.strip_prefix("localStorage:"))
+                    .filter_map(|(key, _)| key.strip_prefix(prefix))
                     .collect::<Vec<_>>()
             ),
             "length" => json!(
                 self.pairs
                     .iter()
-                    .filter(|(key, _)| key.starts_with("localStorage:"))
+                    .filter(|(key, _)| key.starts_with(prefix))
                     .count()
             ),
             "key" => json!(key.parse::<usize>().ok().and_then(|i| {
                 self.pairs
                     .iter()
-                    .filter_map(|(key, _)| key.strip_prefix("localStorage:"))
+                    .filter_map(|(key, _)| key.strip_prefix(prefix))
                     .nth(i)
             })),
             "set" => {
@@ -69,8 +94,7 @@ impl CookieJar {
                 serde_json::Value::Null
             }
             "clear" => {
-                self.pairs
-                    .retain(|(name, _)| !name.starts_with("localStorage:"));
+                self.pairs.retain(|(name, _)| !name.starts_with(prefix));
                 serde_json::Value::Null
             }
             _ => return None,
@@ -133,6 +157,34 @@ impl CookieJar {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn session_view_reads_its_prefix_without_mutating_or_spending_budget() {
+        let mut jar = CookieJar::default();
+        jar.storage("set", "same", "local");
+        jar.pairs
+            .push(("sessionStorage:same".into(), "session".into()));
+        let charged = jar.charged;
+        assert_eq!(
+            jar.session_storage("get", "same", ""),
+            Some(serde_json::json!("session"))
+        );
+        assert_eq!(
+            jar.session_storage("keys", "", ""),
+            Some(serde_json::json!(["same"]))
+        );
+        jar.session_storage("set", "same", "changed");
+        jar.session_storage("remove", "same", "");
+        jar.session_storage("clear", "", "");
+        assert_eq!(
+            jar.session_storage("get", "same", ""),
+            Some(serde_json::json!("session"))
+        );
+        assert_eq!(
+            jar.storage("get", "same", ""),
+            Some(serde_json::json!("local"))
+        );
+        assert_eq!(jar.charged, charged);
+    }
     #[test]
     fn cookie_pairs_and_deletion() {
         let mut jar = CookieJar::default();

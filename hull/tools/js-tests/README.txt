@@ -108,3 +108,9 @@ Video fixtures execute the production one-slot URL handoff over a mocked native
 ABI. They cover relative video/source URLs, coalescing multiple elements, play
 promises waiting for first-frame confirmation, failure/supersession, navigation
 isolation and no native close when Hull is dropped. No media is downloaded.
+
+Inline CSS fixtures use Lightning CSS and the production style attribute. They
+check first valid writes per field/element/navigation, camel-case aliases,
+shorthand protection, custom properties, cssText/attribute/jQuery bypass attempts,
+invalid values/priorities, quota rejection and navigation reset. Sandbox fixtures
+check that the accepted style reaches the first diagnostic SVG.
