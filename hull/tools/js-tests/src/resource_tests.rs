@@ -423,3 +423,23 @@ fn video_subdocument_play_control_is_neutralized_into_media_inspection_not_navig
     assert_eq!(netfs::requested().len(),2);
     no_errors(&reports);
 }
+
+
+#[test]
+fn videoobject_metadata_hands_off_media_without_running_an_application_bundle() {
+    let mut r=runtime(r#"<p>metadata</p><script type='application/ld+json'>
+    {"@graph":[{"@type":"ImageObject","contentUrl":"https://fixture.test/wrong.jpg"},{"@type":["Thing","VideoObject"],"url":"https://fixture.test/watch","embedUrl":"https://fixture.test/embed","contentUrl":"/stream/master.m3u8?signature=keep"}]}
+    </script><script>throw Error('application not required for media')</script>"#,vec![]);
+    let (_doc,_reports)=finish(&mut r,1);
+    assert_eq!(r.take_video_request().unwrap().1.url,"https://fixture.test/stream/master.m3u8?signature=keep");
+    assert!(netfs::requested().is_empty());
+}
+
+#[test]
+fn videoobject_metadata_rejects_non_media_types_and_unsafe_schemes() {
+    let mut r=runtime(r#"<script type='application/ld+json'>
+    [{"@type":"ImageObject","contentUrl":"https://fixture.test/image.jpg"},{"@type":"VideoObject","contentUrl":"javascript:alert(1)","embedUrl":"https://fixture.test/not-media"}]
+    </script>"#,vec![]);
+    let (_doc,reports)=finish(&mut r,1);
+    assert!(r.take_video_request().is_none());no_errors(&reports);
+}

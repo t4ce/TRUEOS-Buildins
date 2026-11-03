@@ -484,7 +484,7 @@ fn run(options: Options) -> Result<(), String> {
             }
             let active_turn_ms = turn_start.elapsed().as_secs_f64() * 1000.0;
             if let Some((generation,request))=runtime.take_video_request(){
-                video_requests.push(json!({"id":request.id,"node":request.node,"url":request.url}));
+                video_requests.push(json!({"id":request.id,"node":request.node,"url":request.url,"referrer":request.referrer}));
                 runtime.video_status(generation,request.id,-95);
             }
             trace.push(json!({"event":"turn","turn":turns,"host_turn_ms":active_turn_ms}));
@@ -584,7 +584,7 @@ fn run(options: Options) -> Result<(), String> {
                 trace.push(event);
             }
             if let Some((generation,request))=runtime.take_video_request(){
-                video_requests.push(json!({"id":request.id,"node":request.node,"url":request.url,"phase":"post-snapshot"}));
+                video_requests.push(json!({"id":request.id,"node":request.node,"url":request.url,"referrer":request.referrer,"phase":"post-snapshot"}));
                 runtime.video_status(generation,request.id,-95);
             }
             if Instant::now() >= until { break; }

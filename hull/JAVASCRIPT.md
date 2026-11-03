@@ -437,3 +437,32 @@ unchanged and do not spend the write budget. Missing entries read as null throug
 getItem or undefined through named access. The fresh navigation box supplies no
 prior-session or other-tab entries. Reading this view performs no navigation,
 network requests or tab operations.
+
+
+## URL-only player admission
+
+KVS/KT `kt_player.js` entry points use a small compatibility adapter instead of
+constructing the browser/Flash player UI. The page's normal kt_player call
+supplies video_url; the adapter passes that exact source through the existing
+HTMLVideoElement.play/native vid handoff. It does not decode obfuscated KVS
+sources, invent a source, or claim successful playback before a native receipt.
+Recognized Google/reCAPTCHA scripts are skipped without synthesizing success.
+
+The same worker can inspect media subdocuments without embedding them. It
+recognizes ordinary video/source markup, VideoObject contentUrl in JSON-LD
+(including arrays and @graph), and video/player-labelled iframe
+sources, then follows at most nine distinct documents and three levels. Each
+HTML response is limited to 256 KiB and uses the existing bounded resource
+loader. A disposable, same-thread QJS realm can evaluate up to eight short
+inline scripts and the explicit Play button handler. External scripts and
+frame timers are not run. Location assignments become same-origin media
+inspection requests; window.open, top-level navigation and layout stay inert.
+Inspection execution spends the remaining page allowance, with a 25 ms local
+cap. Finding a URL stops inspection; subsequent explicit page play requests
+still use the existing latest-request policy. These temporary trees are not
+persistent page DOMs or additional windows/workers.
+
+Offline replay may need these extra HTML responses imported into capture.json.
+The current native URL-fetch ABI has no Referer/custom-header argument. Servers
+which return empty HTML without those headers remain a live-fetch limitation;
+replay of a header-aware capture does not prove that native fetch works there.

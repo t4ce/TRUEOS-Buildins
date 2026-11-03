@@ -31,7 +31,9 @@ pub(super) struct Playback {
 impl Playback {
     pub fn poll(&mut self, runtime: &Runtime) {
         if let Some((generation, request)) = runtime.take_video_request() {
-            let rc = command(8, 0, request.url.as_bytes());
+            let mut payload=request.url.into_bytes();
+            if let Some(referrer)=request.referrer {payload.push(0);payload.extend_from_slice(referrer.as_bytes());}
+            let rc = command(8, 0, &payload);
             if rc > 0 {
                 self.pending = Some((generation, request.id, rc as u32));
             } else {

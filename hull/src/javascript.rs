@@ -1069,6 +1069,7 @@ async fn worker(
         let bytes = if let Some(bytes) = &source.bytes {
             bytes.as_slice()
         } else if let Some(adapter) = javascript_dom::media::player_adapter(&source.origin) {
+            let _ = reports.try_send(Report::Resource { generation:page.generation,url:source.origin.clone(),status:"adapted",detail:"URL-only KT player adapter; upstream player UI is not executed".into() });
             adapter
         } else if let Some(loader) = &mut resources {
             let state = if module {

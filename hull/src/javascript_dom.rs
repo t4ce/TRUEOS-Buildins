@@ -288,7 +288,7 @@ impl Gateway {
             let url=url::Url::parse(address).map_err(|_|failure("NotSupportedError","Invalid media URL"))?;
             if url.scheme()!="https"||url.host_str().is_none()||url.username()!=""||url.password().is_some()||address.len()>3072{return Err(failure("NotSupportedError","Only bounded HTTPS media URLs are admitted"));}
             let media=self.media.as_ref().ok_or_else(||failure("NotSupportedError","Media handoff is not installed"))?;
-            return Ok(json!(media.borrow_mut().request(node,url.to_string())));
+            return Ok(json!(media.borrow_mut().request(node,url.to_string(),&self.page_url)));
         }
         if operation=="timer" {
             return self.timers.as_ref().map(|state|timers::call(state,&args[1..])).ok_or_else(||failure("NotSupportedError","Timers are not installed"));
