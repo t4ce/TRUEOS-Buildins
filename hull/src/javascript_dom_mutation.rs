@@ -72,6 +72,13 @@ pub(super) fn call(
     id: usize,
     args: &[Value],
 ) -> DomResult<Value> {
+    if operation == "clone" {
+        return clone_node(
+            gateway,
+            id,
+            args.get(2).and_then(Value::as_bool).unwrap_or(false),
+        );
+    }
     if operation == "create" {
         if !matches!(gateway.document.borrow().nodes[id].kind, NodeKind::Document) {
             return Err(failure("TypeError", "Expected a Document"));
@@ -301,4 +308,102 @@ pub(super) fn call(
         doc.nodes[node].parent = Some(id);
     }
     Ok(json!(child))
+}
+
+// Plan first: a rejected clone must not leave a partly allocated subtree.
+// This is iterative for both ordinary descendants and template contents.
+fn clone_node(gateway: &mut Gateway, id: usize, deep: bool) -> DomResult<Value> {
+    let doc = gateway.document.borrow();
+    if matches!(doc.nodes[id].kind, NodeKind::Document) {
+        return Err(failure(
+            "NotSupportedError",
+            "Cloning Documents requires a separate document realm",
+        ));
+    }
+    let until = Instant::now() + Duration::from_millis(20);
+    let mut pending = vec![(id, None, false)];
+    let mut plan = Vec::new();
+    let mut bytes = 0usize;
+    while let Some((source, parent, template_root)) = pending.pop() {
+        if plan.len() + pending.len() >= super::MAX_ADDED_NODES || Instant::now() >= until {
+            return Err(failure(
+                "QuotaExceededError",
+                "DOM clone work budget exceeded",
+            ));
+        }
+        let node = &doc.nodes[source];
+        let size = match &node.kind {
+            NodeKind::Element { name, attrs, .. } => {
+                name.len()
+                    + attrs
+                        .iter()
+                        .map(|a| a.name.len() + a.value.len())
+                        .sum::<usize>()
+            }
+            NodeKind::Text(s) | NodeKind::Comment(s) => s.len(),
+            NodeKind::Doctype {
+                name,
+                public_id,
+                system_id,
+            } => name.len() + public_id.len() + system_id.len(),
+            _ => 0,
+        };
+        bytes = bytes.saturating_add(size);
+        if bytes > MAX_STRING_BYTES {
+            return Err(failure(
+                "QuotaExceededError",
+                "DOM clone string budget exceeded",
+            ));
+        }
+        let mut kind = node.kind.clone();
+        let fragment = if let NodeKind::Element {
+            template_content, ..
+        } = &mut kind
+        {
+            template_content.take()
+        } else {
+            None
+        };
+        let index = plan.len();
+        plan.push((kind, parent, template_root));
+        if let Some(fragment) = fragment {
+            pending.push((fragment, Some(index), true));
+        }
+        if deep {
+            if node.children.len() + pending.len() + plan.len() > super::MAX_ADDED_NODES {
+                return Err(failure(
+                    "QuotaExceededError",
+                    "DOM clone node budget exceeded",
+                ));
+            }
+            pending.extend(
+                node.children
+                    .iter()
+                    .rev()
+                    .map(|child| (*child, Some(index), false)),
+            );
+        }
+    }
+    drop(doc);
+    gateway.charge_nodes(bytes, plan.len())?;
+    let mut doc = gateway.document.borrow_mut();
+    let mut ids: Vec<usize> = Vec::with_capacity(plan.len());
+    for (kind, parent, template_root) in plan {
+        let new_id = doc.add(kind);
+        if let Some(parent) = parent {
+            let parent = ids[parent];
+            if template_root {
+                if let NodeKind::Element {
+                    template_content, ..
+                } = &mut doc.nodes[parent].kind
+                {
+                    *template_content = Some(new_id);
+                }
+            } else {
+                doc.append(parent, new_id);
+            }
+        }
+        ids.push(new_id);
+    }
+    Ok(json!(ids[0]))
 }

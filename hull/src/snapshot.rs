@@ -18,7 +18,7 @@ pub(super) struct Snapshot {
 impl Snapshot {
     /// Creating the future performs no filesystem work. Hull first installs and
     /// publishes the layout, then calls poll once per event-loop iteration.
-    pub fn prepare(&mut self, page_url: &str, svg: String) {
+    pub fn prepare(&mut self, page_url: &str, svg: String, cookies: String) {
         *self = Self::default();
         // A diagnostic snapshot must not become an unbounded second document.
         if svg.len() > 8 * 1024 * 1024 {
@@ -33,7 +33,8 @@ impl Snapshot {
         let root = format!("{}/{host}", app_root());
         self.pending = Some(Box::pin(async move {
             async_fs::create_dir_all(root.as_bytes()).await?;
-            async_fs::write_file(format!("{root}/layout.svg").as_bytes(), svg.as_bytes()).await
+            async_fs::write_file(format!("{root}/layout.svg").as_bytes(), svg.as_bytes()).await?;
+            async_fs::write_file(format!("{root}/cookies.txt").as_bytes(), cookies.as_bytes()).await
         }));
     }
 
@@ -75,7 +76,7 @@ mod tests {
     fn preparation_has_no_io_and_each_poll_returns_while_storage_is_pending() {
         STATE.with(|state| *state.borrow_mut() = Default::default());
         let mut snapshot = Snapshot::default();
-        snapshot.prepare("https://example.com/", "<svg/>".into());
+        snapshot.prepare("https://example.com/", "<svg/>".into(), String::new());
         STATE.with(|state| assert_eq!(state.borrow().calls, 0));
         snapshot.poll();
         STATE.with(|state| {
@@ -97,12 +98,12 @@ mod tests {
     fn slow_snapshot_is_discarded_and_can_be_replaced_after_navigation() {
         STATE.with(|state| *state.borrow_mut() = Default::default());
         let mut snapshot = Snapshot::default();
-        snapshot.prepare("https://example.com/", "<svg/>".into());
+        snapshot.prepare("https://example.com/", "<svg/>".into(), String::new());
         snapshot.poll();
         snapshot.started = Some(Instant::now() - Duration::from_secs(6));
         snapshot.poll();
         assert!(snapshot.pending.is_none());
-        snapshot.prepare("https://new.example/", "<svg/>".into());
+        snapshot.prepare("https://new.example/", "<svg/>".into(), String::new());
         assert!(snapshot.started.is_none());
         STATE.with(|state| state.borrow_mut().ready = true);
         snapshot.poll();

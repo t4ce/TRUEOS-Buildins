@@ -15,6 +15,8 @@ mod jquery;
 mod mutation;
 #[path = "javascript_url.rs"]
 mod url_api;
+#[path = "javascript_cookies.rs"]
+pub(super) mod cookies;
 
 pub(super) fn install_url_only(engine: &mut Engine) -> Result<(), String> {
     url_api::install(engine)
@@ -40,6 +42,7 @@ pub(super) fn install(engine: &mut Engine, document: SharedDocument) -> Result<(
         None,
         Rc::new(Cell::new(None)),
         "about:blank",
+        Rc::new(RefCell::new(cookies::CookieJar::default())),
     )
 }
 
@@ -55,6 +58,7 @@ pub(super) fn install_with_window(
         Some(window),
         Rc::new(Cell::new(None)),
         "about:blank",
+        Rc::new(RefCell::new(cookies::CookieJar::default())),
     )
 }
 
@@ -66,7 +70,18 @@ pub(super) fn install_for_page(
     current_script: SharedCurrentScript,
     page_url: &str,
 ) -> Result<(), String> {
-    install_gateway(engine, document, window, current_script, page_url)
+    install_gateway(engine, document, window, current_script, page_url, Rc::new(RefCell::new(cookies::CookieJar::default())))
+}
+
+pub(super) fn install_for_page_with_cookies(
+    engine: &mut Engine,
+    document: SharedDocument,
+    window: Option<SharedWindowMetrics>,
+    current_script: SharedCurrentScript,
+    page_url: &str,
+    cookies: cookies::SharedCookies,
+) -> Result<(), String> {
+    install_gateway(engine, document, window, current_script, page_url, cookies)
 }
 
 fn install_gateway(
@@ -75,6 +90,7 @@ fn install_gateway(
     window: Option<SharedWindowMetrics>,
     current_script: SharedCurrentScript,
     page_url: &str,
+    cookies: cookies::SharedCookies,
 ) -> Result<(), String> {
     let initial_nodes = document.borrow().nodes.len();
     let mut gateway = Gateway {
@@ -82,6 +98,7 @@ fn install_gateway(
         window,
         current_script,
         page_url: page_url.to_owned(),
+        cookies,
         initial_nodes,
         mutation_bytes: 0,
     };
@@ -94,6 +111,7 @@ fn install_gateway(
         serde_json::to_vec(&response).map_err(|error| error.to_string())
     })?;
     let source = include_str!("javascript_dom.js")
+        .replace("/* HULL_COOKIES */", include_str!("javascript_cookies.js"))
         .replace(
             "/* HULL_DOM_EVENTS */",
             include_str!("javascript_event_target.js"),
@@ -109,7 +127,8 @@ fn install_gateway(
         .replace(
             "/* HULL_NATIVE_URL */",
             &format!("({})(request);", include_str!("javascript_url.js")),
-        );
+        )
+        .replace("/* HULL_NAVIGATION */", include_str!("javascript_navigation.js"));
     engine.eval(source.as_bytes(), "hull:dom", false)?;
     engine.bind_message_handler("__hullInputReceive")
 }
@@ -126,6 +145,7 @@ fn input<'a>(request: &'a [Value], index: usize) -> DomResult<&'a str> {
 }
 
 struct Gateway {
+    cookies: cookies::SharedCookies,
     document: SharedDocument,
     window: Option<SharedWindowMetrics>,
     current_script: SharedCurrentScript,
@@ -170,6 +190,14 @@ impl Gateway {
         if operation == "jquery" {
             return jquery::call(self, args);
         }
+        if operation == "cookieFull" {
+            self.cookies.borrow_mut().ignore_further_writes();
+            return Ok(Value::Null);
+        }
+        if operation == "cookie" {
+            if let Some(value) = args.get(1).and_then(Value::as_str) { self.cookies.borrow_mut().set(value); return Ok(Value::Null); }
+            return Ok(json!(self.cookies.borrow().get()));
+        }
         if operation == "root" {
             return Ok(json!(self.document.borrow().root));
         }
@@ -187,7 +215,7 @@ impl Gateway {
             .ok_or_else(|| failure("TypeError", "Invalid node handle"))?;
         if matches!(
             operation,
-            "create" | "appendChild" | "insertBefore" | "removeChild"
+            "create" | "appendChild" | "insertBefore" | "removeChild" | "clone"
         ) {
             return mutation::call(self, operation, id, args);
         }

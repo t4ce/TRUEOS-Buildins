@@ -23,6 +23,78 @@ fn run(engine: &mut Engine, source: &str) {
         .unwrap();
 }
 #[test]
+fn text_interfaces_and_clone_preserve_real_tree_without_listeners_or_expandos() {
+    let (mut engine, _) = fixture(
+        "<div id=source class=x>hello<!--note--><b>bold</b></div><template><i>inside</i></template>",
+    );
+    run(
+        &mut engine,
+        r#"
+        const source=document.getElementById('source'),text=source.firstChild;
+        if(!(text instanceof Text)||!(text instanceof CharacterData)||text.data!=='hello')throw Error('Text interface');
+        const extra=new Text('a💡');if(extra.length!==3||extra.ownerDocument!==document||extra.parentNode!==null)throw Error('Text constructor');
+        extra.data='changed';if(extra.nodeValue!=='changed')throw Error('data reflection');
+        const comment=new Comment('comment');if(!(comment instanceof Comment)||comment.nodeType!==8)throw Error('Comment');
+        let calls=0;source.addEventListener('ping',()=>calls++);source.extra=1;
+        const shallow=source.cloneNode(),deep=source.cloneNode(true);
+        if(shallow===source||shallow.firstChild!==null||shallow.id!=='source'||shallow.className!=='x')throw Error('shallow clone');
+        if(deep.textContent!=='hellobold'||deep.firstChild===text||deep.firstChild.parentNode!==deep||deep.firstChild.nextSibling.data!=='note')throw Error('deep clone');
+        if(deep.parentNode!==null||deep.isConnected||deep.ownerDocument!==document||deep.extra!==undefined)throw Error('detached clone');
+        deep.dispatchEvent(new Event('ping'));if(calls!==0)throw Error('listener cloned');
+        deep.firstChild.data='other';if(source.firstChild.data!=='hello')throw Error('shared clone data');
+        const template=document.querySelector('template'),copy=template.cloneNode(true),empty=template.cloneNode();
+        if(copy.content===template.content||copy.content.firstChild.textContent!=='inside'||empty.content.firstChild!==null)throw Error('template contents');
+        document.body.appendChild(copy);if(copy.content.firstChild.isConnected)throw Error('template content attached');
+    "#,
+    );
+}
+
+#[test]
+fn adjacent_element_uses_preinsertion_rules_and_moves_existing_elements() {
+    let (mut engine, _) = fixture("<main><b id=anchor>middle</b></main>");
+    run(
+        &mut engine,
+        r#"
+        const anchor=document.getElementById('anchor'),main=anchor.parentNode;
+        for(const [where,value] of [['beforebegin','a'],['afterbegin','b'],['beforeend','c'],['afterend','d']]) {
+            const node=document.createElement('i');node.textContent=value;
+            if(anchor.insertAdjacentElement(where.toUpperCase(),node)!==node)throw Error('return');
+        }
+        if(main.textContent!=='abmiddlecd')throw Error('insertion order');
+        const detached=document.createElement('p');if(detached.insertAdjacentElement('afterend',anchor)!==null||anchor.parentNode!==main)throw Error('detached');
+        const parent=document.createDocumentFragment();parent.appendChild(detached);
+        if(detached.insertAdjacentElement('beforebegin',anchor)!==anchor||parent.firstChild!==anchor)throw Error('fragment parent');
+        let caught=false;try{anchor.insertAdjacentElement('beforeend',parent)}catch(e){caught=e instanceof TypeError}if(!caught)throw Error('element argument');
+        caught=false;try{anchor.insertAdjacentElement('bad',detached)}catch(e){caught=e.name==='SyntaxError'}if(!caught)throw Error('invalid position');
+        caught=false;try{main.insertAdjacentElement('beforeend',main)}catch(e){caught=e.name==='HierarchyRequestError'}if(!caught)throw Error('cycle');
+    "#,
+    );
+}
+
+#[test]
+fn deep_clone_quota_failure_is_atomic() {
+    let (mut engine, doc) = fixture("<div id=source></div>");
+    run(
+        &mut engine,
+        "document.getElementById('source').textContent='x'.repeat(200000)",
+    );
+    let before = doc.borrow().nodes.len();
+    run(
+        &mut engine,
+        r#"
+        let failed=false;try{for(let i=0;i<40;i++)document.getElementById('source').cloneNode(true)}catch(e){failed=e.name==='QuotaExceededError'}
+        if(!failed)throw Error('clone quota not enforced');
+    "#,
+    );
+    let after = doc.borrow().nodes.len();
+    run(
+        &mut engine,
+        r#"let failedAgain=false;try{document.getElementById('source').cloneNode(true)}catch(e){failedAgain=e.name==='QuotaExceededError'}if(!failedAgain)throw Error('quota');"#,
+    );
+    assert!(after > before);
+    assert_eq!(after, doc.borrow().nodes.len());
+}
+#[test]
 fn creates_and_inserts_real_link_with_reflected_preload_properties() {
     let (mut engine, doc) = fixture("<p>ready</p>");
     run(

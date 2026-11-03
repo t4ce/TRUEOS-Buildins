@@ -260,3 +260,20 @@ actor/DOM/layout code on the host, without a kernel build, boot, VM or GPU. It
 exports exact script bytes, per-source traces and optional diagnostic SVG; node
 isolation, local replacements and watch mode support iterative investigation.
 See `tools/sandbox/README.txt` for commands and explicit experiment flags.
+
+`document.cookie` reads navigation-local `name=value` pairs separated by `; `.
+The setter converts its argument to a string, replaces an existing name, and
+supports deletion with `Max-Age=0` or a negative Max-Age. Attributes are never
+returned as pairs. Each navigation starts empty; saved diagnostic cookies are
+never loaded and cookies are never transmitted with resource requests. This
+small admission does not implement domain/path scoping, expiration clocks,
+Expires dates, Secure/HttpOnly enforcement or SameSite behavior.
+
+The per-navigation cumulative cookie budget is 1 MiB: every setter attempt
+charges its JSON-encoded UTF-8 input bytes (including quotes/escapes) plus 32
+bytes for entry overhead, including
+replacements, deletions and invalid inputs. A write exceeding the remaining
+budget latches the jar against all further writes. Reads remain available.
+`cookies.txt` is written beside the diagnostic `layout.svg` with the pairs
+captured when that SVG is prepared. Later JavaScript can change the live jar;
+the saved initial snapshot is not refreshed.

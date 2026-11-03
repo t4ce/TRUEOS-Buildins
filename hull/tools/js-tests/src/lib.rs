@@ -53,6 +53,8 @@ mod dom_tests;
 #[cfg(test)]
 mod dom_mutation_tests;
 #[cfg(test)]
+mod navigation_tests;
+#[cfg(test)]
 mod dom_tag_collection_tests;
 #[cfg(test)]
 mod jquery_event_bridge_tests;

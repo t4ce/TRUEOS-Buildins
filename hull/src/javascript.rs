@@ -118,6 +118,7 @@ struct Page {
     active: bool,
     document: Option<SharedDocument>,
     current_script: SharedCurrentScript,
+    cookies: javascript_dom::cookies::SharedCookies,
     load_resources: bool,
     window: Option<SharedWindowMetrics>,
     initial_started: Option<Instant>,
@@ -254,6 +255,7 @@ impl Runtime {
             active: automatic,
             document,
             current_script: Rc::new(Cell::new(None)),
+            cookies: Rc::new(RefCell::new(Default::default())),
             load_resources: self.load_resources,
             window: if automatic { self.window.clone() } else { None },
             initial_started: automatic.then(Instant::now),
@@ -275,6 +277,10 @@ impl Runtime {
         } else {
             self.window = Some(Rc::new(Cell::new(metrics)));
         }
+    }
+
+    pub fn cookie_snapshot(&self) -> String {
+        self.pages.borrow().as_ref().map_or_else(String::new, |page| page.cookies.borrow().get())
     }
 
     pub fn is_initializing(&self, generation: u64) -> bool {
@@ -508,12 +514,13 @@ async fn worker(
                         });
                     let initialized = initialized.and_then(|_| {
                         if let Some(document) = &page.document {
-                            javascript_dom::install_for_page(
+                            javascript_dom::install_for_page_with_cookies(
                                 &mut value,
                                 document.clone(),
                                 page.window.clone(),
                                 page.current_script.clone(),
                                 &page.url,
+                                page.cookies.clone(),
                             )
                         } else {
                             javascript_dom::install_url_only(&mut value)

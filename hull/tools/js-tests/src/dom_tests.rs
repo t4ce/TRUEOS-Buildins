@@ -141,3 +141,29 @@ fn mutation_limits_reject_writes_before_changing_the_document() {
     "#,
     );
 }
+
+#[test]
+fn cookies_are_navigation_local_pairs_with_setter_conversion() {
+    let (mut engine, _) = fixture("<p>cookies</p>");
+    evaluate(&mut engine, r#"
+        if(document.cookie!=='')throw Error('initial jar');
+        document.cookie={toString(){return 'a=one; Path=/; Secure'}};
+        document.cookie='b=two'; document.cookie='a=new';
+        if(document.cookie!=='a=new; b=two')throw Error(document.cookie);
+        document.cookie='a=; Max-Age=-1';
+        if(document.cookie!=='b=two')throw Error('delete');
+    "#);
+    let (mut fresh, _) = fixture("<p>fresh</p>");
+    evaluate(&mut fresh,"if(document.cookie!=='')throw Error('persisted cookies')");
+}
+
+#[test]
+fn oversized_cookie_write_is_silently_ignored_and_latches() {
+    let (mut engine, _) = fixture("<p>cookies</p>");
+    evaluate(&mut engine,r#"
+        document.cookie='keep=yes';
+        document.cookie='big='+String.fromCharCode(1).repeat(200000);
+        document.cookie='keep=changed';
+        if(document.cookie!=='keep=yes')throw Error('oversized setter did not latch');
+    "#);
+}

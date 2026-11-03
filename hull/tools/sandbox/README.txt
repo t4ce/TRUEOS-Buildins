@@ -47,6 +47,7 @@ replace an existing capture; ordinary replay never refreshes it.
 The replay output defaults to CAPTURE/run:
 
   layout.svg       Production diagnostic text/box SVG, not a browser screenshot.
+  cookies.txt      Navigation-local document.cookie pairs at SVG capture time.
   layout.json      Production layout export.
   scripts.json     All sources with node IDs, type, origin and per-source outcome.
   scripts/*.js     Exact originally extracted inline source bytes.
@@ -125,3 +126,9 @@ the host accesses files. No downloaded JavaScript runs during capture.
 Host fixtures (no live network):
 
   python3 hull/tools/sandbox/test_sandbox.py
+
+Cookies are a fresh empty in-memory jar for every navigation. Replay never reads
+cookies.txt; it writes this diagnostic beside layout.svg only when saving SVG.
+Production similarly captures cookies when preparing its one diagnostic SVG,
+then persists both after publishing the frame. Later JavaScript may continue and
+change the live jar; those changes do not rewrite the saved initial snapshot.

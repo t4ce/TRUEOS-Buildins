@@ -77,6 +77,30 @@
         appendChild(child) { required(arguments,1); return wrap(request('appendChild',state(this).id,state(child).id)); }
         insertBefore(child, before) { required(arguments,2); return wrap(request('insertBefore',state(this).id,state(child).id,before==null?null:state(before).id)); }
         removeChild(child) { required(arguments,1); return wrap(request('removeChild',state(this).id,state(child).id)); }
+        cloneNode(deep=false) { return wrap(request('clone',state(this).id,!!deep)); }
+    }
+    class CharacterData extends Node {
+        get data() {
+            if(![3,8].includes(state(this).type))throw new TypeError('Expected CharacterData');
+            return get(this,'nodeValue');
+        }
+        set data(value) {
+            const s=state(this);if(![3,8].includes(s.type))throw new TypeError('Expected CharacterData');
+            request('set',s.id,'nodeValue',string(value));
+        }
+        get length() { return this.data.length; }
+    }
+    class Text extends CharacterData {
+        constructor(key='',id,description) {
+            if(key!==token)return wrap(request('create',state(document).id,'text',string(key)));
+            super(key,id,description);
+        }
+    }
+    class Comment extends CharacterData {
+        constructor(key='',id,description) {
+            if(key!==token)return wrap(request('create',state(document).id,'comment',string(key)));
+            super(key,id,description);
+        }
     }
     class Element extends Node {
         get tagName() { return state(this).name; }
@@ -99,6 +123,19 @@
         querySelector(selector) { required(arguments, 1); return wrap(request('query', state(this).id, string(selector))[0] ?? null); }
         querySelectorAll(selector) { required(arguments, 1); return new NodeList(token, request('query', state(this).id, string(selector))); }
         getElementsByTagName(name) { const s=state(this); if(s.type!==1)throw new TypeError('Illegal invocation'); required(arguments, 1); return new HTMLCollection(token, s.id, string(name)); }
+        insertAdjacentElement(position,element) {
+            if(state(this).type!==1)throw new TypeError('Expected an Element');
+            required(arguments,2);position=string(position).replace(/[A-Z]/g,c=>c.toLowerCase());
+            if(state(element).type!==1)throw new TypeError('Expected an Element');
+            switch(position) {
+                case 'beforebegin': if(!this.parentNode)return null;this.parentNode.insertBefore(element,this);break;
+                case 'afterbegin': this.insertBefore(element,this.firstChild);break;
+                case 'beforeend': this.appendChild(element);break;
+                case 'afterend': if(!this.parentNode)return null;this.parentNode.insertBefore(element,this.nextSibling);break;
+                default: throw new DOMException('Invalid insertion position','SyntaxError');
+            }
+            return element;
+        }
     }
     class Document extends Node {
         get URL() { return get(this,'URL'); }
@@ -280,14 +317,14 @@
         if (id === null) return null;
         if (wrappers.has(id)) return wrappers.get(id);
         const description = request('describe', id);
-        let Constructor=description.type===9?Document:description.type===11?DocumentFragment:description.type===1?Element:Node;
+        let Constructor=description.type===9?Document:description.type===11?DocumentFragment:description.type===3?Text:description.type===8?Comment:description.type===1?Element:Node;
         if(description.type===1&&description.namespace==='http://www.w3.org/1999/xhtml')
             Constructor=description.name==='LINK'?HTMLLinkElement:description.name==='TEMPLATE'?HTMLTemplateElement:HTMLElement;
         const node = new Constructor(token, id, description);
         wrappers.set(id, node);
         return node;
     }
-    for (const Constructor of [EventTarget, Event, CustomEvent, Node, Element, HTMLElement, HTMLLinkElement, HTMLTemplateElement, DocumentFragment, Document, NodeList, HTMLCollection, DOMException]) {
+    for (const Constructor of [EventTarget, Event, CustomEvent, Node, CharacterData, Text, Comment, Element, HTMLElement, HTMLLinkElement, HTMLTemplateElement, DocumentFragment, Document, NodeList, HTMLCollection, DOMException]) {
         Object.defineProperty(Constructor.prototype, Symbol.toStringTag, {value:Constructor.name, configurable:true});
         Object.defineProperty(globalThis, Constructor.name, {value:Constructor, writable:true, configurable:true});
     }
@@ -297,6 +334,7 @@
         Object.defineProperty(Node, name, {value, enumerable:true});
         Object.defineProperty(Node.prototype, name, {value, enumerable:true});
     }
+    /* HULL_COOKIES */
     Object.defineProperty(globalThis, 'document', {value:wrap(request('root')), writable:false, configurable:false});
     if (request('window') !== null) {
         const pageGlobal = globalThis, define = Object.defineProperty;
@@ -322,5 +360,6 @@
     }
     /* HULL_NATIVE_JQUERY */
     /* HULL_NATIVE_URL */
+    /* HULL_NAVIGATION */
     /* HULL_INPUT_EVENTS */
 })();
