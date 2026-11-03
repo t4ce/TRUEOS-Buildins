@@ -54,9 +54,14 @@ mod tests {
     }
     #[test]
     fn lengths_clamp_at_the_safe_integer_boundary() {
-        for n in [f64::NAN, -1.0, f64::NEG_INFINITY, -0.5] { assert_eq!(to_length(n), 0); }
+        for n in [f64::NAN, -1.0, f64::NEG_INFINITY, -0.5] {
+            assert_eq!(to_length(n), 0);
+        }
         assert_eq!(to_length(9.9), 9);
-        assert_eq!(to_length(MAX_SAFE_INTEGER as f64 - 1.0), MAX_SAFE_INTEGER - 1);
+        assert_eq!(
+            to_length(MAX_SAFE_INTEGER as f64 - 1.0),
+            MAX_SAFE_INTEGER - 1
+        );
         assert_eq!(to_length(MAX_SAFE_INTEGER as f64), MAX_SAFE_INTEGER);
         assert_eq!(to_length(f64::MAX), MAX_SAFE_INTEGER);
         assert_eq!(to_length(f64::INFINITY), MAX_SAFE_INTEGER);

@@ -4,5 +4,7 @@
   "version": "3.51.0",
   "archive_url": "https://codeload.github.com/zloirock/core-js/tar.gz/refs/tags/v3.51.0",
   "archive_sha256": "ccad53f9f76a74463f8d4932214826edf6dcd46e6b8999cb628eb5bae236a578",
-  "files": 4355
+  "files": 4355,
+  "commit": "633931af9d6bf6d6d6ad1a191839a66ee998b8c8",
+  "tree_sha256": "5f7de71f0f9f5579d908f21ae1e4c5d6e109c779123eac6fd28312ce780f88e2"
 }

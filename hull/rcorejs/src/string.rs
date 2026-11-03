@@ -52,7 +52,11 @@ mod tests {
     }
     #[test]
     fn repair_preserves_length_and_is_idempotent() {
-        for input in [&[0xd800, 0x61, 0xdc00][..], &[0, 0xd7ff, 0xe000, 0xffff], &[]] {
+        for input in [
+            &[0xd800, 0x61, 0xdc00][..],
+            &[0, 0xd7ff, 0xe000, 0xffff],
+            &[],
+        ] {
             let output = to_well_formed(input);
             assert_eq!(input.len(), output.len());
             assert!(is_well_formed(&output));
