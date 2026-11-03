@@ -72,7 +72,7 @@ fn file_count_and_source_size_limits_release_the_initial_snapshot() {
             .any(|r| matches!(r, Report::Evaluated { result: Err(_), .. }))
     );
     drop(r);
-    let code = " ".repeat(1024 * 1024 + 1);
+    let code = " ".repeat(4 * 1024 * 1024 + 1);
     let mut r = runtime(
         "<p>before</p><script type=module src='./huge.js'></script>",
         vec![("https://fixture.test/path/huge.js", &code)],

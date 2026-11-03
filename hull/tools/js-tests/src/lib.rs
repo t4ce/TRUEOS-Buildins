@@ -48,6 +48,8 @@ mod console_tests;
 #[cfg(test)]
 mod dom_tests;
 #[cfg(test)]
+mod dom_events_tests;
+#[cfg(test)]
 mod url_tests;
 #[cfg(test)]
 mod helpers_tests;

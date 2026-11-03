@@ -13,7 +13,7 @@ use url::Url;
 pub(crate) const PRIMARY: &str = "https://esm.sh/";
 pub(crate) const SECONDARY: &str = "https://cdn.jsdelivr.net/npm/";
 pub(crate) const MAX_FILES: usize = 64;
-const MAX_FILE: usize = 1024 * 1024;
+const MAX_FILE: usize = 4 * 1024 * 1024;
 const MAX_TOTAL: usize = 8 * 1024 * 1024;
 pub(crate) const MAX_WAIT: Duration = Duration::from_secs(5);
 const FETCH_WAIT: Duration = Duration::from_secs(2);

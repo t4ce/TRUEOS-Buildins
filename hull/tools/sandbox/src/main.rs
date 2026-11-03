@@ -259,7 +259,7 @@ fn captured_resources(input: &Path, manifest: &Value) -> Result<HashMap<String, 
             if !file.starts_with(&root) {
                 return Err("resource path escapes capture directory".into());
             }
-            let bytes = read_bounded(&file, 1024 * 1024)?;
+            let bytes = read_bounded(&file, 4 * 1024 * 1024)?;
             total += bytes.len();
             if total > 16 * 1024 * 1024 {
                 return Err("captured resources exceed 16 MiB".into());
@@ -335,7 +335,7 @@ fn script_sources(
             nodes: vec![0],
             origin: file.display().to_string(),
             kind: "text/javascript".into(),
-            bytes: Some(read_bounded(file, 1024 * 1024)?),
+            bytes: Some(read_bounded(file, 4 * 1024 * 1024)?),
         });
         experiments.push(format!("prelude: {} (reported as node 0)", file.display()));
     }
@@ -363,7 +363,7 @@ fn script_sources(
             .iter()
             .find_map(|node| options.replacements.get(node))
         {
-            source.bytes = Some(read_bounded(file, 1024 * 1024)?);
+            source.bytes = Some(read_bounded(file, 4 * 1024 * 1024)?);
             experiments.push(format!(
                 "replace nodes {:?}: {}",
                 source.nodes,
@@ -602,7 +602,7 @@ fn module_tool(arguments: &[String]) -> Result<(), String> {
         return Ok(());
     }
     let path = Path::new(arguments.get(2).ok_or("missing module source path")?);
-    let source = read_bounded(path, 1024 * 1024)?;
+    let source = read_bounded(path, 4 * 1024 * 1024)?;
     let mut engine = hull_quickjs::Engine::new()?;
     let names = engine.module_dependencies(&source, base)?;
     let deps = names

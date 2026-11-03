@@ -101,7 +101,7 @@ def capture_page(args, executable: Path) -> None:
             return
         entry = {"kind": kind, "status": "failed"}
         try:
-            cap = min(512 * 1024 if kind == "css" else 1024**2, 16 * 1024**2 - total)
+            cap = min(4 * 1024**2, 16 * 1024**2 - total)
             if cap <= 0:
                 raise ValueError("capture resource budget exceeded")
             data, resolved, content_type = fetch(url, cap)

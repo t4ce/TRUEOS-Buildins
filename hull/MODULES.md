@@ -42,7 +42,7 @@ elements execute separately, with their own currentScript; repeated external
 module URLs share QuickJS module execution. Navigation cancels tickets and drops
 the realm, promises, aliases and RAM-only source cache.
 
-Limits per page: 64 source URLs, 1 MiB per source, 8 MiB aggregate, 32 outstanding
+Limits per page: 64 source URLs, 4 MiB per source, 8 MiB aggregate, 32 outstanding
 dynamic imports, 256 static requests per module, 4 KiB URLs, 2 seconds per fetch,
 and 5 seconds cumulative resource waiting (downloads and between-turn graph
 preparation). At most four module probes are admitted per turn with a cooperative

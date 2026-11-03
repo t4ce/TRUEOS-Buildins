@@ -78,7 +78,8 @@ fn window_aliases_the_page_global_and_reads_live_content_dimensions() {
         for(const name of ['devicePixelRatio','outerWidth','outerHeight','screen','screenX','screenY','closed','fetch','XMLHttpRequest','setTimeout','require','process','std','os','__hullDom']) {
             if(typeof window[name]!=='undefined')throw Error('unsupported capability exposed: '+name);
         }
-        if(typeof document.hasFocus!=='undefined'||typeof window.addEventListener!=='undefined')throw Error('stubbed focus/events exposed');
+        if(typeof document.hasFocus!=='undefined')throw Error('stubbed focus exposed');
+        if(typeof window.addEventListener!=='function'||typeof document.addEventListener!=='function')throw Error('DOM event targets missing');
     "#,
     );
     // Hull's resize callback supplies its actual content extent, not the full

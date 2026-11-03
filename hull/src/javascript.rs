@@ -446,6 +446,7 @@ async fn worker(
     let mut engine: Option<Engine> = None;
     let mut resources: Option<Loader> = None;
     let mut started = false;
+    let mut dom_ready_sent = false;
     let mut next = 0;
     let mut seen_loss = 0;
     let mut reset: Option<PendingReset> = None;
@@ -457,6 +458,7 @@ async fn worker(
                 engine = None; // Context, globals, pending promises and limits all go together.
                 next = 0;
                 started = false;
+                dom_ready_sent = false;
                 reset = None;
                 while inputs.try_recv().is_ok() {}
                 seen_loss = losses.borrow_and_update().count;
@@ -503,15 +505,7 @@ async fn worker(
                                 "hull:helpers",
                                 false,
                             )
-                        })
-                        .and_then(|_| {
-                            value.eval(
-                                include_bytes!("javascript_events.js"),
-                                "hull:input-bridge",
-                                false,
-                            )
-                        })
-                        .and_then(|_| value.bind_message_handler("__hullInputReceive"));
+                        });
                     let initialized = initialized.and_then(|_| {
                         if let Some(document) = &page.document {
                             javascript_dom::install_for_page(
@@ -522,6 +516,8 @@ async fn worker(
                             )
                         } else {
                             javascript_dom::install_url_only(&mut value)
+                                .and_then(|_| value.eval(include_bytes!("javascript_events.js"),"hull:input-bridge",false))
+                                .and_then(|_| value.bind_message_handler("__hullInputReceive"))
                         }
                     });
                     match initialized {
@@ -657,6 +653,16 @@ async fn worker(
         };
         let Some(source) = source else {
             if resources.as_ref().is_some_and(Loader::pending) {
+                continue;
+            }
+            if !dom_ready_sent && page.document.is_some() {
+                dom_ready_sent=true;
+                let result=engine.dispatch_json(br#"{"kind":"__hull_dom_ready"}"#);
+                if let Err(error)=result {
+                    let _=reports.try_send(Report::JobError{generation:page.generation,error});
+                }
+                flush_console(engine,page.generation,&reports);
+                // Ready callbacks and their Promise jobs run before capture.
                 continue;
             }
             if resources.is_some() {

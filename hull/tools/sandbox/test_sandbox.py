@@ -88,6 +88,23 @@ class SandboxWorkflow(unittest.TestCase):
         self.assertIn('#13579b', (self.out / "layout.svg").read_text())
         self.assertIn('status=native%20ready', (self.out / "console.log").read_text())
 
+    def test_larger_css_and_js_are_admitted_and_dom_ready_runs_before_svg(self):
+        (self.capture / "large.css").write_text("/*" + " " * (600 * 1024) + "*/p{color:#2468ac}")
+        (self.capture / "large.js").write_text("/*" + " " * (1200 * 1024) + "*/" + """
+document.addEventListener('DOMContentLoaded',function(event){
+  if(event.target!==document||document.readyState!=='interactive')throw Error('ready state');
+  document.querySelector('p').textContent='DOMContentLoaded';
+  Promise.resolve().then(()=>document.querySelector('p').textContent+=' promise');
+});""")
+        self.page("<link rel=stylesheet href=large.css><p>before</p><script src=large.js></script>", {
+            "https://fixture.test/large.css":{"status":"ok","path":"large.css","kind":"css"},
+            "https://fixture.test/large.js":{"status":"ok","path":"large.js","kind":"js"},
+        })
+        report = self.run_page("--modules")
+        self.assertEqual(report["scripts"][0]["status"], "executed")
+        self.assertEqual(svg_text(self.out / "layout.svg"), "DOMContentLoaded promise")
+        self.assertIn('#2468ac', (self.out / "layout.svg").read_text())
+
     def test_modules_use_captured_fallback_and_render_the_result(self):
         (self.capture / "fallback.js").write_text("export const answer='CDN fallback ready';")
         self.page("<p>before</p><script>import('demo@1.0.0').then(m=>document.querySelector('p').textContent=m.answer)</script>", {

@@ -28,8 +28,8 @@ pub(super) struct Css {
 }
 
 const MAX_STYLESHEETS: usize = 16;
-const MAX_SHEET_BYTES: usize = 512 * 1024;
-const MAX_CSS_BYTES: usize = 2 * 1024 * 1024;
+const MAX_SHEET_BYTES: usize = 4 * 1024 * 1024;
+const MAX_CSS_BYTES: usize = 8 * 1024 * 1024;
 const CSS_WAIT: Duration = Duration::from_millis(2_000);
 
 pub(super) struct RootStylesheet {

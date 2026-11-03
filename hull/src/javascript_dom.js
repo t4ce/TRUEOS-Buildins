@@ -51,10 +51,13 @@
     function attribute(value, action, name, content) {
         return request('attribute', state(value).id, action, string(name), content);
     }
-    class Node {
+    /* HULL_DOM_EVENTS */
+    class Node extends EventTarget {
         constructor(key, id, description) {
+            super();
             if (key !== token) throw new TypeError('Illegal constructor');
             states.set(this, {id, ...description});
+            eventTarget(this).parent=()=>description.type===9 ? eventWindow : wrap(get(this,'parentNode'));
         }
         get nodeType() { return state(this).type; }
         get nodeName() { return state(this).name; }
@@ -93,6 +96,10 @@
         querySelectorAll(selector) { required(arguments, 1); return new NodeList(token, request('query', state(this).id, string(selector))); }
     }
     class Document extends Node {
+        get readyState() {
+            if(state(this).type!==9)throw new TypeError('Expected a Document');
+            return documentReadyState;
+        }
         get currentScript() { return wrap(get(this, 'currentScript')); }
         get documentElement() { return wrap(get(this, 'documentElement')); }
         get head() { return wrap(get(this, 'head')); }
@@ -135,7 +142,7 @@
         wrappers.set(id, node);
         return node;
     }
-    for (const Constructor of [Node, Element, Document, NodeList, DOMException]) {
+    for (const Constructor of [EventTarget, Event, CustomEvent, Node, Element, Document, NodeList, DOMException]) {
         Object.defineProperty(Constructor.prototype, Symbol.toStringTag, {value:Constructor.name, configurable:true});
         Object.defineProperty(globalThis, Constructor.name, {value:Constructor, writable:true, configurable:true});
     }
@@ -148,6 +155,12 @@
     Object.defineProperty(globalThis, 'document', {value:wrap(request('root')), writable:false, configurable:false});
     if (request('window') !== null) {
         const pageGlobal = globalThis, define = Object.defineProperty;
+        eventWindow=pageGlobal;
+        registerEventTarget(pageGlobal);
+        for(const name of ['addEventListener','removeEventListener','dispatchEvent']) {
+            const method=EventTarget.prototype[name];
+            define(pageGlobal,name,{value:function(...args){return eventApply(method,pageGlobal,args)},writable:true,configurable:true});
+        }
         // The single page realm owns its global identity; replacing the ordinary
         // globalThis property must not change the window getter's target.
         define(pageGlobal, 'window', {get:() => pageGlobal, enumerable:true, configurable:false});
@@ -164,4 +177,5 @@
     }
     /* HULL_NATIVE_JQUERY */
     /* HULL_NATIVE_URL */
+    /* HULL_INPUT_EVENTS */
 })();

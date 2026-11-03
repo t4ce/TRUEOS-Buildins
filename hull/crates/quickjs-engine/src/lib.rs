@@ -39,6 +39,7 @@ struct InterruptState {
 }
 
 const HOST_JSON_BYTES: usize = 1024 * 1024;
+const SOURCE_BYTES: usize = 4 * 1024 * 1024;
 type HostHandler = dyn FnMut(&[u8]) -> Result<Vec<u8>, String>;
 struct HostState {
     handler: RefCell<Box<HostHandler>>,
@@ -408,12 +409,12 @@ impl Engine {
         Ok(())
     }
     /// Store source without parsing or executing it. The host bounds aggregate
-    /// bytes/count; individual module bodies are limited to 1 MiB here.
+    /// bytes/count; individual module bodies are limited to 4 MiB here.
     pub fn add_module(&mut self, url: &str, source: &[u8]) -> Result<(), String> {
         if self.modules.is_none() {
             return Err("Module loader is not installed".into());
         }
-        if source.len() > 1024 * 1024 || url.len() > 4096 {
+        if source.len() > SOURCE_BYTES || url.len() > 4096 {
             return Err("Module source/URL exceeds budget".into());
         }
         let name = CString::new(url).map_err(|_| "Module URL contains NUL")?;
@@ -438,8 +439,8 @@ impl Engine {
         source: &[u8],
         origin: &str,
     ) -> Result<Vec<String>, String> {
-        if source.len() > 1024 * 1024 {
-            return Err("Module source exceeds 1 MiB".into());
+        if source.len() > SOURCE_BYTES {
+            return Err("Module source exceeds 4 MiB".into());
         }
         let origin = CString::new(origin).map_err(|_| "Module origin contains NUL")?;
         let mut terminated = source.to_vec();
@@ -645,6 +646,7 @@ impl Engine {
     /// unsupported until a module loader is installed explicitly in the future.
     /// Completion values are discarded without coercion or host-side evaluation.
     pub fn eval(&mut self, source: &[u8], origin: &str, module: bool) -> Result<(), String> {
+        if source.len()>SOURCE_BYTES{return Err("JavaScript source exceeds 4 MiB".into());}
         let origin = CString::new(origin).map_err(|_| "QuickJS origin contains a NUL byte")?;
         // JS_Eval requires a trailing NUL even though it also receives the length.
         let mut terminated = Vec::with_capacity(source.len() + 1);

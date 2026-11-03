@@ -77,6 +77,8 @@ fn install_gateway(
         serde_json::to_vec(&response).map_err(|error| error.to_string())
     })?;
     let source = include_str!("javascript_dom.js")
+        .replace("/* HULL_DOM_EVENTS */",include_str!("javascript_event_target.js"))
+        .replace("/* HULL_INPUT_EVENTS */",include_str!("javascript_events.js"))
         .replace(
             "/* HULL_NATIVE_JQUERY */",
             include_str!("javascript_jquery.js"),
@@ -85,7 +87,8 @@ fn install_gateway(
             "/* HULL_NATIVE_URL */",
             &format!("({})(request);", include_str!("javascript_url.js")),
         );
-    engine.eval(source.as_bytes(), "hull:dom", false)
+    engine.eval(source.as_bytes(), "hull:dom", false)?;
+    engine.bind_message_handler("__hullInputReceive")
 }
 
 type DomResult<T> = Result<T, (&'static str, String)>;

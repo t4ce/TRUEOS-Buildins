@@ -42,6 +42,29 @@ fn body_text(document: &rp5::Document) -> String {
 }
 
 #[test]
+fn dom_ready_runs_after_sources_and_their_jobs_before_render_capture(){
+    let mut runtime=Runtime::start().unwrap();
+    begin(&mut runtime,30,r#"<p>before</p><script>
+        let trace=[];const p=document.querySelector('p');
+        if(document.readyState!=='loading')throw Error('initial ready state');
+        document.addEventListener('readystatechange',()=>trace.push(document.readyState));
+        document.addEventListener('DOMContentLoaded',function(e){
+            if(this!==document||e.target!==document||!e.bubbles||!e.isTrusted||document.currentScript!==null)throw Error('ready semantics');
+            if(trace.join(',')!=='first,promise,second,interactive')throw Error(trace);
+            if(hullInput.snapshot().received!=='0')throw Error('lifecycle counted as raw input');
+            p.textContent='ready';Promise.resolve().then(()=>p.textContent+=' job');
+        },{once:true});
+        trace.push('first');Promise.resolve().then(()=>trace.push('promise'));
+    </script><script>trace.push('second')</script>"#);
+    let(document,reports)=snapshot(&mut runtime,30);
+    let p=document.nodes.iter().enumerate().find(|(id,_)|document.name(*id)=="p").unwrap().0;
+    assert_eq!(document.text_content(p),"ready job");
+    assert!(!reports.iter().any(|r|matches!(r,Report::Evaluated{result:Err(_),..}|Report::JobError{..})),"{reports:?}");
+    runtime.execute_pasted("if(document.readyState!=='interactive')throw Error('ready state lost')".into()).unwrap();
+    for _ in 0..16{for report in runtime.poll(){if let Report::Pasted{result,..}=report{result.unwrap();return;}}}panic!("paste not executed");
+}
+
+#[test]
 fn current_script_tracks_classic_identity_and_parent_but_not_jobs_modules_or_pastes() {
     let mut runtime = Runtime::start().unwrap();
     begin(

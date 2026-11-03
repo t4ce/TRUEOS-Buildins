@@ -1,8 +1,10 @@
-// Native input endpoint only. No document, elements, hit testing or rendering.
+// Raw native input endpoint, with an optional DOM lifecycle receiver supplied
+// by the enclosing DOM bootstrap. Raw HID records retain their own contract.
 (() => {
     'use strict';
     const freeze = Object.freeze, isFrozen = Object.isFrozen, values = Object.values, apply = Reflect.apply;
     const listeners = new Map();
+    const receiveDOM=typeof dispatchDomRecord==='function' ? dispatchDomRecord : null;
     let lastEvent = null, received = 0n, resetCount = 0n;
     function immutable(value) {
         if (value && typeof value === 'object' && !isFrozen(value)) {
@@ -29,6 +31,7 @@
     Object.defineProperty(globalThis, '__hullInputReceive', {
         configurable:true,
         value(record) {
+            if(receiveDOM && receiveDOM(record))return;
             const event = immutable(record);
             lastEvent = event; received++;
             if (event.kind === 'input-reset') resetCount++;
