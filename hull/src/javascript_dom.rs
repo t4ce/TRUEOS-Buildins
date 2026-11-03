@@ -77,8 +77,14 @@ fn install_gateway(
         serde_json::to_vec(&response).map_err(|error| error.to_string())
     })?;
     let source = include_str!("javascript_dom.js")
-        .replace("/* HULL_DOM_EVENTS */",include_str!("javascript_event_target.js"))
-        .replace("/* HULL_INPUT_EVENTS */",include_str!("javascript_events.js"))
+        .replace(
+            "/* HULL_DOM_EVENTS */",
+            include_str!("javascript_event_target.js"),
+        )
+        .replace(
+            "/* HULL_INPUT_EVENTS */",
+            include_str!("javascript_events.js"),
+        )
         .replace(
             "/* HULL_NATIVE_JQUERY */",
             include_str!("javascript_jquery.js"),

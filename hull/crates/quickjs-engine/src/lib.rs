@@ -646,7 +646,9 @@ impl Engine {
     /// unsupported until a module loader is installed explicitly in the future.
     /// Completion values are discarded without coercion or host-side evaluation.
     pub fn eval(&mut self, source: &[u8], origin: &str, module: bool) -> Result<(), String> {
-        if source.len()>SOURCE_BYTES{return Err("JavaScript source exceeds 4 MiB".into());}
+        if source.len() > SOURCE_BYTES {
+            return Err("JavaScript source exceeds 4 MiB".into());
+        }
         let origin = CString::new(origin).map_err(|_| "QuickJS origin contains a NUL byte")?;
         // JS_Eval requires a trailing NUL even though it also receives the length.
         let mut terminated = Vec::with_capacity(source.len() + 1);

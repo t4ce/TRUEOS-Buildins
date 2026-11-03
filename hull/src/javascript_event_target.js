@@ -2,6 +2,7 @@
 // This file is inserted inside javascript_dom.js's private bootstrap closure.
 const eventTargets = new WeakMap(), eventStates = new WeakMap();
 const eventApply = Reflect.apply, eventNow = globalThis.performance?.now?.bind(globalThis.performance);
+const eventDefine = Object.defineProperty;
 let eventWindow = null, documentReadyState = 'loading';
 function eventState(event) {
     const result = eventStates.get(event);
@@ -21,7 +22,7 @@ class Event {
             stopped:false, immediate:false, canceled:false, passive:false, path:[], trusted:false,
             timestamp:eventNow ? eventNow() : 0, detail:null};
         eventStates.set(this, value);
-        Object.defineProperty(this, 'isTrusted', {get:() => value.trusted, enumerable:true});
+        eventDefine(this, 'isTrusted', {get:() => value.trusted, enumerable:true});
     }
     get type() { return eventState(this).type; }
     get bubbles() { return eventState(this).bubbles; }

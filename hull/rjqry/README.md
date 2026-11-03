@@ -26,6 +26,12 @@ data caches, effects, extend/plugin helpers or Ajax. Traversal selector argument
 and param function/cyclic/non-data values fail explicitly. Other library exports
 remain available to Rust callers. Page scripts still run in QuickJS.
 
+Hull's separate DOM binding now supplies EventTarget listeners/dispatch on nodes,
+document and window, plus the actor's DOMContentLoaded signal. This does not yet
+expose jQuery's on/off or ready adapters. Winit window focus/blur/resize records
+reach window listeners; raw keyboard/pointer input remains on hullInput pending
+DOM focus/hit-test routing.
+
 Native batches have a cooperative 20 ms work deadline as well as existing DOM
 size/mutation limits; QuickJS retains its per-call slice and cumulative page
 execution allowance. The native work deadline is checked at DOM work boundaries,

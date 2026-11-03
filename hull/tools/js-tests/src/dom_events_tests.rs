@@ -1,14 +1,39 @@
-use crate::javascript_dom::{self,WindowMetrics};
+use crate::javascript_dom::{self, WindowMetrics};
 use hull_quickjs::Engine;
-use std::{cell::{Cell,RefCell},rc::Rc};
-fn fixture(window:bool)->Engine{
-    let mut engine=Engine::new().unwrap();engine.install_console().unwrap();
-    let doc=Rc::new(RefCell::new(rp5::parse("<main><p>before</p></main>")));
-    if window{javascript_dom::install_with_window(&mut engine,doc,Rc::new(Cell::new(WindowMetrics{inner_width:1280,inner_height:720}))).unwrap();}
-    else{javascript_dom::install(&mut engine,doc).unwrap();}engine
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc,
+};
+fn fixture(window: bool) -> Engine {
+    let mut engine = Engine::new().unwrap();
+    engine.install_console().unwrap();
+    let doc = Rc::new(RefCell::new(rp5::parse("<main><p>before</p></main>")));
+    if window {
+        javascript_dom::install_with_window(
+            &mut engine,
+            doc,
+            Rc::new(Cell::new(WindowMetrics {
+                inner_width: 1280,
+                inner_height: 720,
+            })),
+        )
+        .unwrap();
+    } else {
+        javascript_dom::install(&mut engine, doc).unwrap();
+    }
+    engine
 }
-fn run(engine:&mut Engine,source:&str){engine.eval(source.as_bytes(),"dom-events-fixture.js",false).unwrap();}
-#[test]fn event_targets_capture_and_bubble_on_real_node_ancestry(){let mut engine=fixture(true);run(&mut engine,r#"
+fn run(engine: &mut Engine, source: &str) {
+    engine
+        .eval(source.as_bytes(), "dom-events-fixture.js", false)
+        .unwrap();
+}
+#[test]
+fn event_targets_capture_and_bubble_on_real_node_ancestry() {
+    let mut engine = fixture(true);
+    run(
+        &mut engine,
+        r#"
     const p=document.querySelector('p'),main=p.parentNode,trace=[];
     if(!(p instanceof EventTarget)||!(document instanceof EventTarget))throw Error('EventTarget inheritance');
     window.addEventListener('test',e=>{if(e.eventPhase!==Event.CAPTURING_PHASE)throw Error('capture phase');trace.push('window-capture')},true);
@@ -23,8 +48,15 @@ fn run(engine:&mut Engine,source:&str){engine.eval(source.as_bytes(),"dom-events
     if(!p.dispatchEvent(e)||e.detail.answer!==42||e.currentTarget!==null||e.eventPhase!==Event.NONE||e.composedPath().length)throw Error('cleanup/detail');
     if(trace.join(',')!=='window-capture,document-capture,main-capture,target-capture,target-bubble,main-bubble,document-bubble,window-bubble')throw Error(trace);
     if(typeof __hullInputReceive!=='undefined')throw Error('unpinned receiver');
-"#);}
-#[test]fn listener_identity_once_removal_objects_and_reentrancy(){let mut engine=fixture(false);run(&mut engine,r#"
+"#,
+    );
+}
+#[test]
+fn listener_identity_once_removal_objects_and_reentrancy() {
+    let mut engine = fixture(false);
+    run(
+        &mut engine,
+        r#"
     const t=new EventTarget(),trace=[],removed=()=>trace.push('removed');
     function repeated(){trace.push('repeated');t.removeEventListener('x',removed);t.addEventListener('x',()=>trace.push('late'),{once:true})}
     t.addEventListener('x',repeated);t.addEventListener('x',repeated,{once:true});t.addEventListener('x',removed);
@@ -37,8 +69,16 @@ fn run(engine:&mut Engine,source:&str){engine.eval(source.as_bytes(),"dom-events
     t.dispatchEvent(new Event('reentrant'));
     let empty=0;t.addEventListener('',()=>empty++);t.dispatchEvent(new Event(''));if(empty!==1)throw Error('empty type');
     let preStopped=0;t.addEventListener('pre-stopped',()=>preStopped++);const stopped=new Event('pre-stopped');stopped.stopPropagation();t.dispatchEvent(stopped);if(preStopped)throw Error('pre-dispatch stop');
-"#);assert!(engine.take_console().messages.is_empty());}
-#[test]fn cancellation_passive_stop_propagation_and_exception_reporting(){let mut engine=fixture(false);run(&mut engine,r#"
+"#,
+    );
+    assert!(engine.take_console().messages.is_empty());
+}
+#[test]
+fn cancellation_passive_stop_propagation_and_exception_reporting() {
+    let mut engine = fixture(false);
+    run(
+        &mut engine,
+        r#"
     const p=document.querySelector('p'),main=p.parentNode,trace=[];
     main.addEventListener('x',()=>trace.push('parent'));
     p.addEventListener('x',e=>{e.preventDefault();e.stopPropagation();trace.push('first')});
@@ -49,26 +89,54 @@ fn run(engine:&mut Engine,source:&str){engine.eval(source.as_bytes(),"dom-events
     document.addEventListener('wheel',e=>e.preventDefault(),{passive:false});if(document.dispatchEvent(new Event('wheel',{cancelable:true})))throw Error('explicit nonpassive');
     const t=new EventTarget();let count=0;t.addEventListener('stop',e=>e.stopImmediatePropagation());t.addEventListener('stop',()=>count++);t.dispatchEvent(new Event('stop'));if(count)throw Error('immediate');
     t.addEventListener('error-test',()=>{throw Error('listener-reported')});t.addEventListener('error-test',()=>count++);if(!t.dispatchEvent(new Event('error-test'))||count!==1)throw Error('exception stopped dispatch');
-"#);let batch=engine.take_console();assert!(batch.messages.iter().any(|r|r.text.contains("listener-reported")));}
-#[test]fn event_path_is_fixed_even_if_a_listener_detaches_target(){let mut engine=fixture(false);run(&mut engine,r#"
+"#,
+    );
+    let batch = engine.take_console();
+    assert!(
+        batch
+            .messages
+            .iter()
+            .any(|r| r.text.contains("listener-reported"))
+    );
+}
+#[test]
+fn event_path_is_fixed_even_if_a_listener_detaches_target() {
+    let mut engine = fixture(false);
+    run(
+        &mut engine,
+        r#"
     const p=document.querySelector('p'),main=p.parentNode;let seen=false;
     p.addEventListener('x',()=>{main.textContent='detached'});
     main.addEventListener('x',e=>{if(e.target!==p||p.parentNode!==null)throw Error('path');seen=true});
     p.dispatchEvent(new Event('x',{bubbles:true}));if(!seen)throw Error('path changed');
-"#);assert!(engine.take_console().messages.is_empty());}
+"#,
+    );
+    assert!(engine.take_console().messages.is_empty());
+}
 
-#[test]fn actual_winit_window_records_dispatch_dom_window_events_and_keep_raw_delivery(){
-    let mut engine=fixture(true);
-    run(&mut engine,r#"
+#[test]
+fn actual_winit_window_records_dispatch_dom_window_events_and_keep_raw_delivery() {
+    let mut engine = fixture(true);
+    run(
+        &mut engine,
+        r#"
         let windowEvents=[];
         for(const kind of ['focus','blur','resize'])window.addEventListener(kind,function(event){
             if(this!==window||event.target!==window||!event.isTrusted)throw Error('native window event identity');
             windowEvents.push(event.type);
         });
-    "#);
-    for record in [r#"{"kind":"focus","source":"winit-window-state","focused":true}"#,
+    "#,
+    );
+    for record in [
+        r#"{"kind":"focus","source":"winit-window-state","focused":true}"#,
         r#"{"kind":"resize","source":"winit-window-state","width":1280,"height":752}"#,
-        r#"{"kind":"focus","source":"winit-window-state","focused":false}"#]{engine.dispatch_json(record.as_bytes()).unwrap();}
-    run(&mut engine,"if(windowEvents.join(',')!=='focus,resize,blur'||hullInput.snapshot().received!=='3')throw Error('native/raw routing')");
+        r#"{"kind":"focus","source":"winit-window-state","focused":false}"#,
+    ] {
+        engine.dispatch_json(record.as_bytes()).unwrap();
+    }
+    run(
+        &mut engine,
+        "if(windowEvents.join(',')!=='focus,resize,blur'||hullInput.snapshot().received!=='3')throw Error('native/raw routing')",
+    );
     assert!(engine.take_console().messages.is_empty());
 }

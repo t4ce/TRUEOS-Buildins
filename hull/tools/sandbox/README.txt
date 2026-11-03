@@ -88,6 +88,12 @@ Useful comparisons:
   --width/--height Content viewport, initially 1280x720, not whole native frame.
 
 Production retains the active 250 ms allowance and per-call 25 ms interrupts.
+JavaScript sources and CSS sheets are capped at 4 MiB each; their aggregate
+production budgets are 8 MiB each. Capture and replay use the same per-file cap.
+DOM wrappers support EventTarget and document DOMContentLoaded runs, with its
+Promise jobs, before the first snapshot. There is no automatic window load event
+or HTML on* handler binding. Native keyboard/pointer records remain on hullInput;
+Winit window resize/focus/blur records additionally reach window DOM listeners.
 Resource-enabled initial pages exclude bounded resource waiting from the 250 ms
 elapsed window (downloads/preparation up to 5 s, 5.25 s overall initial cap). The child
 process additionally has a 30 s host

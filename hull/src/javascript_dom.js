@@ -159,7 +159,7 @@
         registerEventTarget(pageGlobal);
         for(const name of ['addEventListener','removeEventListener','dispatchEvent']) {
             const method=EventTarget.prototype[name];
-            define(pageGlobal,name,{value:function(...args){return eventApply(method,pageGlobal,args)},writable:true,configurable:true});
+            define(pageGlobal,name,{value:function(...args){return eventApply(method,this ?? pageGlobal,args)},writable:true,configurable:true});
         }
         // The single page realm owns its global identity; replacing the ordinary
         // globalThis property must not change the window getter's target.

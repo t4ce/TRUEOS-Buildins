@@ -65,6 +65,14 @@ DPI/focus/browser services. DOM-only staging without a window producer stays
 without window globals. Host fixtures do not create a kernel-backed Winit window.
 
 DOM-backed realms also install the admitted native rjqry subset as $/jQuery.
+Node/Document wrappers implement EventTarget with Event/CustomEvent, capture,
+target/bubble dispatch, cancellation, once/passive and listener objects. The
+actor fires readystatechange/DOMContentLoaded after source/job completion; ready
+callbacks and their jobs precede the first frozen render snapshot. Native Winit
+resize/focus/blur records also dispatch on the window. Raw keyboard/pointer
+records retain hullInput: DOM focus/hit-test targeting is not implemented.
+AbortSignal options, HTML on* attributes, automatic window load/complete and
+specialized keyboard/pointer event interfaces are not claimed by this admission.
 jquery_tests execute the production JS binding and Rust adapter against the same
 rp5 arena. They cover identity and mutable collection indices, stacks/traversal,
 native text/attribute/class changes, guest callbacks, tagged param values,

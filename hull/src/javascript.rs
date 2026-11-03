@@ -516,7 +516,13 @@ async fn worker(
                             )
                         } else {
                             javascript_dom::install_url_only(&mut value)
-                                .and_then(|_| value.eval(include_bytes!("javascript_events.js"),"hull:input-bridge",false))
+                                .and_then(|_| {
+                                    value.eval(
+                                        include_bytes!("javascript_events.js"),
+                                        "hull:input-bridge",
+                                        false,
+                                    )
+                                })
                                 .and_then(|_| value.bind_message_handler("__hullInputReceive"))
                         }
                     });
@@ -656,12 +662,15 @@ async fn worker(
                 continue;
             }
             if !dom_ready_sent && page.document.is_some() {
-                dom_ready_sent=true;
-                let result=engine.dispatch_json(br#"{"kind":"__hull_dom_ready"}"#);
-                if let Err(error)=result {
-                    let _=reports.try_send(Report::JobError{generation:page.generation,error});
+                dom_ready_sent = true;
+                let result = engine.dispatch_json(br#"{"kind":"__hull_dom_ready"}"#);
+                if let Err(error) = result {
+                    let _ = reports.try_send(Report::JobError {
+                        generation: page.generation,
+                        error,
+                    });
                 }
-                flush_console(engine,page.generation,&reports);
+                flush_console(engine, page.generation, &reports);
                 // Ready callbacks and their Promise jobs run before capture.
                 continue;
             }
