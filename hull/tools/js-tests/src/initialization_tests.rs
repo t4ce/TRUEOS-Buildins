@@ -244,7 +244,7 @@ fn frozen_document_does_not_follow_later_live_dom_changes() {
     let mut runtime = Runtime::start().unwrap();
     begin(&mut runtime, 2, "<p id='message'>first frame</p>");
     let (document, _) = snapshot(&mut runtime, 2);
-    runtime.execute_pasted("document.querySelector('p').textContent='later';console.log(document.getElementById('message').textContent)".into()).unwrap();
+    runtime.execute_pasted("const live=document.querySelector('p');live.textContent='later';live.setAttribute('style','color:red');live.setAttribute('data-late','yes');console.log(live.textContent)".into()).unwrap();
     let mut output = Vec::new();
     for _ in 0..32 {
         for report in runtime.poll() {
@@ -258,9 +258,50 @@ fn frozen_document_does_not_follow_later_live_dom_changes() {
     }
     assert_eq!(output, ["later"]);
     assert_eq!(body_text(&document), "first frame");
+    let p = document
+        .nodes
+        .iter()
+        .enumerate()
+        .find(|(id, _)| document.name(*id) == "p")
+        .unwrap()
+        .0;
+    assert!(
+        !document
+            .element(p)
+            .unwrap()
+            .2
+            .iter()
+            .any(|a| matches!(a.name.as_str(), "style" | "data-late"))
+    );
     assert!(
         runtime.take_initial_document(2).is_none(),
         "mutation produced a second render snapshot"
+    );
+}
+
+#[test]
+fn finite_script_beyond_old_call_slice_can_contribute_to_initial_snapshot() {
+    let mut runtime = Runtime::start().unwrap();
+    begin(
+        &mut runtime,
+        31,
+        "<p>before</p><script>const until=performance.now()+45;while(performance.now()<until){}document.querySelector('p').textContent='admitted'</script>",
+    );
+    let (document, reports) = snapshot(&mut runtime, 31);
+    let p = document
+        .nodes
+        .iter()
+        .enumerate()
+        .find(|(id, _)| document.name(*id) == "p")
+        .unwrap()
+        .0;
+    assert_eq!(document.text_content(p), "admitted");
+    assert!(
+        !reports.iter().any(|r| matches!(
+            r,
+            Report::Evaluated { result: Err(_), .. } | Report::JobError { .. }
+        )),
+        "{reports:?}"
     );
 }
 

@@ -87,7 +87,9 @@ Useful comparisons:
   --out DIR        Separate artifacts for comparisons.
   --width/--height Content viewport, initially 1280x720, not whole native frame.
 
-Production retains the active 250 ms allowance and per-call 25 ms interrupts.
+Production retains the active 250 ms allowance and initial render cutoff, with
+per-call 125 ms interrupts. The per-call allowance does not extend the initial
+render window or authorize later DOM changes to publish a new frame.
 JavaScript sources and CSS sheets are capped at 4 MiB each; their aggregate
 production budgets are 8 MiB each. Capture and replay use the same per-file cap.
 DOM wrappers support EventTarget and document DOMContentLoaded runs, with its

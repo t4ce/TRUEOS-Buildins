@@ -28,7 +28,7 @@ impl Default for Limits {
         Self {
             heap_bytes: 32 * 1024 * 1024,
             stack_bytes: 1024 * 1024,
-            time_slice: Duration::from_millis(25),
+            time_slice: Duration::from_millis(125),
         }
     }
 }
