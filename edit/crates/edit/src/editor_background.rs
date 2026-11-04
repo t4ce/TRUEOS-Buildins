@@ -20,6 +20,17 @@ pub(crate) struct Page {
     pub glyph_input_revision: u64,
 }
 
+/// Only the fields sent to the terminal, independent of document/layout bookkeeping.
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct Report {
+    enabled: bool,
+    rect: Rect,
+    scroll_revision: u64,
+    emission_revision: u64,
+    exclusions: [Rect; MAX_EXCLUSIONS],
+    exclusion_count: usize,
+}
+
 #[derive(Default)]
 pub(crate) struct EditorBackground {
     previous_page: Option<Page>,
@@ -31,6 +42,7 @@ pub(crate) struct EditorBackground {
     exclusion_overflow: bool,
     scroll_revision: u64,
     emission_revision: u64,
+    last_report: Option<Report>,
 }
 
 impl EditorBackground {
@@ -62,7 +74,8 @@ impl EditorBackground {
         self.exclusion_count += 1;
     }
 
-    pub fn finish_frame(&mut self) {
+    /// Returns whether the terminal needs new metadata even without cell changes.
+    pub fn finish_frame(&mut self) -> bool {
         if let Some(page) = self.page {
             if let Some(previous) = self.previous_page {
                 if previous.document != page.document
@@ -82,24 +95,55 @@ impl EditorBackground {
             }
         }
         self.previous_page = self.page;
+        let report = self.report();
+        let changed = report != self.last_report;
+        self.last_report = report;
+        changed
+    }
+
+    pub fn invalidate_terminal(&mut self) {
+        self.last_report = None;
+    }
+
+    fn report(&self) -> Option<Report> {
+        if !self.managed {
+            return None;
+        }
+        let rect = self.page.map_or_else(Rect::default, |page| page.rect);
+        // Ignore stale slots left behind when a popup closes.
+        let mut exclusions = [Rect::default(); MAX_EXCLUSIONS];
+        exclusions[..self.exclusion_count]
+            .copy_from_slice(&self.exclusions[..self.exclusion_count]);
+        Some(Report {
+            enabled: self.enabled && !self.exclusion_overflow && !rect.is_empty(),
+            rect,
+            scroll_revision: self.scroll_revision,
+            emission_revision: self.emission_revision,
+            exclusions,
+            exclusion_count: self.exclusion_count,
+        })
     }
 }
 
 impl fmt::Display for EditorBackground {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if !self.managed {
-            return Ok(());
+        if let Some(report) = self.report() {
+            report.fmt(f)?;
         }
-        let rect = self.page.map_or_else(Rect::default, |page| page.rect);
-        let enabled = self.enabled && !self.exclusion_overflow && !rect.is_empty();
+        Ok(())
+    }
+}
+
+impl fmt::Display for Report {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "\x1b]777;edit-life;1;{};{};{};{};{};{};{};{}",
-            u8::from(enabled),
-            rect.left,
-            rect.top,
-            rect.width().max(0),
-            rect.height().max(0),
+            u8::from(self.enabled),
+            self.rect.left,
+            self.rect.top,
+            self.rect.width().max(0),
+            self.rect.height().max(0),
             self.scroll_revision,
             self.emission_revision,
             self.exclusion_count,
@@ -199,6 +243,118 @@ mod tests {
         }
         assert!(state.to_string().starts_with("\x1b]777;edit-life;1;0;"));
         assert_eq!(state.exclusion_count, MAX_EXCLUSIONS);
+    }
+
+    #[test]
+    fn reports_change_only_for_published_metadata_or_terminal_reentry() {
+        let mut state = EditorBackground::default();
+        state.begin_frame();
+        assert!(!state.finish_frame());
+        state.begin_frame();
+        state.set_page(true, page());
+        assert!(state.finish_frame());
+        state.begin_frame();
+        state.set_page(true, page());
+        assert!(!state.finish_frame());
+
+        // Even if scrolling a blank page changes no cells, the effect must reset.
+        let mut next = page();
+        next.scroll.y += 1;
+        state.begin_frame();
+        state.set_page(true, next);
+        assert!(state.finish_frame());
+        next.glyph_input_revision += 1;
+        state.begin_frame();
+        state.set_page(true, next);
+        assert!(state.finish_frame());
+
+        // Removing an exclusion must publish once; unused array slots are ignored.
+        state.begin_frame();
+        state.set_page(true, next);
+        state.exclude(next.rect);
+        assert!(state.finish_frame());
+        state.begin_frame();
+        state.set_page(true, next);
+        assert!(state.finish_frame());
+        state.begin_frame();
+        state.set_page(true, next);
+        assert!(!state.finish_frame());
+        state.invalidate_terminal();
+        state.begin_frame();
+        state.set_page(true, next);
+        assert!(state.finish_frame());
+
+        state.begin_frame();
+        assert!(state.finish_frame(), "closing the document disables its effect");
+        state.begin_frame();
+        assert!(!state.finish_frame());
+    }
+
+    #[test]
+    fn unchanged_tui_is_silent_but_metadata_toggles_and_repaints_are_atomic() {
+        use crate::buffer::{RcTextBuffer, TextBuffer};
+        use crate::helpers::Size;
+        use crate::input::Input;
+        use crate::tui::{Context, Tui};
+        use stdext::arena::Arena;
+
+        fn draw(ctx: &mut Context, buffer: RcTextBuffer, enabled: bool) {
+            ctx.textarea("page", buffer);
+            ctx.attr_editor_background(enabled);
+        }
+
+        fn prepare(tui: &mut Tui, buffer: RcTextBuffer, enabled: bool, input: Option<Input>) {
+            draw(&mut tui.create_context(input), buffer.clone(), enabled);
+            while tui.needs_settling() {
+                draw(&mut tui.create_context(None), buffer.clone(), enabled);
+            }
+        }
+
+        let buffer = TextBuffer::new_rc(false).unwrap();
+        buffer.borrow_mut().write_raw(b"source");
+        let mut tui = Tui::new().unwrap();
+        let arena = Arena::new(1024 * 1024).unwrap();
+        prepare(&mut tui, buffer.clone(), true, Some(Input::Resize(Size { width: 40, height: 8 })));
+        let initial = tui.render(&arena);
+        let (cells, metadata) = initial.split_once("\x1b]777;").unwrap();
+        assert!(cells.starts_with("\x1b[?2026h"));
+        assert!(cells.contains("source"));
+        assert!(metadata.starts_with("edit-life;1;1;"));
+        assert!(metadata.ends_with("\x07\x1b[?2026l"));
+
+        for _ in 0..3 {
+            prepare(&mut tui, buffer.clone(), true, None);
+            assert!(tui.render(&arena).is_empty(), "idle frames must not write terminal fences or OSC");
+        }
+
+        prepare(&mut tui, buffer.clone(), false, None);
+        let disabled = tui.render(&arena);
+        assert!(disabled.starts_with("\x1b[?2026h\x1b]777;edit-life;1;0;"));
+        assert!(disabled.ends_with("\x07\x1b[?2026l"));
+        prepare(&mut tui, buffer.clone(), false, None);
+        assert!(tui.render(&arena).is_empty());
+
+        prepare(&mut tui, buffer.clone(), true, None);
+        let enabled = tui.render(&arena);
+        assert!(enabled.starts_with("\x1b[?2026h\x1b]777;edit-life;1;1;"));
+
+        buffer.borrow_mut().write_raw(b"x");
+        prepare(&mut tui, buffer.clone(), true, None);
+        let changed = tui.render(&arena);
+        let (cells, changed_metadata) = changed.split_once("\x1b]777;").unwrap();
+        assert!(cells.starts_with("\x1b[?2026h"));
+        assert!(cells.contains('x'));
+        assert!(changed_metadata.contains(";0;2;0\x07\x1b[?2026l"), "typing publishes its emission revision with the cells");
+
+        tui.invalidate_terminal();
+        prepare(&mut tui, buffer.clone(), true, None);
+        let replacement = tui.render(&arena);
+        let (cells, replacement_metadata) = replacement.split_once("\x1b]777;").unwrap();
+        assert!(cells.starts_with("\x1b[?2026h"));
+        assert!(cells.contains("sourcex"), "terminal replacement must repaint retained source");
+        assert_eq!(replacement_metadata, changed_metadata, "the replacement terminal also receives the page metadata");
+        prepare(&mut tui, buffer, true, None);
+        assert!(tui.render(&arena).is_empty());
     }
 
     #[test]

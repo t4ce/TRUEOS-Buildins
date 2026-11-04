@@ -482,6 +482,8 @@ impl Tui {
     /// The terminal surface was replaced while widget/document state survived.
     pub fn invalidate_terminal(&mut self) {
         self.framebuffer.invalidate();
+        #[cfg(any(target_os = "trueos", test))]
+        self.editor_background.invalidate_terminal();
     }
 
     /// Returns the viewport size.
@@ -888,7 +890,10 @@ impl Tui {
         let output = self.framebuffer.render(arena);
         #[cfg(any(target_os = "trueos", test))]
         {
-            self.editor_background.finish_frame();
+            let metadata_changed = self.editor_background.finish_frame();
+            if output.is_empty() && !metadata_changed {
+                return output;
+            }
             let mut output = output;
             // A single stdout write can cross several VM payloads. Keep cells,
             // cursor and mask metadata in one synchronized terminal frame.

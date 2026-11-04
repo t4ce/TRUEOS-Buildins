@@ -25,6 +25,10 @@ pub fn draw_editor(ctx: &mut Context, state: &mut State) {
     };
 
     if let Some(doc) = state.documents.active() {
+        // A cursor-line tint would turn the transparent shader page into an
+        // opaque strip across the current row. Keep selection rendering intact.
+        #[cfg(target_os = "trueos")]
+        doc.buffer.borrow_mut().set_line_highlight_enabled(!state.shader_enabled);
         ctx.textarea("textarea", doc.buffer.clone());
         #[cfg(target_os = "trueos")]
         ctx.attr_editor_background(state.shader_enabled);
