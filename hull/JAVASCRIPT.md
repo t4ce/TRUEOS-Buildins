@@ -310,8 +310,10 @@ requests reject with AbortError and failed handoffs with NotSupportedError.
 Only confirmed playback emits playing. Old-generation receipts cannot reach a
 new page. The bridge does not implement autoplay, pause/seek, duration/metadata,
 canPlayType, a full media event/state machine or arbitrary player libraries.
-Page scripts must reach a real video.play() call; there is no site-specific
-flashvars extraction or replacement of a site's player constructor.
+Explicit page play calls and the bounded media discovery paths below use the
+same native handoff. A queued handoff, first-frame publication or preparation
+failure is also logged to Hull's console, including requests without a play
+promise.
 
 Offline sandbox replay records video_requests in report.json and rejects native
 playback explicitly; it never downloads media or opens a native player.
@@ -450,19 +452,31 @@ Recognized Google/reCAPTCHA scripts are skipped without synthesizing success.
 
 The same worker can inspect media subdocuments without embedding them. It
 recognizes ordinary video/source markup, VideoObject contentUrl in JSON-LD
-(including arrays and @graph), and video/player-labelled iframe
-sources, then follows at most nine distinct documents and three levels. Each
+(including arrays and @graph), and iframe sources labelled as video/player by
+title, id, name or class, then follows at most nine distinct documents and three levels. Each
 HTML response is limited to 256 KiB and uses the existing bounded resource
 loader. A disposable, same-thread QJS realm can evaluate up to eight short
-inline scripts and the explicit Play button handler. External scripts and
-frame timers are not run. Location assignments become same-origin media
+inline scripts and the explicit Play button handler. Its small MDCore adapter
+captures a player's wurl assignment through the existing video.src/play sink;
+packed inline JavaScript is evaluated normally. External scripts and frame
+timers are not run. Location assignments become same-origin media
 inspection requests; window.open, top-level navigation and layout stay inert.
 Inspection execution spends the remaining page allowance, with a 25 ms local
 cap. Finding a URL stops inspection; subsequent explicit page play requests
 still use the existing latest-request policy. These temporary trees are not
 persistent page DOMs or additional windows/workers.
 
-Offline replay may need these extra HTML responses imported into capture.json.
-The current native URL-fetch ABI has no Referer/custom-header argument. Servers
-which return empty HTML without those headers remain a live-fetch limitation;
-replay of a header-aware capture does not prove that native fetch works there.
+Media subdocument fetches carry their actual parent document URL through the
+existing bounded download tickets. The host applies a same-origin full URL or
+cross-origin origin-only Referer, without fragments or credentials, on every
+redirect. This does not expose arbitrary request headers to JavaScript.
+Offline replay still needs the corresponding captured HTML responses imported
+into capture.json; replay itself never contacts a server.
+
+The native backend supports finite, unencrypted HLS byte ranges that index one
+contiguous fragmented MP4 resource, using the existing MP4/AVC demux. Multiple
+fragment resources, encryption and discontinuities remain unsupported. Native
+HTTPS MP4 playback currently downloads the complete file before demux and first
+publication, with a 512 MiB limit. A discovered URL therefore does not imply
+that a Vid window can already open. Larger files need a bounded range reader;
+increasing this limit also increases whole-file buffering in the kernel heap.

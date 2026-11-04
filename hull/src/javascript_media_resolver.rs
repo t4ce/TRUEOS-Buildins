@@ -15,7 +15,7 @@ use std::{
 #[derive(Default)]
 pub(super) struct Resolver {
     initialized: bool,
-    pending: VecDeque<(String, usize)>,
+    pending: VecDeque<(String, usize, String)>,
     seen: HashSet<String>,
 }
 fn attr<'a>(doc: &'a Document, id: usize, name: &str) -> Option<&'a str> {
@@ -70,9 +70,9 @@ fn metadata_source(value: &serde_json::Value, base: &str) -> Option<String> {
     None
 }
 impl Resolver {
-    fn enqueue(&mut self, url: String, depth: usize) {
+    fn enqueue(&mut self, url: String, depth: usize, referrer: &str) {
         if depth <= 3 && self.seen.len() < 9 && self.seen.insert(url.clone()) {
-            self.pending.push_back((url, depth));
+            self.pending.push_back((url, depth, referrer.to_owned()));
         }
     }
     fn discover(&mut self, doc: &Document, base: &str, depth: usize, page: &LocalPage) -> bool {
@@ -117,15 +117,16 @@ impl Resolver {
             }
             if name == "iframe" {
                 let label = format!(
-                    "{} {} {}",
+                    "{} {} {} {}",
                     attr(doc, id, "title").unwrap_or(""),
                     attr(doc, id, "id").unwrap_or(""),
-                    attr(doc, id, "name").unwrap_or("")
+                    attr(doc, id, "name").unwrap_or(""),
+                    attr(doc, id, "class").unwrap_or("")
                 )
                 .to_ascii_lowercase();
                 if label.contains("video") || label.contains("player") {
                     if let Some(url) = attr(doc, id, "src").and_then(|s| address(base, s)) {
-                        self.enqueue(url, depth + 1);
+                        self.enqueue(url, depth + 1, base);
                     }
                 }
             }
@@ -147,10 +148,10 @@ impl Resolver {
                 }
             }
         }
-        let Some((url, depth)) = self.pending.front().cloned() else {
+        let Some((url, depth, referrer)) = self.pending.front().cloned() else {
             return;
         };
-        let bytes = match loader.source(&url) {
+        let bytes = match loader.source_with_referrer(&url, &referrer) {
             Prepared::Pending => return,
             Prepared::Failed(_) => {
                 self.pending.pop_front();
@@ -160,7 +161,7 @@ impl Resolver {
         };
         self.pending.pop_front();
         if bytes.is_empty() || bytes.len() > 256 * 1024 {
-            loader.events.push(super::module_loader::Event {url,status:"failed",detail:if bytes.is_empty(){"media inspection: empty HTML response; current fetch ABI has no Referer/custom headers".into()}else{"media inspection: HTML exceeds 256 KiB".into()}});
+            loader.events.push(super::module_loader::Event {url,status:"failed",detail:if bytes.is_empty(){"media inspection: empty HTML response".into()}else{"media inspection: HTML exceeds 256 KiB".into()}});
             return;
         }
         let doc = rp5::parse(&String::from_utf8_lossy(&bytes));
@@ -234,6 +235,11 @@ impl Resolver {
             "hull:media-player-adapter",
             false,
         )?;
+        engine.eval(
+            include_bytes!("javascript_player_mdcore.js"),
+            "hull:media-source-adapter",
+            false,
+        )?;
         for source in scripts
             .sources
             .iter()
@@ -259,7 +265,7 @@ impl Resolver {
             if let Some(target) = address(url, &target)
                 .filter(|s| url::Url::parse(s).is_ok_and(|u| u.origin() == base.origin()))
             {
-                self.enqueue(target, depth + 1);
+                self.enqueue(target, depth + 1, url);
             }
         }
         Ok(())

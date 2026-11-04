@@ -6,6 +6,7 @@ struct Network {
     delays: HashMap<String, usize>,
     tickets: HashMap<u32, String>,
     requested: Vec<String>,
+    referrers: Vec<(String, String)>,
     discarded: Vec<String>,
     next: u32,
 }
@@ -37,6 +38,9 @@ pub fn delay(url: &str, polls: usize) {
 pub fn requested() -> Vec<String> {
     NET.with(|n| n.lock().unwrap().requested.clone())
 }
+pub fn requested_referrers() -> Vec<(String, String)> {
+    NET.with(|n| n.lock().unwrap().referrers.clone())
+}
 pub fn active() -> usize {
     NET.with(|n| n.lock().unwrap().tickets.len())
 }
@@ -53,6 +57,14 @@ pub fn fetch_bytes_happy_eyeballs(url: &[u8]) -> Result<u32, i32> {
         n.tickets.insert(id, url);
         Ok(id)
     })
+}
+pub fn fetch_bytes_with_referrer(url: &[u8], referrer: &[u8]) -> Result<u32, i32> {
+    let referrer = std::str::from_utf8(referrer).map_err(|_| -1)?.to_owned();
+    let id = fetch_bytes_happy_eyeballs(url)?;
+    NET.with(|n| {
+        n.lock().unwrap().referrers.push((String::from_utf8_lossy(url).into_owned(), referrer));
+    });
+    Ok(id)
 }
 pub fn fetch_bytes_result_len(id: u32) -> Result<usize, i32> {
     NET.with(|n| {

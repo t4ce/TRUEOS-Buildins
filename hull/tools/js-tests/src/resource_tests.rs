@@ -421,6 +421,32 @@ fn video_subdocument_play_control_is_neutralized_into_media_inspection_not_navig
     assert!(r.cookie_snapshot().contains("frame=visited"));
     assert!(!netfs::requested().iter().any(|u|u.contains("ads.test")));
     assert_eq!(netfs::requested().len(),2);
+    assert_eq!(netfs::requested_referrers(),vec![
+        ("https://fixture.test/loading.html".into(),PAGE.into()),
+        ("https://fixture.test/play.html".into(),"https://fixture.test/loading.html".into()),
+    ]);
+    no_errors(&reports);
+}
+
+#[test]
+fn class_labeled_player_frame_hands_off_evaluated_mdcore_source_without_player_libraries() {
+    let mut r=runtime(r#"<p>page stays</p><iframe class='ab-rounded video-frame' src='https://player.test/embed'></iframe>"#,vec![
+        ("https://player.test/embed",r#"<video id=videojs></video>
+        <script src='/player/full-ui.js'></script><script>
+          MDCore.ref='fixture';
+          eval("MDCore.wurl='//cdn.test/movie.mp4?signature=keep';MDCore.poster='/poster.jpg'");
+        </script>"#),
+    ]);
+    r.update_viewport(1280,720);
+    let (doc,reports)=finish(&mut r,1);
+    assert_eq!(text(&doc),"page stays");
+    let request=r.take_video_request().unwrap().1;
+    assert_eq!(request.url,"https://cdn.test/movie.mp4?signature=keep");
+    assert_eq!(request.referrer.as_deref(),Some("https://player.test/"));
+    assert_eq!(netfs::requested(),vec!["https://player.test/embed"]);
+    assert_eq!(netfs::requested_referrers(),vec![
+        ("https://player.test/embed".into(),PAGE.into()),
+    ]);
     no_errors(&reports);
 }
 

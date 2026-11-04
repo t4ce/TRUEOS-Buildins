@@ -258,6 +258,7 @@ pub(crate) struct Loader {
     queue: VecDeque<String>,
     policy: Rc<RefCell<Policy>>,
     entries: HashMap<String, State>,
+    referrers: HashMap<String, String>,
     inline: HashMap<String, Result<Vec<String>, String>>,
     imports: Vec<ImportRequest>,
     pub events: Vec<Event>,
@@ -289,6 +290,7 @@ impl Loader {
             queue: VecDeque::new(),
             policy,
             entries: HashMap::new(),
+            referrers: HashMap::new(),
             inline: HashMap::new(),
             imports: Vec::new(),
             events: Vec::new(),
@@ -413,7 +415,11 @@ impl Loader {
             }
         }
         for url in queued {
-            match netfs::fetch_bytes_happy_eyeballs(url.as_bytes()) {
+            let request = match self.referrers.get(&url) {
+                Some(referrer) => netfs::fetch_bytes_with_referrer(url.as_bytes(), referrer.as_bytes()),
+                None => netfs::fetch_bytes_happy_eyeballs(url.as_bytes()),
+            };
+            match request {
                 Ok(id) => {
                     self.events.push(Event {
                         url: url.clone(),
@@ -610,6 +616,26 @@ impl Loader {
             State::Failed(e) => Prepared::Failed(e.clone()),
             _ => Prepared::Pending,
         }
+    }
+    /// Subdocuments retain their embedding document's request context. The
+    /// host applies the referrer policy at every redirect; this exposes no
+    /// network operation to JavaScript and shares the existing resource limits.
+    pub(crate) fn source_with_referrer(&mut self, url: &str, referrer: &str) -> Prepared<Arc<[u8]>> {
+        let url = match checked_url(url) {
+            Ok(url) => url,
+            Err(error) => return Prepared::Failed(error),
+        };
+        let referrer = match checked_url(referrer) {
+            Ok(referrer) => referrer,
+            Err(error) => return Prepared::Failed(error),
+        };
+        if let Err(error) = self.request(&url) {
+            return Prepared::Failed(error);
+        }
+        if matches!(self.entries.get(&url), Some(State::Queued)) {
+            self.referrers.entry(url.clone()).or_insert(referrer);
+        }
+        self.source(&url)
     }
     pub(crate) fn prefetch(&mut self, url: &str, module: bool) {
         let resolved = if module {

@@ -131,6 +131,10 @@ pub mod netfs {
     pub fn fetch_bytes_happy_eyeballs(url: &[u8]) -> Result<u32, i32> {
         fetch_bytes(url)
     }
+    pub fn fetch_bytes_with_referrer(url: &[u8], _referrer: &[u8]) -> Result<u32, i32> {
+        // Offline replay uses captured response bodies and opens no socket.
+        fetch_bytes(url)
+    }
     pub fn fetch_bytes_result_len(id: u32) -> Result<usize, i32> {
         NET.with(|net| {
             let net = net.lock().unwrap();
