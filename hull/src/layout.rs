@@ -83,6 +83,12 @@ pub(super) const MAX_IMAGE_EDGE: f32 = 1024.0;
 const MAX_LAYOUT_LENGTH: f32 = 32_768.0;
 const MAX_DOCUMENT_EDGE: f32 = 1_000_000.0;
 
+// Page text grows before measurement and wrapping, independently of viewport
+// pixels, physical distance units, window chrome, and the terminal font.
+const INITIAL_FONT_SIZE: f32 = 11.0;
+const PAGE_TEXT_SCALE: f32 = 2.0;
+const DEFAULT_FONT_SIZE: f32 = INITIAL_FONT_SIZE * PAGE_TEXT_SCALE;
+
 /// The same baseline and textLength geometry written into the SVG snapshot.
 pub(super) struct TextRun {
     pub text: String,
@@ -138,8 +144,8 @@ fn export(
         css,
         ResolveContext {
             viewport,
-            font_size: 11.0,
-            root_font_size: 11.0,
+            font_size: INITIAL_FONT_SIZE,
+            root_font_size: INITIAL_FONT_SIZE,
         },
     );
     let mut cascade_scratch = CascadeScratch::default();
@@ -153,7 +159,7 @@ fn export(
     let mut styles = vec![Style::default(); document.nodes.len()];
     let mut text_metrics = vec![TextMetrics::default(); document.nodes.len()];
     let mut variables = vec![Variables::default(); document.nodes.len()];
-    let mut root_font_size = 11.0;
+    let mut root_font_size = DEFAULT_FONT_SIZE;
     phase("setup");
     let mut pending = vec![document.root];
     while let Some(id) = pending.pop() {
@@ -661,7 +667,7 @@ fn export(
             }
         }
         serde_json::to_string_pretty(
-        &serde_json::json!({"engine":"taffy","engine_version":"0.15.0","viewport":{"width":viewport.0,"height":viewport.1},"units":"layout units; CSS lengths currently map 1:1 for compatibility; SVG uses the same numeric coordinates","coordinates":"absolute layout units; right/bottom are rectangle edges, not CSS insets","text_metrics":"synthetic monospace cell metrics: 6 layout units advance by 11 layout units line height at 11-unit default font-size, scaled by inherited CSS font-size and line-height; no font shaping","limitations":["opacity:0 suppresses subtree paint and visibility is inherited; partial-opacity groups and compositing are not implemented","text widths and wrapping use synthetic monospace metrics; no font shaping","dynamic pseudo-classes, pseudo-elements, :has and namespace selectors are not implemented","media conditions cover viewport sizes and orientation; device preference queries, calc, grid tracks, cascade layers and supports conditions are not implemented","inline flow uses approximate flex line boxes; nested inline boxes may wrap as a single item; no complete browser default stylesheet"],"unsupported_rule_count":unsupported_rules,"properties_not_used_for_layout":unused,"nodes":rows}),
+        &serde_json::json!({"engine":"taffy","engine_version":"0.15.0","viewport":{"width":viewport.0,"height":viewport.1},"units":"layout units; non-text CSS lengths map 1:1 for compatibility; SVG uses the same numeric coordinates","page_text_scale":PAGE_TEXT_SCALE,"default_font_size":DEFAULT_FONT_SIZE,"coordinates":"absolute layout units; right/bottom are rectangle edges, not CSS insets","text_metrics":"synthetic monospace cell metrics: advance is font-size * 6/11; normal line height equals font size; default font size is 22 layout units after page text scaling; no font shaping","limitations":["opacity:0 suppresses subtree paint and visibility is inherited; partial-opacity groups and compositing are not implemented","text widths and wrapping use synthetic monospace metrics; no font shaping","dynamic pseudo-classes, pseudo-elements, :has and namespace selectors are not implemented","media conditions cover viewport sizes and orientation; device preference queries, calc, grid tracks, cascade layers and supports conditions are not implemented","inline flow uses approximate flex line boxes; nested inline boxes may wrap as a single item; no complete browser default stylesheet"],"unsupported_rule_count":unsupported_rules,"properties_not_used_for_layout":unused,"nodes":rows}),
     )?
     } else {
         String::new()
@@ -862,7 +868,7 @@ impl LineHeightMetric {
 impl Default for TextMetrics {
     fn default() -> Self {
         Self {
-            font_size: 11.0,
+            font_size: DEFAULT_FONT_SIZE,
             line_height: LineHeightMetric::Normal,
             align: TextAlignMetric::Start,
             whitespace: WhiteSpaceMetric::Normal,
@@ -1161,10 +1167,22 @@ fn radius_pair(
     })
 }
 
+/// Font-relative lengths already contain the page text scale through their
+/// resolved em/rem. Scale independent lengths only at this text boundary;
+/// ordinary CSS geometry continues to use `scalar` without magnification.
+fn text_length(value: &LengthValue, context: ResolveContext) -> Option<f32> {
+    let scale = if matches!(value, LengthValue::Em(_) | LengthValue::Rem(_)) {
+        1.0
+    } else {
+        PAGE_TEXT_SCALE
+    };
+    scalar(value, context).map(|size| (size * scale).clamp(-MAX_LAYOUT_LENGTH, MAX_LAYOUT_LENGTH))
+}
+
 fn font_size(value: &CssFontSize, parent: f32, context: ResolveContext) -> Option<f32> {
     let size = match value {
         CssFontSize::Length(value) => match value {
-            CssLengthPercentage::Dimension(value) => scalar(
+            CssLengthPercentage::Dimension(value) => text_length(
                 value,
                 ResolveContext {
                     font_size: parent,
@@ -1174,7 +1192,7 @@ fn font_size(value: &CssFontSize, parent: f32, context: ResolveContext) -> Optio
             CssLengthPercentage::Percentage(value) => parent * value.0,
             _ => return None,
         },
-        CssFontSize::Absolute(value) => match value {
+        CssFontSize::Absolute(value) => PAGE_TEXT_SCALE * match value {
             AbsoluteFontSize::XXSmall => 9.0,
             AbsoluteFontSize::XSmall => 10.0,
             AbsoluteFontSize::Small => 13.0,
@@ -1201,7 +1219,7 @@ fn line_height(
         CssLineHeight::Normal => LineHeightMetric::Normal,
         CssLineHeight::Number(value) => LineHeightMetric::Number(value.clamp(0.0, 64.0)),
         CssLineHeight::Length(CssLengthPercentage::Dimension(value)) => {
-            LineHeightMetric::Absolute(scalar(
+            LineHeightMetric::Absolute(text_length(
                 value,
                 ResolveContext {
                     font_size,
@@ -1693,8 +1711,10 @@ fn media_feature(
             Value::Length(lightningcss::values::length::Length::Value(value)) => scalar(
                 value,
                 ResolveContext {
-                    font_size: 11.0,
-                    root_font_size: 11.0,
+                    // Media queries measure the viewport in unscaled CSS
+                    // units; page text magnification does not resize it.
+                    font_size: INITIAL_FONT_SIZE,
+                    root_font_size: INITIAL_FONT_SIZE,
                     ..context
                 },
             ),

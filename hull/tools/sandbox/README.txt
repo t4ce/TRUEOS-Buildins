@@ -88,6 +88,14 @@ Useful comparisons:
   --out DIR        Separate artifacts for comparisons.
   --width/--height Content viewport, initially 1280x720, not whole native frame.
 
+Replay and native UI4 use the same 2x page text scale during layout: the default
+font em is 22 layout pixels instead of 11, and authored absolute font sizes and
+line heights also double. Relative sizes inherit the increase once. Wrapping,
+text bounds, SVG and native text use the enlarged metrics; fewer characters fit
+in the same viewport. This does not scale the UI4 frame, browser chrome, TUI,
+or distance units. Non-font-relative box dimensions retain their existing CSS
+mapping. layout.json reports page_text_scale and default_font_size explicitly.
+
 Production retains the active 250 ms allowance and initial render cutoff, with
 per-call 125 ms interrupts. The per-call allowance does not extend the initial
 render window or authorize later DOM changes to publish a new frame.

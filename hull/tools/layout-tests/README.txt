@@ -3,6 +3,20 @@ sprite projection, viewport clipping, script inspection, and snapshot scheduling
 Kernel network/image/UI4/filesystem interfaces are mocked; no external network or
 disk writes occur in the tests.
 
+Page text sizing:
+- Hull applies one 2x page text scale before measurement and wrapping. The
+  inherited default em is 22 layout pixels (previously 11), with a natural
+  12-pixel advance. Authored absolute font sizes and line heights grow by 2x;
+  percentages, em/rem and relative keywords inherit that increase once.
+- Normal and numeric line heights follow the enlarged font. Font-relative
+  padding and dimensions follow the resolved em/rem; other CSS geometry,
+  physical distance units and viewport dimensions keep their existing mapping.
+  Fixed-size boxes may therefore wrap, clip or overflow more text.
+- SVG and native UI4 text share those resolved metrics. UI4 frame dimensions,
+  browser chrome and terminal/TUI text are unaffected. DotM remains a physical
+  distance (the JavaScript lab uses 1 DotM = 1 cm), not a font-size multiplier.
+- Diagnostic layout.json records page_text_scale and default_font_size.
+
 Run outside the Blueprint Cargo configuration:
   cd /tmp
   CARGO_TARGET_DIR=/home/t4ce/Repositories/TRUEOS/tgt/hull-layout-tests cargo test --manifest-path /home/t4ce/Repositories/TRUEOS-Buildins/hull/tools/layout-tests/Cargo.toml

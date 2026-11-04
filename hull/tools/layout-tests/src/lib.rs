@@ -320,7 +320,7 @@ mod tests {
                 .iter()
                 .find(|node| node["tag"] == "h1")
                 .unwrap();
-            assert!(heading["rect"]["height"].as_f64().unwrap() < 30.0);
+            assert!(heading["rect"]["height"].as_f64().unwrap() < 60.0);
         }
     }
 
@@ -328,7 +328,7 @@ mod tests {
     fn double_precision_wrapping_keeps_real_subpixel_width_constraints() {
         let (_, output) = export(
             "<div>Technik</div>",
-            "div { font-size:19.8px;white-space:pre-wrap;width:75px }",
+            "div { font-size:19.8px;white-space:pre-wrap;width:150px }",
         );
         let lines: Vec<_> = output
             .text_runs
@@ -602,8 +602,8 @@ mod tests {
         assert_eq!(output.text_runs.len(), 2);
         assert_eq!(output.svg.matches("<text ").count(), 2);
         for run in &output.text_runs {
-            assert_eq!(run.size_px, 22.0);
-            assert_eq!(run.advance_px, layout::estimate_text_width(&run.text, 22.0));
+            assert_eq!(run.size_px, 44.0);
+            assert_eq!(run.advance_px, layout::estimate_text_width(&run.text, 44.0));
             assert!(output.svg.contains(&format!(
                 "<text x=\"{}\" y=\"{}\" font-size=\"{}\"",
                 run.x, run.baseline_y, run.size_px,
@@ -617,7 +617,7 @@ mod tests {
         assert_eq!(output.text_runs[0].text, "A&Ω");
         assert_eq!(output.text_runs[1].text, "B<");
         assert!(
-            (output.text_runs[1].baseline_y - output.text_runs[0].baseline_y - 30.0).abs() < 0.001
+            (output.text_runs[1].baseline_y - output.text_runs[0].baseline_y - 60.0).abs() < 0.001
         );
         assert!(output.svg.contains("A&amp;Ω</text>"));
         assert!(output.svg.contains("B&lt;</text>"));
@@ -670,18 +670,18 @@ mod tests {
         );
         let json = serde_json::from_str(&output.json).unwrap();
         assert_eq!(text_rect(&doc, &json, "zero")["rect"]["height"], 0.0);
-        assert_eq!(text_rect(&doc, &json, "space")["rect"]["height"], 11.0);
-        assert_eq!(text_rect(&doc, &json, "space")["rect"]["width"], 18.0);
+        assert_eq!(text_rect(&doc, &json, "space")["rect"]["height"], 22.0);
+        assert_eq!(text_rect(&doc, &json, "space")["rect"]["width"], 36.0);
     }
     #[test]
     fn pre_wrap_preserves_space_columns_and_reserves_every_emitted_line() {
         let (doc, output) = export(
             "<div id='wrapped'>a        b</div><div id='next'>next</div>",
-            "#wrapped{white-space:pre-wrap;width:12px}",
+            "#wrapped{white-space:pre-wrap;width:24px}",
         );
         let json = serde_json::from_str(&output.json).unwrap();
         let wrapped = &text_rect(&doc, &json, "wrapped")["rect"];
-        assert_eq!(wrapped["height"], 55.0);
+        assert_eq!(wrapped["height"], 110.0);
         assert!(
             node(&doc, &json, "next")["rect"]["top"].as_f64().unwrap()
                 >= wrapped["bottom"].as_f64().unwrap()
@@ -696,7 +696,7 @@ mod tests {
             .iter()
             .find(|run| run.text.ends_with('b'))
             .unwrap();
-        assert_eq!(b.baseline_y - a.baseline_y, 44.0);
+        assert_eq!(b.baseline_y - a.baseline_y, 88.0);
         assert!(
             output
                 .text_runs
@@ -708,12 +708,12 @@ mod tests {
     fn normal_trailing_space_reserves_advance_without_a_phantom_line() {
         let (doc, output) = export(
             "<div id='wrapped'>aa </div><div id='next'>next</div>",
-            "#wrapped{width:12px}",
+            "#wrapped{width:24px}",
         );
         let json = serde_json::from_str(&output.json).unwrap();
-        assert_eq!(text_rect(&doc, &json, "wrapped")["rect"]["height"], 11.0);
+        assert_eq!(text_rect(&doc, &json, "wrapped")["rect"]["height"], 22.0);
         assert_eq!(output.text_runs[0].text, "aa");
-        assert_eq!(output.text_runs[0].advance_px, 12.0);
+        assert_eq!(output.text_runs[0].advance_px, 24.0);
         assert!(
             output
                 .text_runs
@@ -792,54 +792,55 @@ mod tests {
         );
     }
     #[test]
-    fn default_text_uses_six_by_eleven_cell() {
+    fn default_text_doubles_the_six_by_eleven_source_cell() {
         assert_eq!(layout::estimate_text_width("xx", 11.0), 12.0);
-        let (doc, json) = run("<div id='p' style='width:18px'>xx</div>", "");
-        assert_eq!(text_rect(&doc, &json, "p")["rect"]["height"], 11.0);
+        let (doc, json) = run("<div id='p' style='width:36px'>xx</div>", "");
+        assert_eq!(text_rect(&doc, &json, "p")["rect"]["height"], 22.0);
+        assert_eq!(text_rect(&doc, &json, "p")["rect"]["width"], 24.0);
     }
     #[test]
     fn inherited_font_size_scales_advance_and_normal_line_height() {
         assert_eq!(layout::estimate_text_width("x", 22.0), 12.0);
         let (doc, json) = run(
-            "<div id='p' style='width:26px'><span id='c'>xx</span></div>",
+            "<div id='p' style='width:52px'><span id='c'>xx</span></div>",
             "#p{font-size:22px}",
-        );
-        assert_eq!(text_rect(&doc, &json, "c")["rect"]["height"], 22.0);
-    }
-    #[test]
-    fn font_shorthand_sets_size_and_numeric_line_height() {
-        let (doc, json) = run(
-            "<div id='p' style='width:26px'><span id='c'>xx</span></div>",
-            "#p{font:22px/2 monospace}",
         );
         assert_eq!(text_rect(&doc, &json, "c")["rect"]["height"], 44.0);
     }
     #[test]
+    fn font_shorthand_sets_size_and_numeric_line_height() {
+        let (doc, json) = run(
+            "<div id='p' style='width:52px'><span id='c'>xx</span></div>",
+            "#p{font:22px/2 monospace}",
+        );
+        assert_eq!(text_rect(&doc, &json, "c")["rect"]["height"], 88.0);
+    }
+    #[test]
     fn inherited_absolute_and_numeric_line_height_survive_child_font_size() {
         let (doc, json) = run(
-            "<div id='p' style='width:26px'><span id='a'>xx</span><span id='b'>xx</span></div>",
+            "<div id='p' style='width:52px'><span id='a'>xx</span><span id='b'>xx</span></div>",
             "#p{font-size:22px;line-height:30px}#a{font-size:11px}#b{font-size:22px}",
         );
-        assert_eq!(text_rect(&doc, &json, "a")["rect"]["height"], 30.0);
+        assert_eq!(text_rect(&doc, &json, "a")["rect"]["height"], 60.0);
         let (doc, json) = run(
-            "<div id='p' style='width:26px'><span id='c'>xx</span></div>",
+            "<div id='p' style='width:52px'><span id='c'>xx</span></div>",
             "#p{font-size:11px;line-height:1.5}#c{font-size:22px}",
         );
-        assert_eq!(text_rect(&doc, &json, "c")["rect"]["height"], 33.0);
+        assert_eq!(text_rect(&doc, &json, "c")["rect"]["height"], 66.0);
     }
     #[test]
     fn relative_font_size_resolves_against_inherited_size_and_cascade_winner() {
         let (doc, json) = run(
-            "<div id='p' style='width:12px'><span id='c' class='x'>x</span></div>",
+            "<div id='p' style='width:24px'><span id='c' class='x'>x</span></div>",
             "#p{font-size:22px}#c{font-size:2em;line-height:50px}.x{font-size:smaller}",
         );
-        assert_eq!(text_rect(&doc, &json, "c")["rect"]["height"], 50.0);
+        assert_eq!(text_rect(&doc, &json, "c")["rect"]["height"], 100.0);
     }
     #[test]
     fn wrapping_uses_available_content_width() {
-        let (doc, json) = run("<div id='p' style='width:18px'>aa aa aa</div>", "");
+        let (doc, json) = run("<div id='p' style='width:36px'>aa aa aa</div>", "");
         let r = &text_rect(&doc, &json, "p")["rect"];
-        assert_eq!(r["height"], 33.0);
+        assert_eq!(r["height"], 66.0);
     }
     #[test]
     fn typed_inline_dimensions_include_padding_and_border() {
@@ -996,7 +997,7 @@ mod tests {
         let text = &text_rect(&doc, &json, "box")["rect"];
         assert_eq!(
             text["left"].as_f64().unwrap(),
-            rect["left"].as_f64().unwrap() + 44.0
+            rect["left"].as_f64().unwrap() + 38.0
         );
     }
     #[test]
@@ -1034,13 +1035,13 @@ mod tests {
         );
         let body = &node(&doc, &json, "box")["rect"];
         let paragraph = &node(&doc, &json, "text")["rect"];
-        assert_eq!(body["width"], 480.0);
+        assert_eq!(body["width"], 960.0);
         assert!(paragraph["top"].as_f64().unwrap() >= 180.0);
     }
     #[test]
     fn preformatted_text_preserves_line_breaks() {
         let (doc, json) = run("<pre id='box'>aa\n bb</pre>", "");
-        assert_eq!(text_rect(&doc, &json, "box")["rect"]["height"], 22.0);
+        assert_eq!(text_rect(&doc, &json, "box")["rect"]["height"], 44.0);
     }
     #[test]
     fn index_keys_the_subject_instead_of_its_ancestor() {

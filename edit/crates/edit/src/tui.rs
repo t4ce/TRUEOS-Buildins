@@ -1061,14 +1061,22 @@ impl Tui {
                 if let Some(enabled) = node.attributes.editor_background {
                     let mut rect = destination;
                     rect.left = (inner.left + tb.margin_width()).max(rect.left).min(rect.right);
-                    self.editor_background.set_page(enabled, crate::editor_background::Page {
-                        document: tc.buffer as *const TextBufferCell as usize,
-                        rect,
-                        scroll: tc.scroll_offset,
-                        wrap: tb.is_word_wrap_enabled(),
-                        tab_size: tb.tab_size(),
-                        glyph_input_revision: tb.glyph_input_revision(),
-                    });
+                    // Only the page may animate. Floating roots are also a veto even
+                    // if they do not overlap the page or steal keyboard focus.
+                    let active = self.is_node_focused(node.id)
+                        && ptr::eq(self.prev_tree.root_first, self.prev_tree.root_last);
+                    self.editor_background.set_page(
+                        enabled,
+                        active,
+                        crate::editor_background::Page {
+                            document: tc.buffer as *const TextBufferCell as usize,
+                            rect,
+                            scroll: tc.scroll_offset,
+                            wrap: tb.is_word_wrap_enabled(),
+                            tab_size: tb.tab_size(),
+                            glyph_input_revision: tb.glyph_input_revision(),
+                        },
+                    );
                 }
 
                 if !tc.single_line {
@@ -1769,7 +1777,8 @@ impl<'a> Context<'a, '_> {
     }
 
     /// Opt this textarea into TRUEOS's editor-only Conway background.
-    /// Glyphs remain opaque; floating menus and dialogs are excluded by layout.
+    /// Glyphs remain opaque. Animation pauses unless this page owns focus
+    /// and there are no floating menus, dialogs, or other overlay roots.
     #[cfg(any(target_os = "trueos", test))]
     pub fn attr_editor_background(&mut self, enabled: bool) {
         self.tree.last_node.borrow_mut().attributes.editor_background = Some(enabled);
