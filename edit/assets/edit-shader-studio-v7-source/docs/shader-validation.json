@@ -1,0 +1,131 @@
+{
+  "uniform_array_checks": {
+    "aurora": {
+      "name": "iChannelResolution[0]",
+      "active_array_length": 1,
+      "old_batch_upload_count": 2,
+      "old_batch_upload_error": 0,
+      "current_per_element_upload_error": 0
+    },
+    "cubes": {
+      "name": "iChannelResolution[0]",
+      "active_array_length": 1,
+      "old_batch_upload_count": 2,
+      "old_batch_upload_error": 0,
+      "current_per_element_upload_error": 0
+    },
+    "contour": {
+      "name": "iChannelResolution[0]",
+      "active_array_length": 1,
+      "old_batch_upload_count": 2,
+      "old_batch_upload_error": 0,
+      "current_per_element_upload_error": 0
+    },
+    "dither": {
+      "name": "iChannelResolution[0]",
+      "active_array_length": 1,
+      "old_batch_upload_count": 2,
+      "old_batch_upload_error": 0,
+      "current_per_element_upload_error": 0
+    }
+  },
+  "driver": "OpenGL ES 3.2 Mesa 25.0.7-2+deb13u1",
+  "renderer": "llvmpipe (LLVM 19.1.7, 256 bits)",
+  "mask_dimensions": [
+    900,
+    550
+  ],
+  "renderer_dimensions": [
+    450,
+    275
+  ],
+  "mask_bytes": 495000,
+  "nonzero_glyph_pixels": 9669,
+  "summed_glyph_coverage_a": 1601772,
+  "summed_glyph_coverage_b": 1601772,
+  "characters_in_both_layouts": 555,
+  "production_capture_fixture": "/workspace/scratch/cb2b4e04fd87/text-mask-validation.r8",
+  "layout_b_translation": [
+    240,
+    20
+  ],
+  "feedback_frames": 120,
+  "palette": "violet",
+  "feedback": 0.88,
+  "text_influence": 1,
+  "gl_error": 0,
+  "results": [
+    {
+      "shader": "aurora",
+      "mean_absolute_difference_vs_blank_8bit": 21.6418,
+      "pixels_different_vs_blank_percent": 47.94,
+      "mean_absolute_difference_same_characters_different_layout_8bit": 30.7541,
+      "pixels_different_same_characters_different_layout_percent": 73.61,
+      "raw_nonempty_peak_channel": 183,
+      "raw_nonempty_mean_channel": 28.642,
+      "default_50_percent_veil_mean_absolute_difference_vs_blank_8bit": 10.8209,
+      "cleared_empty_max_difference_vs_blank_8bit": 0,
+      "old_trails_mean_difference_before_clear_8bit": 17.1272
+    },
+    {
+      "shader": "wave",
+      "mean_absolute_difference_vs_blank_8bit": 16.7134,
+      "pixels_different_vs_blank_percent": 46.37,
+      "mean_absolute_difference_same_characters_different_layout_8bit": 26.0285,
+      "pixels_different_same_characters_different_layout_percent": 73.57,
+      "raw_nonempty_peak_channel": 255,
+      "raw_nonempty_mean_channel": 23.713,
+      "default_50_percent_veil_mean_absolute_difference_vs_blank_8bit": 8.3567,
+      "cleared_empty_max_difference_vs_blank_8bit": 0,
+      "old_trails_mean_difference_before_clear_8bit": 9.1713
+    },
+    {
+      "shader": "cubes",
+      "mean_absolute_difference_vs_blank_8bit": 4.7586,
+      "pixels_different_vs_blank_percent": 16.46,
+      "mean_absolute_difference_same_characters_different_layout_8bit": 8.4694,
+      "pixels_different_same_characters_different_layout_percent": 29.73,
+      "raw_nonempty_peak_channel": 204,
+      "raw_nonempty_mean_channel": 11.759,
+      "default_50_percent_veil_mean_absolute_difference_vs_blank_8bit": 2.3793,
+      "cleared_empty_max_difference_vs_blank_8bit": 0,
+      "old_trails_mean_difference_before_clear_8bit": 3.833
+    },
+    {
+      "shader": "contour",
+      "mean_absolute_difference_vs_blank_8bit": 10.079,
+      "pixels_different_vs_blank_percent": 33.51,
+      "mean_absolute_difference_same_characters_different_layout_8bit": 17.1939,
+      "pixels_different_same_characters_different_layout_percent": 59.4,
+      "raw_nonempty_peak_channel": 237,
+      "raw_nonempty_mean_channel": 17.079,
+      "default_50_percent_veil_mean_absolute_difference_vs_blank_8bit": 5.0395,
+      "cleared_empty_max_difference_vs_blank_8bit": 0,
+      "old_trails_mean_difference_before_clear_8bit": 9.5271
+    },
+    {
+      "shader": "dither",
+      "mean_absolute_difference_vs_blank_8bit": 3.0032,
+      "pixels_different_vs_blank_percent": 4.31,
+      "mean_absolute_difference_same_characters_different_layout_8bit": 4.8962,
+      "pixels_different_same_characters_different_layout_percent": 7.7,
+      "raw_nonempty_peak_channel": 169,
+      "raw_nonempty_mean_channel": 10.003,
+      "default_50_percent_veil_mean_absolute_difference_vs_blank_8bit": 1.5016,
+      "cleared_empty_max_difference_vs_blank_8bit": 0,
+      "old_trails_mean_difference_before_clear_8bit": 2.5069
+    },
+    {
+      "shader": "echo",
+      "mean_absolute_difference_vs_blank_8bit": 13.3969,
+      "pixels_different_vs_blank_percent": 41.82,
+      "mean_absolute_difference_same_characters_different_layout_8bit": 20.8963,
+      "pixels_different_same_characters_different_layout_percent": 69.23,
+      "raw_nonempty_peak_channel": 192,
+      "raw_nonempty_mean_channel": 20.397,
+      "default_50_percent_veil_mean_absolute_difference_vs_blank_8bit": 6.6985,
+      "cleared_empty_max_difference_vs_blank_8bit": 0,
+      "old_trails_mean_difference_before_clear_8bit": 13.0941
+    }
+  ]
+}

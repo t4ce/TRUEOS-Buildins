@@ -1,0 +1,38 @@
+[
+  {
+    "size": 16,
+    "lineHeight": 28,
+    "width": 10,
+    "allAsciiWidthSpread": 0,
+    "ascent": 13,
+    "descent": 5,
+    "baseline": 18,
+    "partialAlpha": 0,
+    "solidPixels": 371,
+    "loadedFromWoff2": true
+  },
+  {
+    "size": 24,
+    "lineHeight": 36,
+    "width": 15,
+    "allAsciiWidthSpread": 0,
+    "ascent": 19.5,
+    "descent": 7.5,
+    "baseline": 24,
+    "partialAlpha": 671,
+    "solidPixels": 509,
+    "loadedFromWoff2": true
+  },
+  {
+    "size": 32,
+    "lineHeight": 44,
+    "width": 20,
+    "allAsciiWidthSpread": 0,
+    "ascent": 26,
+    "descent": 10,
+    "baseline": 30,
+    "partialAlpha": 0,
+    "solidPixels": 1484,
+    "loadedFromWoff2": true
+  }
+]

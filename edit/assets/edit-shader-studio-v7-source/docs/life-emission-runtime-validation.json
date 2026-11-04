@@ -1,0 +1,57 @@
+{
+  "runtime_checks": [
+    {
+      "test": "Positive alpha emits new coverage only and flips rows for GL",
+      "passed": true
+    },
+    {
+      "test": "Same emission revision suppresses whitespace/layout movement even when pixels differ",
+      "passed": true
+    },
+    {
+      "test": "Identical snapshots and deletions emit no live cells",
+      "passed": true
+    },
+    {
+      "test": "Whitespace snapshot becomes the next baseline, preventing replay on following input",
+      "passed": true
+    },
+    {
+      "test": "Upload plus one emission preserves generation, time, and partial timestep",
+      "passed": true
+    },
+    {
+      "test": "Whitespace upload changes raw input without emission or reset",
+      "passed": true
+    },
+    {
+      "test": "Legacy image-only callers advance emission revision only for changed pixels",
+      "passed": true
+    },
+    {
+      "test": "Incoming metadata is retained and exposed to custom shader uniform",
+      "passed": true
+    },
+    {
+      "test": "Reselecting Life, compiling Life, and switching away/back preserve the world",
+      "passed": true
+    },
+    {
+      "test": "Unselected retained world receives new ink but does not advance generations",
+      "passed": true
+    },
+    {
+      "test": "Only explicit reseed requests replace the world and reset its generation",
+      "passed": true
+    },
+    {
+      "test": "Viewport grid resize preserves generation and copies overlap at top-left",
+      "passed": true
+    },
+    {
+      "test": "CSS geometry changes within the same grid do not reset or allocate",
+      "passed": true
+    }
+  ],
+  "count": 13
+}

@@ -1391,6 +1391,25 @@ mod images;
 mod scripts;
 
 #[cfg(test)]
+mod render_path_tests {
+    use super::*;
+    #[test]
+    fn render_path_keeps_geometry_and_skips_diagnostic_json() {
+        let document = rp5::parse(
+            "<style>p{margin:4px}.box{width:120px;height:45px}</style><main><p>Hello <b>layout</b></p><img class=box><p>after</p></main>",
+        );
+        let mut css = css::Css::default();
+        css.parse_document(&document, "https://example.com/");
+        let diagnostic = layout::compute(&document, &css, (1280, 720)).unwrap();
+        let render = layout::compute_for_render(&document, &css, (1280, 720)).unwrap();
+        assert_eq!(render.svg, diagnostic.svg);
+        assert_eq!(render.line_rects, diagnostic.line_rects);
+        assert!(!diagnostic.json.is_empty());
+        assert!(render.json.is_empty());
+    }
+}
+
+#[cfg(test)]
 mod image_layout_tests {
     use super::*;
     fn output(html: &str) -> layout::Export {

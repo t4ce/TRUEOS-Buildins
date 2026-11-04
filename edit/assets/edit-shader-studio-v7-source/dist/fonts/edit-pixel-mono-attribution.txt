@@ -1,0 +1,21 @@
+Edit Pixel Mono — ASCII fixed-width web-font derivative
+
+Derived from “Pixel UniCode” by ivancr72.
+Original copyright: Copyright ivancr72 2013.
+Original font: https://fontstruct.com/fontstructions/show/908795
+License: Creative Commons Attribution 3.0 Unported (CC BY 3.0).
+License URL: https://creativecommons.org/licenses/by/3.0/
+
+Changes made for edit / shader studio:
+- Included printable ASCII U+0020–U+007E: A–Z, a–z, 0–9, space, and punctuation.
+- Assigned a uniform 640-unit advance in a 1024-unit em and centered glyphs
+  through whole 64-unit horizontal shifts. Pixel outlines and baselines remain
+  unchanged. No contours were added, removed, or reshaped.
+- Added U+00A0 (non-breaking space) as an alias of the space glyph.
+- Renamed the derivative to Edit Pixel Mono and converted it to WOFF2.
+
+The source font was supplied in pixel_unicode.zip by the user. The unmodified
+license and readme from that archive accompany this derivative as
+pixel-unicode-license.txt and pixel-unicode-readme.txt.
+
+No endorsement by the original font creator or FontStruct is implied.

@@ -1,0 +1,67 @@
+{
+  "source_archive": "pixel_unicode.zip",
+  "source_font": "Pixel UniCode",
+  "source_creator": "ivancr72",
+  "source_url": "https://fontstruct.com/fontstructions/show/908795",
+  "license": "CC BY 3.0",
+  "license_url": "https://creativecommons.org/licenses/by/3.0/",
+  "family": "Edit Pixel Mono",
+  "file": "edit-pixel-mono.woff2",
+  "bytes": 2672,
+  "original_ttf_bytes": 302084,
+  "codepoints": 96,
+  "ranges": [
+    "U+0020-007E",
+    "U+00A0"
+  ],
+  "all_printable_ascii_present": true,
+  "all_printable_ascii_equal_advance": true,
+  "glyph_shapes_preserved_except_horizontal_translation": true,
+  "original_64_unit_point_grid_preserved": true,
+  "all_printable_ascii_bounds_inside_cell": true,
+  "units_per_em": 1024,
+  "advance_units": 640,
+  "source_pixel_units": 64,
+  "capital_height_units": 512,
+  "font_ascent_units": 832,
+  "font_descent_units": -320,
+  "preserved_embedding_flags": 4,
+  "pixel_metrics": [
+    {
+      "css_font_size": 10,
+      "advance_px": 6.25,
+      "capital_height_px": 5.0,
+      "source_pixel_px": 0.625
+    },
+    {
+      "css_font_size": 14,
+      "advance_px": 8.75,
+      "capital_height_px": 7.0,
+      "source_pixel_px": 0.875
+    },
+    {
+      "css_font_size": 16,
+      "advance_px": 10.0,
+      "capital_height_px": 8.0,
+      "source_pixel_px": 1.0
+    },
+    {
+      "css_font_size": 24,
+      "advance_px": 15.0,
+      "capital_height_px": 12.0,
+      "source_pixel_px": 1.5
+    },
+    {
+      "css_font_size": 32,
+      "advance_px": 20.0,
+      "capital_height_px": 16.0,
+      "source_pixel_px": 2.0
+    },
+    {
+      "css_font_size": 48,
+      "advance_px": 30.0,
+      "capital_height_px": 24.0,
+      "source_pixel_px": 3.0
+    }
+  ]
+}

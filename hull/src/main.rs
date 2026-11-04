@@ -620,7 +620,7 @@ impl ApplicationHandler for Hull {
             self.layout_attempted = true;
             self.css.freeze();
             let started = std::time::Instant::now();
-            let result = layout::compute(
+            let result = layout::compute_for_render(
                 self.document.as_ref().unwrap(),
                 &self.css,
                 self.viewport.extent(),

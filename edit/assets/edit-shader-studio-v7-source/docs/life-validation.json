@@ -1,0 +1,206 @@
+{
+  "compiled_programs": [
+    {
+      "shader": "aurora",
+      "version": 100,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "wave",
+      "version": 100,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "cubes",
+      "version": 100,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "contour",
+      "version": 100,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "dither",
+      "version": 100,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "echo",
+      "version": 100,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "life",
+      "version": 100,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "feedback",
+      "version": 100,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "life-seed",
+      "version": 100,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "life-step",
+      "version": 100,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "aurora",
+      "version": 300,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "wave",
+      "version": 300,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "cubes",
+      "version": 300,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "contour",
+      "version": 300,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "dither",
+      "version": 300,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "echo",
+      "version": 300,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "life",
+      "version": 300,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "feedback",
+      "version": 300,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "life-seed",
+      "version": 300,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "life-step",
+      "version": 300,
+      "compiled": true,
+      "linked": true
+    }
+  ],
+  "gpu_rule_tests": [
+    {
+      "test": "block still life",
+      "generations": 10,
+      "initial_live": 4,
+      "final_live": 4,
+      "passed": true
+    },
+    {
+      "test": "blinker period two",
+      "generations": 2,
+      "initial_live": 3,
+      "final_live": 3,
+      "passed": true
+    },
+    {
+      "test": "glider translates one diagonal cell in four generations",
+      "generations": 4,
+      "initial_live": 5,
+      "final_live": 5,
+      "passed": true
+    },
+    {
+      "test": "empty world stays empty",
+      "generations": 10,
+      "initial_live": 0,
+      "final_live": 0,
+      "passed": true
+    },
+    {
+      "test": "finite dead boundary",
+      "generations": 12,
+      "initial_live": 5,
+      "final_live": 4,
+      "passed": true
+    },
+    {
+      "test": "decorative green and blue never influence Conway rules",
+      "generations": 8,
+      "initial_live": 3,
+      "final_live": 3,
+      "passed": true
+    },
+    {
+      "test": "random world agrees with independent CPU rules",
+      "generations": 40,
+      "initial_live": 70,
+      "final_live": 35,
+      "passed": true
+    }
+  ],
+  "glyph_snapshots": [
+    {
+      "generation": 0,
+      "alive": 2699,
+      "trail": 2699
+    },
+    {
+      "generation": 10,
+      "alive": 1987,
+      "trail": 7284
+    },
+    {
+      "generation": 30,
+      "alive": 1643,
+      "trail": 9565
+    },
+    {
+      "generation": 60,
+      "alive": 1477,
+      "trail": 9343
+    }
+  ],
+  "blank_seed_passed": true,
+  "nonempty_seed_passed": true,
+  "boundary": "finite dead",
+  "grid": [
+    300,
+    184
+  ],
+  "gl_renderer": "llvmpipe (LLVM 19.1.7, 256 bits)",
+  "gl_version": "OpenGL ES 3.2 Mesa 25.0.7-2+deb13u1"
+}

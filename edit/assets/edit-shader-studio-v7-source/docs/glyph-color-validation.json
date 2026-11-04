@@ -1,0 +1,82 @@
+{
+  "realCanvas2D": true,
+  "productionCapture": "text-mask-v7-color.js",
+  "oldR8Capture": "current v6 dist/text-mask.js",
+  "checks": [
+    {
+      "name": "actual-11-app-pastels-antialiased",
+      "glyphPixels": 3476,
+      "sourceRGBMismatches": 0,
+      "r8DifferentBytes": 0
+    },
+    {
+      "name": "source-rgb-block-16",
+      "glyphPixels": 76,
+      "pixelsByColor": [
+        20,
+        18,
+        22,
+        16
+      ],
+      "r8DifferentBytes": 0
+    },
+    {
+      "name": "source-rgb-block-32",
+      "glyphPixels": 304,
+      "pixelsByColor": [
+        80,
+        72,
+        88,
+        64
+      ],
+      "r8DifferentBytes": 0
+    },
+    {
+      "name": "wrapped-tabs-crlf",
+      "glyphPixels": 552,
+      "r8DifferentBytes": 0
+    },
+    {
+      "name": "scroll-both-axes",
+      "glyphPixels": 481,
+      "r8DifferentBytes": 0
+    },
+    {
+      "name": "classic-font-spacing",
+      "glyphPixels": 1142,
+      "r8DifferentBytes": 0
+    },
+    {
+      "name": "classic-large-wrapped",
+      "glyphPixels": 4123,
+      "r8DifferentBytes": 0
+    },
+    {
+      "name": "blank",
+      "glyphPixels": 0,
+      "r8DifferentBytes": 0
+    }
+  ],
+  "width": 900,
+  "height": 550,
+  "font": "EditBlock",
+  "fontSize": 16,
+  "lineHeight": 28,
+  "rowOrder": "top-down",
+  "colorFormat": "straight RGBA8",
+  "alphaExactlyMatchesR8": true,
+  "glyphPixels": 4942,
+  "sourcePalettePixelCounts": {
+    "154,166,184": 1379,
+    "192,173,235": 756,
+    "220,226,232": 1705,
+    "197,216,167": 698,
+    "227,188,147": 244,
+    "179,216,218": 160
+  },
+  "fixtureR8": "/workspace/scratch/cb2b4e04fd87/glyph-color-validation.r8",
+  "fixtureRGBA": "/workspace/scratch/cb2b4e04fd87/glyph-color-validation.rgba",
+  "preview": "/workspace/scratch/cb2b4e04fd87/glyph-color-preview.png",
+  "fixtureText": "// Life begins with the color of your words.\n\nconst seed = { color: \"aurora\", alive: true };\nconst alphabet = \"ABCDEFGHIJKLMNOPQRSTUVWXYZ\";\nconst numbers = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];\n\nfunction evolve(cells) {\n  for (const cell of cells) {\n    if (cell.neighbors === 3) return \"light\";\n    if (cell.neighbors === 2) return cell.color;\n  }\n}\n\n// New letters emit into the living field.\n// Their syntax colors travel, combine, and wrap.\nconst rgb = (left + right) % 256;\nconst next = evolve(seed);\n\nprint(\"type something. watch it grow.\");",
+  "browserUIQA": false
+}

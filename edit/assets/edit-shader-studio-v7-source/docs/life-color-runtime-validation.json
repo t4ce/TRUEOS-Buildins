@@ -1,0 +1,192 @@
+{
+  "tests": 45,
+  "passed": 45,
+  "failed": 0,
+  "original_behavior_tests": 32,
+  "new_color_lifecycle_tests": 13,
+  "engine": "shader-engine-v7-color.js",
+  "engine_sha256": "c8b5ca1e8df311863cc32e63019e2a73544b857b3ae5e6984108de6db57e3130",
+  "checks": [
+    {
+      "test": "RGBA upload flips rows, preserves straight source RGB and black, and uses authoritative R8 alpha",
+      "passed": true
+    },
+    {
+      "test": "Color bytes stay a CPU reference until the engine has Life resources",
+      "passed": true
+    },
+    {
+      "test": "RGB-only captures update source color without emitting or recoloring the retained world",
+      "passed": true
+    },
+    {
+      "test": "Positive alpha delta emits once while uploading the complete new source RGB",
+      "passed": true
+    },
+    {
+      "test": "Color input validation accepts straight byte arrays and rejects malformed dimensions",
+      "passed": true
+    },
+    {
+      "test": "Either Life channel activates resources and the wrapper exposes exactly four channels",
+      "passed": true
+    },
+    {
+      "test": "State and color emission read the same old pair and commit the shared index after both draws",
+      "passed": true
+    },
+    {
+      "test": "Generation pass uses new birth flags plus old RGB and advances only after both outputs",
+      "passed": true
+    },
+    {
+      "test": "Manual restart and scroll refresh reseed both fields and preserve the animation clock",
+      "passed": true
+    },
+    {
+      "test": "Resize copies state and RGB from the same old index without resetting time or generation",
+      "passed": true
+    },
+    {
+      "test": "A failed color framebuffer allocation leaves the complete old pair usable",
+      "passed": true
+    },
+    {
+      "test": "Seven non-Life displays, generic feedback, and all occupancy shader bodies remain byte-identical",
+      "passed": true
+    },
+    {
+      "test": "Real engine context restoration rebuilds color resources from retained CPU input and destroy releases them",
+      "passed": true
+    },
+    {
+      "test": "Positive alpha emits new coverage only and flips rows for GL",
+      "passed": true
+    },
+    {
+      "test": "Same emission revision suppresses whitespace/layout movement even when pixels differ",
+      "passed": true
+    },
+    {
+      "test": "Identical snapshots and deletions emit no live cells",
+      "passed": true
+    },
+    {
+      "test": "Whitespace snapshot becomes the next baseline, preventing replay on following input",
+      "passed": true
+    },
+    {
+      "test": "Upload plus one emission preserves generation, time, and partial timestep",
+      "passed": true
+    },
+    {
+      "test": "Whitespace upload changes raw input without emission or reset",
+      "passed": true
+    },
+    {
+      "test": "Legacy image-only callers advance emission revision only for changed pixels",
+      "passed": true
+    },
+    {
+      "test": "Incoming metadata is retained and exposed to custom shader uniform",
+      "passed": true
+    },
+    {
+      "test": "Reselecting Life, compiling Life, and switching away/back preserve the world",
+      "passed": true
+    },
+    {
+      "test": "Unselected retained world receives new ink but does not advance generations",
+      "passed": true
+    },
+    {
+      "test": "Manual restart still replaces the world and resets its generation",
+      "passed": true
+    },
+    {
+      "test": "Viewport grid resize preserves generation and copies overlap at top-left",
+      "passed": true
+    },
+    {
+      "test": "CSS geometry changes within the same grid do not reset or allocate",
+      "passed": true
+    },
+    {
+      "test": "A new scroll revision refreshes from the latest full mask once, without resetting the animation clock",
+      "passed": true
+    },
+    {
+      "test": "First scroll metadata and edits at unchanged offsets keep Life additive",
+      "passed": true
+    },
+    {
+      "test": "first successful capture starts emission revision at one; identical snapshots keep it",
+      "passed": true
+    },
+    {
+      "test": "whitespace-only edits and their layout changes never advance emission revision",
+      "passed": true
+    },
+    {
+      "test": "ink edits, same-length replacements, repeated characters, and deletions advance emission revision",
+      "passed": true
+    },
+    {
+      "test": "selected typography changes advance emission revision without a text edit",
+      "passed": true
+    },
+    {
+      "test": "a web font becoming ready emits once even when its CSS and text are unchanged",
+      "passed": true
+    },
+    {
+      "test": "unavailable or failing optional font readiness checks do not block capture",
+      "passed": true
+    },
+    {
+      "test": "each-key coalescing compares captured content, including edits undone before capture",
+      "passed": true
+    },
+    {
+      "test": "manual mode keeps emission identity until the final content is explicitly captured",
+      "passed": true
+    },
+    {
+      "test": "three-second snapshots retain their raw cadence while only new ink advances emission identity",
+      "passed": true
+    },
+    {
+      "test": "failed capture does not consume an emission revision or the pending text change",
+      "passed": true
+    },
+    {
+      "test": "captured vertical and horizontal scrolling each advance the refresh revision once",
+      "passed": true
+    },
+    {
+      "test": "scroll refresh follows Manual and interval capture timing and survives failed capture",
+      "passed": true
+    },
+    {
+      "test": "R8 stores alpha coverage, independent of RGB color",
+      "passed": true
+    },
+    {
+      "test": "each-key input is queued and coalesces to the newest text without inline capture",
+      "passed": true
+    },
+    {
+      "test": "three-second mode holds edits, then emits periodic snapshots even without new text",
+      "passed": true
+    },
+    {
+      "test": "manual input holds through edits and layout invalidations until explicit capture",
+      "passed": true
+    },
+    {
+      "test": "hidden pages stop periodic captures and resume a new interval when visible",
+      "passed": true
+    }
+  ],
+  "gpu_behavior_report": "life-color-gpu-validation.json"
+}

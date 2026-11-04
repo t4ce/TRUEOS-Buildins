@@ -1,0 +1,13 @@
+{
+  "realCanvas2D": true,
+  "productionTextMaskCapture": true,
+  "webfont": "EditBlock / edit-pixel-mono.woff2",
+  "glyphArea16": 183,
+  "glyphArea32": 732,
+  "doublingSizeAreaRatio": 4,
+  "fontChangeDifferentPixels": 2077,
+  "gutterExcluded": true,
+  "blankAllZero": true,
+  "cadenceCoveredBy": "tests/text-mask.test.mjs",
+  "browserUIQA": false
+}

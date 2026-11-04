@@ -1,0 +1,363 @@
+{
+  "glyph_snapshots": [
+    {
+      "generation": 0,
+      "alive": 2281,
+      "trail": 2281,
+      "live_colors": 6
+    },
+    {
+      "generation": 10,
+      "alive": 2016,
+      "trail": 6459,
+      "live_colors": 133
+    },
+    {
+      "generation": 30,
+      "alive": 1877,
+      "trail": 9831,
+      "live_colors": 531
+    },
+    {
+      "generation": 60,
+      "alive": 1743,
+      "trail": 10267,
+      "live_colors": 627
+    }
+  ],
+  "compiled_programs": [
+    {
+      "shader": "aurora",
+      "version": 100,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "wave",
+      "version": 100,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "cubes",
+      "version": 100,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "contour",
+      "version": 100,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "dither",
+      "version": 100,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "echo",
+      "version": 100,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "life",
+      "version": 100,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "matrix",
+      "version": 100,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "feedback",
+      "version": 100,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "life-seed",
+      "version": 100,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "life-step",
+      "version": 100,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "lifeEmit",
+      "version": 100,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "lifeColorSeed",
+      "version": 100,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "lifeColorStep",
+      "version": 100,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "lifeColorEmit",
+      "version": 100,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "aurora",
+      "version": 300,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "wave",
+      "version": 300,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "cubes",
+      "version": 300,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "contour",
+      "version": 300,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "dither",
+      "version": 300,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "echo",
+      "version": 300,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "life",
+      "version": 300,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "matrix",
+      "version": 300,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "feedback",
+      "version": 300,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "life-seed",
+      "version": 300,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "life-step",
+      "version": 300,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "lifeEmit",
+      "version": 300,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "lifeColorSeed",
+      "version": 300,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "lifeColorStep",
+      "version": 300,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "lifeColorEmit",
+      "version": 300,
+      "compiled": true,
+      "linked": true
+    }
+  ],
+  "original_gpu_rule_tests": [
+    {
+      "test": "block still life",
+      "generations": 10,
+      "initial_live": 4,
+      "final_live": 4,
+      "passed": true
+    },
+    {
+      "test": "blinker period two",
+      "generations": 2,
+      "initial_live": 3,
+      "final_live": 3,
+      "passed": true
+    },
+    {
+      "test": "glider translates one diagonal cell in four generations",
+      "generations": 4,
+      "initial_live": 5,
+      "final_live": 5,
+      "passed": true
+    },
+    {
+      "test": "empty world stays empty",
+      "generations": 10,
+      "initial_live": 0,
+      "final_live": 0,
+      "passed": true
+    },
+    {
+      "test": "finite dead boundary",
+      "generations": 12,
+      "initial_live": 5,
+      "final_live": 4,
+      "passed": true
+    },
+    {
+      "test": "decorative green and blue never influence Conway rules",
+      "generations": 8,
+      "initial_live": 3,
+      "final_live": 3,
+      "passed": true
+    },
+    {
+      "test": "random world agrees with independent CPU rules",
+      "generations": 40,
+      "initial_live": 70,
+      "final_live": 35,
+      "passed": true
+    }
+  ],
+  "gpu_color_tests": [
+    {
+      "test": "Seed takes exact font RGB, preserves antialiased colors, and supports black cells",
+      "passed": true,
+      "colors": [
+        [
+          255,
+          1,
+          128
+        ],
+        [
+          17,
+          222,
+          63
+        ],
+        [
+          0,
+          0,
+          0
+        ],
+        [
+          1,
+          254,
+          255
+        ]
+      ]
+    },
+    {
+      "test": "Subpixel alpha footprints select contributing glyph RGB without dark edges",
+      "passed": true,
+      "live": 2
+    },
+    {
+      "test": "Direct collisions use full incoming RGB and byte-wise modulo 256 including 255 + 1",
+      "passed": true,
+      "collision": [
+        0,
+        4,
+        44
+      ],
+      "dead_destination": [
+        23,
+        87,
+        201
+      ]
+    },
+    {
+      "test": "Emission chooses the actual new glyph color rather than adjacent old ink",
+      "passed": true
+    },
+    {
+      "test": "Zero-alpha input preserves every state and color byte",
+      "passed": true
+    },
+    {
+      "test": "Same-color births preserve a single source lineage through twelve generations",
+      "passed": true,
+      "source_rgb": [
+        234,
+        91,
+        147
+      ]
+    },
+    {
+      "test": "Mixed-parent births ring-sum all three RGB values; survivor and trail colors persist",
+      "passed": true,
+      "birth_rgb": [
+        7,
+        131,
+        7
+      ],
+      "survivor_rgb": [
+        1,
+        250,
+        252
+      ]
+    },
+    {
+      "test": "Thirty random generations exactly match independent CPU B3/S23 and byte RGB reference",
+      "passed": true,
+      "generations": 30,
+      "black_cells_included": true
+    },
+    {
+      "test": "Growing and shrinking preserve both state and RGB byte-for-byte at editor top-left",
+      "passed": true
+    },
+    {
+      "test": "Explicit full-mask seed clears stale color memory together with the old world",
+      "passed": true
+    },
+    {
+      "test": "Actual production syntax glyph capture seeds every source color exactly",
+      "passed": true,
+      "palette_count": 6,
+      "seed_cells": 2281
+    }
+  ],
+  "boundary": "finite dead",
+  "color_rule": "RGB bytes modulo 256; equal-color parents inherit unchanged",
+  "gl_renderer": "llvmpipe (LLVM 19.1.7, 256 bits)",
+  "gl_version": "OpenGL ES 3.2 Mesa 25.0.7-2+deb13u1"
+}

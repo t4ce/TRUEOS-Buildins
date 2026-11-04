@@ -1,0 +1,247 @@
+{
+  "compiled_programs": [
+    {
+      "shader": "aurora",
+      "version": 100,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "wave",
+      "version": 100,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "cubes",
+      "version": 100,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "contour",
+      "version": 100,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "dither",
+      "version": 100,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "echo",
+      "version": 100,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "life",
+      "version": 100,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "matrix",
+      "version": 100,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "feedback",
+      "version": 100,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "life-seed",
+      "version": 100,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "life-step",
+      "version": 100,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "life-emit",
+      "version": 100,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "aurora",
+      "version": 300,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "wave",
+      "version": 300,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "cubes",
+      "version": 300,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "contour",
+      "version": 300,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "dither",
+      "version": 300,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "echo",
+      "version": 300,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "life",
+      "version": 300,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "matrix",
+      "version": 300,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "feedback",
+      "version": 300,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "life-seed",
+      "version": 300,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "life-step",
+      "version": 300,
+      "compiled": true,
+      "linked": true
+    },
+    {
+      "shader": "life-emit",
+      "version": 300,
+      "compiled": true,
+      "linked": true
+    }
+  ],
+  "original_rule_tests": [
+    {
+      "test": "block still life",
+      "generations": 10,
+      "initial_live": 4,
+      "final_live": 4,
+      "passed": true
+    },
+    {
+      "test": "blinker period two",
+      "generations": 2,
+      "initial_live": 3,
+      "final_live": 3,
+      "passed": true
+    },
+    {
+      "test": "glider translates one diagonal cell in four generations",
+      "generations": 4,
+      "initial_live": 5,
+      "final_live": 5,
+      "passed": true
+    },
+    {
+      "test": "empty world stays empty",
+      "generations": 10,
+      "initial_live": 0,
+      "final_live": 0,
+      "passed": true
+    },
+    {
+      "test": "finite dead boundary",
+      "generations": 12,
+      "initial_live": 5,
+      "final_live": 4,
+      "passed": true
+    },
+    {
+      "test": "decorative green and blue never influence Conway rules",
+      "generations": 8,
+      "initial_live": 3,
+      "final_live": 3,
+      "passed": true
+    },
+    {
+      "test": "random world agrees with independent CPU rules",
+      "generations": 40,
+      "initial_live": 70,
+      "final_live": 35,
+      "passed": true
+    }
+  ],
+  "emission_gpu_tests": [
+    {
+      "test": "An evolved glider survives new ink and four new cells are added",
+      "passed": true,
+      "existing_live": 5,
+      "new_live": 4,
+      "after_live": 9
+    },
+    {
+      "test": "blank emission preserves every state byte",
+      "passed": true
+    },
+    {
+      "test": "identical snapshot zero delta preserves every state byte",
+      "passed": true
+    },
+    {
+      "test": "Combined world keeps evolving under independent B3/S23 reference",
+      "generations": 8,
+      "passed": true
+    },
+    {
+      "test": "GPU resize preserves top-left cells and trails without interpolation",
+      "grow": [
+        20,
+        22
+      ],
+      "shrink": [
+        12,
+        10
+      ],
+      "passed": true
+    },
+    {
+      "test": "Explicit seed replaces old world with complete current input",
+      "passed": true
+    },
+    {
+      "test": "Actual glyph-derived world preserves live cells while receiving another letter",
+      "existing_live": 1643,
+      "after_live": 1871,
+      "passed": true
+    }
+  ],
+  "gl_renderer": "llvmpipe (LLVM 19.1.7, 256 bits)",
+  "gl_version": "OpenGL ES 3.2 Mesa 25.0.7-2+deb13u1",
+  "gl_error": 0,
+  "readback": "validation only"
+}

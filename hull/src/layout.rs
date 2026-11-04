@@ -93,11 +93,46 @@ pub(super) struct TextRun {
     pub color: [u8; 4],
 }
 
+// Host sandbox and layout tests read the diagnostic JSON; the device build renders with compute_for_render.
+#[allow(dead_code)]
 pub(super) fn compute(
     document: &Document,
     css: &Css,
     viewport: (u32, u32),
 ) -> Result<Export, Box<dyn std::error::Error>> {
+    export(document, css, viewport, true)
+}
+
+/// Render path: skips the diagnostic JSON, which only the host sandbox reads.
+pub(super) fn compute_for_render(
+    document: &Document,
+    css: &Css,
+    viewport: (u32, u32),
+) -> Result<Export, Box<dyn std::error::Error>> {
+    export(document, css, viewport, false)
+}
+
+fn export(
+    document: &Document,
+    css: &Css,
+    viewport: (u32, u32),
+    diagnostics: bool,
+) -> Result<Export, Box<dyn std::error::Error>> {
+    let started = std::time::Instant::now();
+    let mut phase_started = started;
+    let mut phase = |name: &str| {
+        let now = std::time::Instant::now();
+        trueos::logl::log(
+            trueos::logl::level::INFO,
+            format_args!(
+                "hull: layout phase={} elapsed_ms={} total_ms={}",
+                name,
+                now.duration_since(phase_started).as_millis(),
+                now.duration_since(started).as_millis(),
+            ),
+        );
+        phase_started = now;
+    };
     let match_dom = MatchDom::new(document);
     let cascade = CascadeIndex::new(
         css,
@@ -119,6 +154,7 @@ pub(super) fn compute(
     let mut text_metrics = vec![TextMetrics::default(); document.nodes.len()];
     let mut variables = vec![Variables::default(); document.nodes.len()];
     let mut root_font_size = 11.0;
+    phase("setup");
     let mut pending = vec![document.root];
     while let Some(id) = pending.pop() {
         let node = &document.nodes[id];
@@ -228,6 +264,7 @@ pub(super) fn compute(
         variables[id] = inherited_variables;
         pending.extend(node.children.iter().rev().copied());
     }
+    phase("cascade");
 
     // Anonymous flex line boxes provide a first inline-flow implementation.
     // Word fragments retain their HTML owner while anonymous boxes stay out of the DOM.
@@ -336,6 +373,7 @@ pub(super) fn compute(
             _ => {}
         }
     }
+    phase("tree");
     let root = ids[document.root][0];
     tree.compute_layout_with_measure(
         root,
@@ -387,6 +425,7 @@ pub(super) fn compute(
             )
         },
     )?;
+    phase("taffy");
     let mut fragments: Vec<Vec<BoxRect>> = vec![vec![]; document.nodes.len()];
     let mut text_svg = String::new();
     let mut text_runs = Vec::new();
@@ -498,6 +537,7 @@ pub(super) fn compute(
                 .map(|child| (child, left, top)),
         );
     }
+    phase("text-svg");
     let mut rows = Vec::new();
     let mut rectangles = Vec::new();
     // HTML's root background paints the canvas. With a transparent root,
@@ -533,7 +573,9 @@ pub(super) fn compute(
                 document.name(id)
             };
             let rect = BoxRect::bounds(&fragments[id]);
-            rows.push(serde_json::json!({"node":id,"tag":tag,"rect":rect.as_ref().map(BoxRect::json),"hidden":hidden[id],"paint_visible":!hidden[id] && text_metrics[id].paints(),"display_contents":contents[id],"text_metrics":{"font_size":text_metrics[id].font_size,"advance":text_metrics[id].font_size*6.0/11.0,"line_height":text_metrics[id].line_height.used(text_metrics[id].font_size)},"fragments":fragments[id].iter().map(BoxRect::json).collect::<Vec<_>>() }));
+            if diagnostics {
+                rows.push(serde_json::json!({"node":id,"tag":tag,"rect":rect.as_ref().map(BoxRect::json),"hidden":hidden[id],"paint_visible":!hidden[id] && text_metrics[id].paints(),"display_contents":contents[id],"text_metrics":{"font_size":text_metrics[id].font_size,"advance":text_metrics[id].font_size*6.0/11.0,"line_height":text_metrics[id].line_height.used(text_metrics[id].font_size)},"fragments":fragments[id].iter().map(BoxRect::json).collect::<Vec<_>>() }));
+            }
             if text_metrics[id].paints()
                 && matches!(document.nodes[id].kind, NodeKind::Element { .. })
             {
@@ -601,25 +643,29 @@ pub(super) fn compute(
         })
         .count();
     let mut unused = std::collections::BTreeSet::new();
-    for sheet in &css.sheets {
-        unused_properties(&sheet.rules.0, &mut unused);
-    }
-    for (_, attribute) in &css.attributes {
-        for property in attribute
-            .declarations
-            .declarations
-            .iter()
-            .chain(&attribute.declarations.important_declarations)
-        {
-            let name = property.property_id().name().to_owned();
-            if !used_for_layout(&name) {
-                unused.insert(name);
+    let json = if diagnostics {
+        for sheet in &css.sheets {
+            unused_properties(&sheet.rules.0, &mut unused);
+        }
+        for (_, attribute) in &css.attributes {
+            for property in attribute
+                .declarations
+                .declarations
+                .iter()
+                .chain(&attribute.declarations.important_declarations)
+            {
+                let name = property.property_id().name().to_owned();
+                if !used_for_layout(&name) {
+                    unused.insert(name);
+                }
             }
         }
-    }
-    let json = serde_json::to_string_pretty(
+        serde_json::to_string_pretty(
         &serde_json::json!({"engine":"taffy","engine_version":"0.15.0","viewport":{"width":viewport.0,"height":viewport.1},"units":"layout units; CSS lengths currently map 1:1 for compatibility; SVG uses the same numeric coordinates","coordinates":"absolute layout units; right/bottom are rectangle edges, not CSS insets","text_metrics":"synthetic monospace cell metrics: 6 layout units advance by 11 layout units line height at 11-unit default font-size, scaled by inherited CSS font-size and line-height; no font shaping","limitations":["opacity:0 suppresses subtree paint and visibility is inherited; partial-opacity groups and compositing are not implemented","text widths and wrapping use synthetic monospace metrics; no font shaping","dynamic pseudo-classes, pseudo-elements, :has and namespace selectors are not implemented","media conditions cover viewport sizes and orientation; device preference queries, calc, grid tracks, cascade layers and supports conditions are not implemented","inline flow uses approximate flex line boxes; nested inline boxes may wrap as a single item; no complete browser default stylesheet"],"unsupported_rule_count":unsupported_rules,"properties_not_used_for_layout":unused,"nodes":rows}),
-    )?;
+    )?
+    } else {
+        String::new()
+    };
     let extent = project_extent(tree.layout(root)?.size.height).max(viewport.1 as f32);
     let mut svg = format!(
         "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{}\" height=\"{}\" viewBox=\"0 0 {} {}\"><rect width=\"100%\" height=\"100%\" fill=\"#{r:02x}{g:02x}{b:02x}\"/>",
@@ -637,6 +683,7 @@ pub(super) fn compute(
     }
     svg.push_str(&text_svg);
     svg.push_str("</svg>\n");
+    phase("export");
     Ok(Export {
         json,
         svg,
