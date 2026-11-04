@@ -958,6 +958,38 @@ mod terminal_reentry_tests {
     use super::*;
 
     #[test]
+    fn explicit_white_default_survives_queried_gray_and_keeps_syntax_colors() {
+        use crate::buffer::TextBuffer;
+
+        let arena = Arena::new(1024 * 1024).expect("frame arena");
+        let mut framebuffer = Framebuffer::new();
+        // A negotiated palette normally represents default foreground with
+        // transparent coverage, which would emit SGR 39 and inherit shell gray.
+        framebuffer.set_indexed_colors(DEFAULT_THEME);
+        let size = Size { width: 24, height: 1 };
+        framebuffer.flip(size);
+        let white = StraightRgba::from_rgba(0xffffffff);
+        framebuffer.blend_fg(size.as_rect(), white);
+
+        let mut buffer = TextBuffer::new(false).unwrap();
+        let language = crate::lsh::LANGUAGES.iter().find(|language| language.name == "Rust").unwrap();
+        buffer.set_language(Some(language));
+        buffer.write_raw(b"let answer = 42;");
+        buffer.render(Point::default(), size.as_rect(), false, &mut framebuffer).unwrap();
+
+        let colors = &framebuffer.buffers[framebuffer.frame_counter & 1].fg_bitmap.data;
+        assert_eq!(colors[11], white, "neutral syntax punctuation inherits the explicit white base");
+        assert_eq!(
+            colors[13],
+            framebuffer.indexed(IndexedColor::BrightGreen),
+            "numeric syntax keeps its own color",
+        );
+        let output = framebuffer.render(&arena);
+        assert!(output.contains("\x1b[38;2;255;255;255m"));
+        assert!(!output.contains("\x1b[39m"), "default text must not fall back to shell gray");
+    }
+
+    #[test]
     fn unchanged_frame_repaints_after_terminal_replacement() {
         let arena = Arena::new(1024 * 1024).expect("frame arena");
         let mut framebuffer = Framebuffer::new();

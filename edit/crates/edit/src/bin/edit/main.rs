@@ -440,6 +440,11 @@ fn print_version() {
 }
 
 fn draw(ctx: &mut Context, state: &mut State) {
+    // Paint the TRUEOS theme's default text explicitly: SGR 39 would inherit
+    // the shell's queried gray. Syntax spans and UI colors override this base.
+    #[cfg(target_os = "trueos")]
+    ctx.attr_foreground_rgba(StraightRgba::from_rgba(0xffffffff));
+
     draw_menubar(ctx, state);
     draw_editor(ctx, state);
     draw_statusbar(ctx, state);

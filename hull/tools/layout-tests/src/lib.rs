@@ -116,7 +116,7 @@ mod tests {
         let mut engine = hull_quickjs::Engine::new().unwrap();
         javascript_dom::install(&mut engine, live.clone()).unwrap();
         engine.eval(
-            br"const message=document.querySelector('#message');message.textContent='initialized';message.setAttribute('style','color:rgb(12,34,56);background-color:rgb(78,90,123);width:120px;height:24px')",
+            br"const message=document.querySelector('#message');message.textContent='initialized';message.setAttribute('style','color:rgb(12,34,56);background-color:rgb(78,90,123);width:180px;height:24px')",
             "initial-render.js",
             false,
         ).unwrap();
@@ -138,7 +138,7 @@ mod tests {
         assert!(!first.svg.contains(">child</text>"));
 
         engine.eval(
-            br"message.textContent='later';message.setAttribute('style','color:red;background-color:lime;width:120px;height:24px')",
+            br"message.textContent='later';message.setAttribute('style','color:red;background-color:lime;width:180px;height:24px')",
             "after-freeze.js",
             false,
         ).unwrap();
@@ -837,6 +837,87 @@ mod tests {
         assert_eq!(text_rect(&doc, &json, "c")["rect"]["height"], 100.0);
     }
     #[test]
+    fn page_text_scale_is_applied_once_through_nested_relative_fonts() {
+        let (doc, json) = run(
+            "<html id='root'><body><div id='parent'><div id='inherited'>a</div><div id='half'><div id='em'><div id='percent'>b</div></div></div><div id='rem'>c</div><div id='larger'>d</div><div id='smaller'>e</div><div id='keyword'>f</div></div></body></html>",
+            "html{font-size:10px}#parent{font-size:20px}#half{font-size:50%}#em{font-size:2em}#percent{font-size:100%}#rem{font-size:1.5rem}#larger{font-size:larger}#smaller{font-size:smaller}#keyword{font-size:medium}",
+        );
+        for (id, expected) in [
+            ("root", 20.0),
+            ("parent", 40.0),
+            ("inherited", 40.0),
+            ("half", 20.0),
+            ("em", 40.0),
+            ("percent", 40.0),
+            ("rem", 30.0),
+            ("larger", 48.0),
+            ("smaller", 40.0 / 1.2),
+            ("keyword", 32.0),
+        ] {
+            let actual = node(&doc, &json, id)["text_metrics"]["font_size"]
+                .as_f64()
+                .unwrap();
+            assert!((actual - expected).abs() < 0.001, "{id}: {actual} != {expected}");
+        }
+    }
+    #[test]
+    fn font_enlargement_preserves_distance_geometry_and_the_viewport() {
+        let (doc, output) = export(
+            "<div id='box'></div><div id='px'>p</div><div id='mm'>m</div><div id='pt'>t</div><div id='viewport'>v</div>",
+            "#box{width:10mm;height:5mm;padding:4px;border:1px solid red;box-sizing:border-box}#px{font-size:12px}#mm{font-size:10mm}#pt{font-size:9pt}#viewport{font-size:1vw}",
+        );
+        let json: serde_json::Value = serde_json::from_str(&output.json).unwrap();
+        assert_eq!(json["viewport"], serde_json::json!({"width":1280,"height":720}));
+        assert_eq!(json["page_text_scale"], 2.0);
+        assert_eq!(json["default_font_size"], 22.0);
+        let rect = &node(&doc, &json, "box")["rect"];
+        assert_eq!(rect["width"], 38.0);
+        assert_eq!(rect["height"], 19.0);
+        for (text, expected) in [("p", 24.0), ("m", 20.0 * 96.0 / 25.4), ("t", 24.0), ("v", 25.6)] {
+            let actual = output.text_runs.iter().find(|run| run.text == text).unwrap().size_px;
+            assert!((f64::from(actual) - expected).abs() < 0.001, "{text}: {actual} != {expected}");
+        }
+        assert_eq!(output.line_extent.0, 1280);
+        assert!(output.svg.contains("viewBox=\"0 0 1280 720\""));
+    }
+    #[test]
+    fn line_height_lengths_and_ratios_follow_the_larger_text_once() {
+        let (doc, json) = run(
+            "<div id='parent'><div id='inherited'>a</div></div><div id='number'>b</div><div id='percent'>c</div><div id='em'>d</div><div id='rem'>e</div><div id='px'>f</div>",
+            "html{font-size:10px}body{font-size:10px}#parent{line-height:3em}#inherited{font-size:50%}#number{line-height:1.5}#percent{line-height:150%}#em{line-height:1.5em}#rem{line-height:2rem}#px{line-height:15px}",
+        );
+        for (id, expected) in [
+            ("parent", 60.0),
+            ("inherited", 60.0),
+            ("number", 30.0),
+            ("percent", 30.0),
+            ("em", 30.0),
+            ("rem", 40.0),
+            ("px", 30.0),
+        ] {
+            let actual = node(&doc, &json, id)["text_metrics"]["line_height"]
+                .as_f64()
+                .unwrap();
+            assert!((actual - expected).abs() < 0.001, "{id}: {actual} != {expected}");
+        }
+        assert_eq!(node(&doc, &json, "inherited")["text_metrics"]["font_size"], 10.0);
+    }
+    #[test]
+    fn larger_default_text_fits_fewer_characters_without_enlarging_the_box() {
+        assert_eq!(layout::estimate_text_width("abcdef", 11.0), 36.0);
+        let (doc, output) = export(
+            "<div id='box'>abcdef</div>",
+            "#box{width:36px;height:100px;white-space:pre-wrap}",
+        );
+        let json = serde_json::from_str(&output.json).unwrap();
+        assert_eq!(node(&doc, &json, "box")["rect"]["width"], 36.0);
+        assert_eq!(node(&doc, &json, "box")["rect"]["height"], 100.0);
+        let lines: Vec<_> = output.text_runs.iter().map(|run| run.text.as_str()).collect();
+        assert_eq!(lines, ["abc", "def"]);
+        assert!(output.text_runs.iter().all(|run| run.size_px == 22.0 && run.advance_px == 36.0));
+        assert!((output.text_runs[1].baseline_y - output.text_runs[0].baseline_y - 22.0).abs() < 0.001);
+    }
+    #[test]
     fn wrapping_uses_available_content_width() {
         let (doc, json) = run("<div id='p' style='width:36px'>aa aa aa</div>", "");
         let r = &text_rect(&doc, &json, "p")["rect"];
@@ -975,6 +1056,16 @@ mod tests {
             "@media (600px < width < 1400px){#box{width:88px}}",
         );
         assert_eq!(node(&doc, &json, "box")["rect"]["width"], 88.0);
+    }
+    #[test]
+    fn larger_page_text_does_not_shift_font_relative_media_breakpoints() {
+        let (doc, json) = run(
+            "<div id='box'></div>",
+            "#box{width:20px;height:10px}@media (min-width:100em){#box{width:100px}}@media (min-width:100rem){#box{height:80px}}",
+        );
+        let rect = &node(&doc, &json, "box")["rect"];
+        assert_eq!(rect["width"], 100.0);
+        assert_eq!(rect["height"], 80.0);
     }
     #[test]
     fn inline_spans_and_links_share_a_line() {
