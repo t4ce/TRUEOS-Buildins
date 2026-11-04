@@ -168,6 +168,12 @@ fn draw_menu_edit(ctx: &mut Context, state: &mut State) {
 
 fn draw_menu_view(ctx: &mut Context, state: &mut State) {
     #[cfg(target_os = "trueos")]
+    if ctx.menubar_menu_checkbox("Shader", 'H', vk::NULL, state.shader_enabled) {
+        state.shader_enabled = !state.shader_enabled;
+        ctx.needs_rerender();
+    }
+
+    #[cfg(target_os = "trueos")]
     if crate::COLLAPSE_AVAILABLE.load(std::sync::atomic::Ordering::Relaxed)
         && ctx.menubar_menu_button("Compact", 'C', vk::NULL)
         && let Err(code) = trueos::terminal_ui4::collapse()

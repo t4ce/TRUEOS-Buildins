@@ -123,6 +123,8 @@ pub struct OscTitleFileStatus {
 }
 
 pub struct State {
+    #[cfg(target_os = "trueos")]
+    pub shader_enabled: bool,
     pub menubar_color_bg: StraightRgba,
     pub menubar_color_fg: StraightRgba,
 
@@ -184,6 +186,8 @@ pub struct State {
 impl State {
     pub fn new() -> apperr::Result<Self> {
         Ok(Self {
+            #[cfg(target_os = "trueos")]
+            shader_enabled: true,
             menubar_color_bg: StraightRgba::zero(),
             menubar_color_fg: StraightRgba::zero(),
 

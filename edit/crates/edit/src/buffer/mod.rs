@@ -231,6 +231,8 @@ pub type RcTextBuffer = Rc<TextBufferCell>;
 /// A text buffer for a text editor.
 pub struct TextBuffer {
     buffer: GapBuffer,
+    /// Independent of undo generations: whitespace-only edits do not emit Life cells.
+    glyph_input_revision: u64,
 
     undo_stack: VecDeque<SemiRefCell<HistoryEntry>>,
     redo_stack: VecDeque<SemiRefCell<HistoryEntry>>,
@@ -285,6 +287,7 @@ impl TextBuffer {
     pub fn new(small: bool) -> io::Result<Self> {
         Ok(Self {
             buffer: GapBuffer::new(small)?,
+            glyph_input_revision: 0,
 
             undo_stack: Default::default(),
             redo_stack: Default::default(),
@@ -350,6 +353,18 @@ impl TextBuffer {
     /// the last time you called this function.
     pub fn generation(&self) -> u32 {
         self.buffer.generation()
+    }
+
+    /// Changes when an edit touches visible glyphs, including undo and redo.
+    /// This lets background effects accept input without scanning the document.
+    pub fn glyph_input_revision(&self) -> u64 {
+        self.glyph_input_revision
+    }
+
+    fn record_glyph_input(&mut self, text: &[u8]) {
+        if has_glyph_input(text) {
+            self.glyph_input_revision = self.glyph_input_revision.wrapping_add(1);
+        }
     }
 
     /// Force the buffer to be dirty (needs to be saved to disk).
@@ -686,6 +701,7 @@ impl TextBuffer {
     }
 
     fn recalc_after_content_swap(&mut self) {
+        self.glyph_input_revision = self.glyph_input_revision.wrapping_add(1);
         // If the buffer was changed, nothing we previously saved can be relied upon.
         self.undo_stack.clear();
         self.redo_stack.clear();
@@ -2871,6 +2887,7 @@ impl TextBuffer {
     /// Writes `text` into the buffer at the current cursor position.
     /// It records the change in the undo stack.
     fn edit_write(&mut self, text: &[u8]) {
+        self.record_glyph_input(text);
         let logical_y_before = self.cursor.logical_pos.y;
 
         // Copy the written portion into the undo entry.
@@ -2909,7 +2926,13 @@ impl TextBuffer {
 
         // Copy the deleted portion into the undo entry.
         let deleted = &mut undo.deleted;
+        let deleted_before = deleted.len();
         self.buffer.extract_raw(off..to.offset, deleted, out_off);
+        let added = deleted.len() - deleted_before;
+        let input = if out_off == 0 { &deleted[..added] } else { &deleted[deleted_before..] };
+        if has_glyph_input(input) {
+            self.glyph_input_revision = self.glyph_input_revision.wrapping_add(1);
+        }
 
         // Delete the portion from the buffer by enlarging the gap.
         let count = to.offset - off;
@@ -3027,6 +3050,10 @@ impl TextBuffer {
                 let mut change = change.borrow_mut();
                 let change = &mut *change;
 
+                if has_glyph_input(&change.added) || has_glyph_input(&change.deleted) {
+                    self.glyph_input_revision = self.glyph_input_revision.wrapping_add(1);
+                }
+
                 // Undo: Whatever was deleted is now added and vice versa.
                 mem::swap(&mut change.deleted, &mut change.added);
 
@@ -3115,6 +3142,10 @@ impl TextBuffer {
     }
 }
 
+fn has_glyph_input(text: &[u8]) -> bool {
+    std::str::from_utf8(text).map_or(true, |text| text.chars().any(|c| !c.is_whitespace()))
+}
+
 pub enum Bom {
     None,
     UTF8,
@@ -3175,6 +3206,40 @@ mod tests {
         assert!(buffer.write_stream(&mut output).is_ok());
         assert_eq!(output, bytes);
         assert!(buffer.is_dirty(), "serializing does not commit a project revision");
+    }
+
+    #[test]
+    fn glyph_input_ignores_whitespace_but_tracks_typing_and_undo() {
+        let mut buffer = TextBuffer::new(false).unwrap();
+        buffer.write_raw(" \t\n\u{2003}".as_bytes());
+        assert_eq!(buffer.glyph_input_revision(), 0);
+        buffer.undo();
+        buffer.redo();
+        assert_eq!(buffer.glyph_input_revision(), 0);
+        buffer.write_raw(b"color");
+        let typed = buffer.glyph_input_revision();
+        assert!(typed > 0);
+        buffer.undo();
+        assert!(buffer.glyph_input_revision() > typed);
+        let undone = buffer.glyph_input_revision();
+        buffer.redo();
+        assert!(buffer.glyph_input_revision() > undone);
+    }
+
+    #[test]
+    fn deleting_whitespace_does_not_emit_shifted_glyphs() {
+        let mut buffer = TextBuffer::new(false).unwrap();
+        buffer.write_raw(b" a");
+        let revision = buffer.glyph_input_revision();
+        buffer.cursor_move_to_logical(Default::default());
+        buffer.select_all();
+        buffer.write_raw(b"");
+        assert!(buffer.glyph_input_revision() > revision, "deleting a glyph updates input identity");
+        buffer.write_raw(b" \t");
+        let revision = buffer.glyph_input_revision();
+        buffer.select_all();
+        buffer.write_raw(b"");
+        assert_eq!(buffer.glyph_input_revision(), revision);
     }
 
     #[test]

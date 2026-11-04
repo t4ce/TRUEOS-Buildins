@@ -307,6 +307,8 @@ impl Default for ButtonStyle {
 /// [`Tui`] manages the first one. It's also the entrypoint for
 /// everything else you may want to do.
 pub struct Tui {
+    #[cfg(any(target_os = "trueos", test))]
+    editor_background: crate::editor_background::EditorBackground,
     /// Arena used for the previous frame.
     arena_prev: Arena,
     /// Arena used for the current frame.
@@ -392,6 +394,8 @@ impl Tui {
         let prev_tree = Tree::new(unsafe { mem::transmute::<&Arena, &Arena>(&arena_next) });
 
         let mut tui = Self {
+            #[cfg(any(target_os = "trueos", test))]
+            editor_background: Default::default(),
             arena_prev,
             arena_next,
             prev_tree,
@@ -874,12 +878,26 @@ impl Tui {
 
     /// Renders the last frame into the framebuffer and returns the VT output.
     pub fn render<'a>(&mut self, arena: &'a Arena) -> BString<'a> {
+        #[cfg(any(target_os = "trueos", test))]
+        self.editor_background.begin_frame();
         self.framebuffer.flip(self.size);
         for child in self.prev_tree.iterate_roots() {
             let mut child = child.borrow_mut();
             self.render_node(&mut child);
         }
-        self.framebuffer.render(arena)
+        let output = self.framebuffer.render(arena);
+        #[cfg(any(target_os = "trueos", test))]
+        {
+            self.editor_background.finish_frame();
+            let mut output = output;
+            // A single stdout write can cross several VM payloads. Keep cells,
+            // cursor and mask metadata in one synchronized terminal frame.
+            output.replace_range(arena, 0..0, "\x1b[?2026h");
+            stdext::arena_write_fmt!(arena, output, "{}\x1b[?2026l", self.editor_background);
+            return output;
+        }
+        #[cfg(not(any(target_os = "trueos", test)))]
+        output
     }
 
     /// Recursively renders each node and its children.
@@ -953,6 +971,8 @@ impl Tui {
         }
 
         if node.attributes.float.is_some() {
+            #[cfg(any(target_os = "trueos", test))]
+            self.editor_background.exclude(outer_clipped);
             if !node.attributes.bordered {
                 let scratch = scratch_arena(None);
                 let mut fill = BString::empty();
@@ -1030,6 +1050,20 @@ impl Tui {
                     tb.render(tc.scroll_offset, destination, tc.has_focus, &mut self.framebuffer)
                 {
                     tc.scroll_offset_x_max = res.visual_pos_x_max;
+                }
+
+                #[cfg(any(target_os = "trueos", test))]
+                if let Some(enabled) = node.attributes.editor_background {
+                    let mut rect = destination;
+                    rect.left = (inner.left + tb.margin_width()).max(rect.left).min(rect.right);
+                    self.editor_background.set_page(enabled, crate::editor_background::Page {
+                        document: tc.buffer as *const TextBufferCell as usize,
+                        rect,
+                        scroll: tc.scroll_offset,
+                        wrap: tb.is_word_wrap_enabled(),
+                        tab_size: tb.tab_size(),
+                        glyph_input_revision: tb.glyph_input_revision(),
+                    });
                 }
 
                 if !tc.single_line {
@@ -1727,6 +1761,13 @@ impl<'a> Context<'a, '_> {
     pub fn attr_foreground_rgba(&mut self, fg: StraightRgba) {
         let mut last_node = self.tree.last_node.borrow_mut();
         last_node.attributes.fg = fg;
+    }
+
+    /// Opt this textarea into TRUEOS's editor-only Conway background.
+    /// Glyphs remain opaque; floating menus and dialogs are excluded by layout.
+    #[cfg(any(target_os = "trueos", test))]
+    pub fn attr_editor_background(&mut self, enabled: bool) {
+        self.tree.last_node.borrow_mut().attributes.editor_background = Some(enabled);
     }
 
     /// Applies reverse-video to the current node:
@@ -3731,6 +3772,8 @@ struct FloatAttributes {
 /// NOTE: Must not contain items that require drop().
 #[derive(Default)]
 struct NodeAttributes {
+    #[cfg(any(target_os = "trueos", test))]
+    editor_background: Option<bool>,
     float: Option<FloatAttributes>,
     position: Position,
     padding: Rect,

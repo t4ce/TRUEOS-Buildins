@@ -26,6 +26,8 @@ pub fn draw_editor(ctx: &mut Context, state: &mut State) {
 
     if let Some(doc) = state.documents.active() {
         ctx.textarea("textarea", doc.buffer.clone());
+        #[cfg(target_os = "trueos")]
+        ctx.attr_editor_background(state.shader_enabled);
         ctx.inherit_focus();
     } else {
         ctx.block_begin("empty");

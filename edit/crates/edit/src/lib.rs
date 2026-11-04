@@ -13,6 +13,8 @@ pub mod buffer;
 pub mod cell;
 pub mod clipboard;
 pub mod document;
+#[cfg(any(target_os = "trueos", test))]
+mod editor_background;
 pub mod framebuffer;
 pub mod fuzzy;
 pub mod hash;
