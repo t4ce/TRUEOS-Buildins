@@ -55,7 +55,7 @@ fn begin(runtime: &mut Runtime, generation: u64, html: &str) {
 fn drive(runtime: &mut Runtime, playback: &mut Playback, reports: &mut Vec<Report>, turns: usize) {
     for _ in 0..turns {
         reports.extend(runtime.poll());
-        playback.poll(runtime);
+        let _ = playback.poll(runtime);
         std::thread::sleep(Duration::from_millis(1));
     }
 }
@@ -65,7 +65,7 @@ fn initial(runtime: &mut Runtime, playback: &mut Playback, generation: u64) -> V
     loop {
         drive(runtime, playback, &mut reports, 1);
         if runtime.take_initial_document(generation).is_some() {
-            playback.poll(runtime);
+            let _ = playback.poll(runtime);
             reports.extend(runtime.poll());
             return reports;
         }
@@ -102,7 +102,11 @@ fn page_play_is_pending_until_first_frame_and_hull_drop_sends_no_close() {
         let mut n = n.borrow_mut();
         assert_eq!(
             n.commands[0],
-            (8, 0, "https://fixture.test/movie.mp4".into())
+            (
+                8,
+                0,
+                "https://fixture.test/movie.mp4\0https://fixture.test/path/page".into()
+            )
         );
         n.status = 1;
     });
@@ -138,7 +142,10 @@ fn multiple_page_elements_coalesce_to_one_latest_request() {
         let mut n = n.borrow_mut();
         let requests: Vec<_> = n.commands.iter().filter(|(op, _, _)| *op == 8).collect();
         assert_eq!(requests.len(), 1);
-        assert!(requests[0].2.ends_with("/new.mp4"));
+        assert_eq!(
+            requests[0].2,
+            "https://fixture.test/new.mp4\0https://fixture.test/path/page"
+        );
         n.status = 1;
     });
     drive(&mut runtime, &mut playback, &mut reports, 16);
@@ -186,4 +193,107 @@ fn invalid_sources_reject_without_native_io_or_autoplay() {
     let reports = initial(&mut runtime, &mut playback, 1);
     assert_eq!(logs(&reports), ["NotSupportedError", "NotSupportedError"]);
     NATIVE.with(|n| assert!(n.borrow().commands.is_empty()));
+}
+
+#[test]
+fn discovered_media_reports_native_failure_without_a_javascript_play_promise() {
+    crate::netfs::install([]);
+    NATIVE.with(|n| {
+        *n.borrow_mut() = Native {
+            status: -2,
+            ..Default::default()
+        }
+    });
+    let mut runtime = Runtime::start().unwrap();
+    runtime.enable_resource_loading();
+    let mut playback = Playback::default();
+    begin(
+        &mut runtime,
+        41,
+        r#"<script type="application/ld+json">
+        {"@type":"VideoObject","contentUrl":"https://media.fixture.test/movie.mp4?token=keep"}
+    </script>"#,
+    );
+    let start = Instant::now();
+    let mut messages = Vec::new();
+    while messages.len() < 2 {
+        runtime.poll();
+        messages.extend(playback.poll(&runtime));
+        assert!(start.elapsed() < Duration::from_secs(2), "{messages:?}");
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    assert!(messages[0].contains("page=41 request=1"), "{messages:?}");
+    assert!(
+        messages[0].contains("queued; waiting for first frame code=10"),
+        "{messages:?}"
+    );
+    assert!(
+        messages[1].contains("preparation failed before first frame code=-2"),
+        "{messages:?}"
+    );
+    // Preserve the cross-origin Referer in the actual production ABI payload.
+    NATIVE.with(|n| {
+        assert_eq!(
+            n.borrow().commands,
+            [
+                (
+                    8,
+                    0,
+                    "https://media.fixture.test/movie.mp4?token=keep\0https://fixture.test/".into()
+                ),
+                (9, 10, "".into()),
+            ]
+        )
+    });
+    for _ in 0..8 {
+        assert!(playback.poll(&runtime).is_empty());
+    }
+}
+
+#[test]
+fn handoff_rejection_is_visible_and_does_not_start_status_polling() {
+    NATIVE.with(|n| {
+        *n.borrow_mut() = Native {
+            fail: true,
+            ..Default::default()
+        }
+    });
+    let mut runtime = Runtime::start().unwrap();
+    let mut playback = Playback::default();
+    begin(
+        &mut runtime,
+        42,
+        r#"<video src="/movie.mp4"></video><script>
+        document.querySelector('video').play().catch(()=>{});
+    </script>"#,
+    );
+    let start = Instant::now();
+    let messages = loop {
+        runtime.poll();
+        let messages = playback.poll(&runtime);
+        if !messages.is_empty() {
+            break messages;
+        }
+        assert!(start.elapsed() < Duration::from_secs(2));
+        std::thread::sleep(Duration::from_millis(1));
+    };
+    assert_eq!(messages.len(), 1);
+    assert!(messages[0].contains("page=42 request=1"), "{messages:?}");
+    assert!(
+        messages[0].contains("handoff rejected code=-2"),
+        "{messages:?}"
+    );
+    for _ in 0..8 {
+        assert!(playback.poll(&runtime).is_empty());
+    }
+    NATIVE.with(|n| {
+        assert_eq!(
+            n.borrow().commands,
+            [(
+                8,
+                0,
+                "https://fixture.test/movie.mp4\0https://fixture.test/path/page".into()
+            )]
+        )
+    });
 }

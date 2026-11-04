@@ -1,5 +1,6 @@
 //! Detached native playback handoff. Dropping Hull never closes the player.
 use super::javascript::Runtime;
+use trueos::logl;
 unsafe extern "C" {
     fn trueos_cabi_vmedia_video_command_v1(
         op: u32,
@@ -29,11 +30,38 @@ pub(super) struct Playback {
     pending: Option<(u64, u32, u32)>,
 }
 impl Playback {
-    pub fn poll(&mut self, runtime: &Runtime) {
+    /// Report transitions even for media discovered without a JavaScript play
+    /// promise. A queued request does not mean a first frame was published.
+    pub fn poll(&mut self, runtime: &Runtime) -> Vec<String> {
+        let mut messages = Vec::new();
         if let Some((generation, request)) = runtime.take_video_request() {
-            let mut payload=request.url.into_bytes();
-            if let Some(referrer)=request.referrer {payload.push(0);payload.extend_from_slice(referrer.as_bytes());}
+            let mut payload = request.url.as_bytes().to_vec();
+            if let Some(referrer) = &request.referrer {
+                payload.push(0);
+                payload.extend_from_slice(referrer.as_bytes());
+            }
             let rc = command(8, 0, &payload);
+            let message = format!(
+                "hull: video page={generation} request={} node={} {} code={rc} url={} referrer={}",
+                request.id,
+                request.node,
+                if rc > 0 {
+                    "queued; waiting for first frame"
+                } else {
+                    "handoff rejected"
+                },
+                request.url,
+                request.referrer.as_deref().unwrap_or("none"),
+            );
+            logl::log(
+                if rc > 0 {
+                    logl::level::INFO
+                } else {
+                    logl::level::ERROR
+                },
+                format_args!("{message}"),
+            );
+            messages.push(message);
             if rc > 0 {
                 self.pending = Some((generation, request.id, rc as u32));
             } else {
@@ -46,7 +74,26 @@ impl Playback {
             if status != 0 {
                 self.pending = None;
                 runtime.video_status(generation, id, status);
+                let message = format!(
+                    "hull: video page={generation} request={id} ticket={ticket} {} code={status}",
+                    match status {
+                        1 => "first frame published",
+                        2 => "playback ended",
+                        -125 => "superseded",
+                        _ => "preparation failed before first frame",
+                    },
+                );
+                logl::log(
+                    if status > 0 {
+                        logl::level::INFO
+                    } else {
+                        logl::level::ERROR
+                    },
+                    format_args!("{message}"),
+                );
+                messages.push(message);
             }
         }
+        messages
     }
 }

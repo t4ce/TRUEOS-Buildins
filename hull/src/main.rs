@@ -466,7 +466,9 @@ impl ApplicationHandler for Hull {
         self.poll_javascript_input();
         if let Some(javascript) = &mut self.javascript {
             let reports=javascript.poll();
-            self.video.poll(javascript);
+            for message in self.video.poll(javascript) {
+                shellio::line(&message);
+            }
             for report in reports {
                 match report {
                     javascript::Report::Resource {
