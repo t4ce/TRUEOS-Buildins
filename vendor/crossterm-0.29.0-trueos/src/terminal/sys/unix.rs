@@ -19,7 +19,9 @@ use rustix::{
 
 #[cfg(not(target_os = "trueos"))]
 use std::fs::File;
-use std::{io, process};
+use std::io;
+#[cfg(not(target_os = "trueos"))]
+use std::process;
 #[cfg(feature = "libc")]
 use std::{
     mem,
@@ -111,6 +113,14 @@ pub(crate) fn window_size() -> io::Result<WindowSize> {
     Ok(size.into())
 }
 
+#[cfg(target_os = "trueos")]
+pub(crate) fn size() -> io::Result<(u16, u16)> {
+    // Console geometry is authoritative on TRUEOS; querying it must not spawn
+    // an external utility or replace its error with a subprocess failure.
+    window_size().map(|size| (size.columns, size.rows))
+}
+
+#[cfg(not(target_os = "trueos"))]
 #[allow(clippy::useless_conversion)]
 pub(crate) fn size() -> io::Result<(u16, u16)> {
     if let Ok(window_size) = window_size() {
@@ -294,6 +304,7 @@ fn query_keyboard_enhancement_flags_raw() -> io::Result<Option<KeyboardEnhanceme
 /// the output as a u16.
 ///
 /// The arg should be "cols" or "lines"
+#[cfg(not(target_os = "trueos"))]
 fn tput_value(arg: &str) -> Option<u16> {
     let output = process::Command::new("tput").arg(arg).output().ok()?;
     let value = output
@@ -313,6 +324,7 @@ fn tput_value(arg: &str) -> Option<u16> {
 ///
 /// This alternate way of computing the size is useful
 /// when in a subshell.
+#[cfg(not(target_os = "trueos"))]
 fn tput_size() -> Option<(u16, u16)> {
     match (tput_value("cols"), tput_value("lines")) {
         (Some(w), Some(h)) => Some((w, h)),

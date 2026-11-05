@@ -9,8 +9,8 @@ const SLOT_EDGE: u32 = 32;
 const MAX_CANDIDATES: usize = 16;
 
 /// Prefer explicit icon links, then Apple touch icons, then the origin fallback.
-/// Known SVG declarations are skipped because the raster service does not decode
-/// vectors. Unknown types are tried and may fail through to another candidate.
+/// SVG candidates use the native service's remote PNG bridge. Unknown types
+/// are tried and may fail through to another candidate.
 pub(super) fn discover(document: &Document, page_url: &str) -> Vec<String> {
     let Some(base) = document_base(document, page_url) else {
         return Vec::new();
@@ -41,33 +41,31 @@ pub(super) fn discover(document: &Document, page_url: &str) -> Vec<String> {
                         .ok()
                         .map(|url| url.path().to_ascii_lowercase())
                         .unwrap_or_default();
-                    if !mime.eq_ignore_ascii_case("image/svg+xml") && !path.ends_with(".svg") {
-                        let raster = ["image/png", "image/jpeg", "image/bmp"]
+                    let raster = ["image/png", "image/jpeg", "image/bmp"]
+                        .iter()
+                        .any(|kind| mime.eq_ignore_ascii_case(kind))
+                        || [".png", ".jpg", ".jpeg", ".bmp"]
                             .iter()
-                            .any(|kind| mime.eq_ignore_ascii_case(kind))
-                            || [".png", ".jpg", ".jpeg", ".bmp"]
-                                .iter()
-                                .any(|extension| path.ends_with(extension));
-                        let format_rank = if raster {
-                            0
-                        } else if path.ends_with(".ico")
-                            || mime.eq_ignore_ascii_case("image/x-icon")
-                            || mime.eq_ignore_ascii_case("image/vnd.microsoft.icon")
-                        {
-                            1
-                        } else {
-                            2
-                        };
-                        candidates.push((
-                            (
-                                u8::from(!icon),
-                                size_score(attribute(attrs, "sizes")),
-                                format_rank,
-                                order,
-                            ),
-                            url,
-                        ));
-                    }
+                            .any(|extension| path.ends_with(extension));
+                    let format_rank = if raster {
+                        0
+                    } else if path.ends_with(".ico")
+                        || mime.eq_ignore_ascii_case("image/x-icon")
+                        || mime.eq_ignore_ascii_case("image/vnd.microsoft.icon")
+                    {
+                        1
+                    } else {
+                        2
+                    };
+                    candidates.push((
+                        (
+                            u8::from(!icon),
+                            size_score(attribute(attrs, "sizes")),
+                            format_rank,
+                            order,
+                        ),
+                        url,
+                    ));
                 }
             }
             order += 1;
@@ -184,6 +182,7 @@ mod tests {
             discover(&document, "https://page.example/nested/index.html"),
             [
                 "https://cdn.example/assets/best.png?v=1",
+                "https://cdn.example/assets/vector.svg",
                 "https://cdn.example/assets/small.ico",
                 "https://apple.example/touch.png",
                 "https://page.example/favicon.ico",
@@ -209,13 +208,15 @@ mod tests {
     }
 
     #[test]
-    fn svg_and_unsafe_links_fall_through_to_apple_then_root() {
+    fn svg_links_are_admitted_and_unsafe_links_fall_through_to_apple_then_root() {
         let document = rp5::parse(
             "<link rel=icon href='a.svg'><link rel=icon type='image/svg+xml' href='/vector'><link rel=icon href='data:image/png;base64,no'><link rel=APPLE-TOUCH-ICON-PRECOMPOSED href='/touch.png'>",
         );
         assert_eq!(
             discover(&document, "https://example.com/page"),
             [
+                "https://example.com/a.svg",
+                "https://example.com/vector",
                 "https://example.com/touch.png",
                 "https://example.com/favicon.ico"
             ]

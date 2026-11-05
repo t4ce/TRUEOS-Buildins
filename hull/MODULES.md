@@ -84,3 +84,41 @@ and `trace.jsonl` record requests, successful bodies, fallback and errors. Sourc
 loading itself writes no production assets to disk. Capture files are explicit
 development artifacts. Run the sandbox tests and tools/js-tests host suite for
 end-to-end checks without building or booting the kernel.
+
+
+## Remote SVG assets
+
+The native image service converts URL-backed SVG page images and favicon
+candidates with `https://wsrv.nl/`, requesting `output=png`, the bounded image-box
+width/height, `fit=inside` and one frame. SVG path suffixes use the bridge directly;
+extensionless responses can enter it after a bounded SVG document-prefix check.
+The full source URL is encoded as one query parameter. The existing PNG decoder,
+alpha handling, resize, generation cancellation and UI4 upload own the result.
+Regular raster formats keep their native path. Inline SVG rendering and the
+page's diagnostic `layout.svg` export are separate from this asset bridge.
+
+Only successfully decoded and published conversions are persisted. The cache is
+`<TRUEOS_APP_FS_ROOT>/svg-assets.redb` (normally `apps/hull/svg-assets.redb`), beside
+the domain directories. It reuses `trueos-redb::ImageDatabase` with asynchronous
+TRUEOSFS reads and complete-image commits. Keys include the canonical source URL,
+conversion settings and raster size. Missing/unavailable/corrupt caches are
+misses; a write failure does not undo an already published image. No original SVG
+or ordinary raster download is written by this cache.
+
+The cache admits 256 entries and 32 MiB of PNG payload, with a 64 MiB database
+image limit and the existing 8 MiB per-image bound. Reaching the count/size limit
+resets the disposable cache before adding the next conversion. There is no
+local expiry/revalidation; deleting `svg-assets.redb` clears it. wsrv must be able
+to retrieve the source URL publicly, so local preview URLs and authenticated
+assets cannot rely on remote conversion. Provider failures leave the existing
+placeholder/fallback behavior in place.
+
+Host checks from the TRUEOS repository, without a kernel build:
+
+```sh
+python3 tools/testpy/test_hull_svg_policy.py
+python3 tools/testpy/test_hull_svg_cache.py
+python3 tools/testpy/test_hull_image_policy.py
+```
+
+The regular Hull sandbox does not fetch or paint native image assets.

@@ -1018,7 +1018,7 @@ impl ApplicationHandler for Hull {
                         }
                         return Err(error);
                     }
-                    let icon = self.images.favicon().and_then(|icon| {
+                    let icon = self.images.favicon(self.image_frame_recovery).and_then(|icon| {
                         chrome::icon_quad(
                             size.width,
                             size.height,
@@ -1029,7 +1029,7 @@ impl ApplicationHandler for Hull {
                     });
                     if let Some(icon) = icon {
                         if let Err(error) = target.draw_sprite_quads(&[icon]) {
-                            self.images.disable_favicon();
+                            self.images.favicon_draw_failed(error);
                             self.image_frame_recovery = true;
                             logl::log(
                                 logl::level::ERROR,

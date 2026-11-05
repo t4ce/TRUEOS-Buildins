@@ -101,8 +101,10 @@ impl Images {
         self.set_favicon_candidates(favicon::discover(document, page_url));
     }
 
-    pub fn favicon(&self) -> Option<FaviconSprite> {
-        if self.favicon_disabled {
+    pub fn favicon(&self, recovering_frame: bool) -> Option<FaviconSprite> {
+        // Recovery must publish its safe text frame before retrying a retained
+        // icon. Otherwise an icon Busy can stall recovery itself.
+        if recovering_frame || self.favicon_disabled {
             return None;
         }
         let asset = self.assets.get(self.favicon_asset?)?;
@@ -117,9 +119,12 @@ impl Images {
         })
     }
 
-    /// A failed chrome sprite draw disables only favicon painting until reset.
-    /// Page boxes that share the asset retain their existing ticket ownership.
-    pub fn disable_favicon(&mut self) {
+    /// Recover a busy chrome draw with its retained source. A permanent failure
+    /// disables only favicon painting; shared page boxes retain their tickets.
+    pub fn favicon_draw_failed(&mut self, error: Error) {
+        if error == Error::Busy {
+            return;
+        }
         self.favicon_disabled = true;
         self.favicon_candidates.clear();
         self.retire_favicon();
@@ -421,9 +426,14 @@ impl Images {
         }
         match target.draw_sprite_quads(&quads) {
             Ok(()) => false,
+            // Busy can cancel the write lease, but the kernel still owns and
+            // fences every retained source. Recover a frame and retry these
+            // same sprites after publication instead of losing all images
+            // until the next navigation.
+            Err(Error::Busy) => true,
             Err(error) => {
-                // Even Busy may have canceled the current write lease. Disable
-                // this navigation's image paint and let Hull recover a text frame.
+                // A permanent draw error leaves the placeholders and lets Hull
+                // recover a text frame.
                 self.paint_disabled = true;
                 let page_assets: HashSet<_> =
                     self.boxes.iter().filter_map(|(_, index)| *index).collect();
@@ -696,7 +706,7 @@ mod tests {
         });
         assert!(images.poll());
         assert_eq!(
-            images.favicon(),
+            images.favicon(false),
             Some(FaviconSprite {
                 sprite_id: 99,
                 width: 28,
@@ -704,7 +714,7 @@ mod tests {
             })
         );
         images.reset(1, 10);
-        assert!(images.favicon().is_none());
+        assert!(images.favicon(false).is_none());
         SERVICE.with(|service| assert!(service.borrow().live.is_empty()));
     }
 
@@ -754,9 +764,14 @@ mod tests {
             info.sprite_id = 42;
         });
         images.poll();
-        assert!(images.favicon().is_some());
-        images.disable_favicon();
-        assert!(images.favicon().is_none());
+        assert!(images.favicon(false).is_some());
+        images.favicon_draw_failed(Error::Busy);
+        assert!(images.favicon(true).is_none());
+        assert_eq!(images.favicon(false).unwrap().sprite_id, 42);
+        assert!(!images.favicon_disabled);
+        SERVICE.with(|service| assert!(service.borrow().released.is_empty()));
+        images.favicon_draw_failed(Error::NotFound);
+        assert!(images.favicon(false).is_none());
         assert_eq!(images.assets[images.boxes[0].1.unwrap()].sprite, Some(42));
         images.collect_favicon(&rp5::parse(html), "https://example.com/page");
         for _ in 0..5 {
@@ -805,7 +820,7 @@ mod tests {
         for _ in 0..12 {
             images.poll();
         }
-        assert!(images.favicon().is_none());
+        assert!(images.favicon(false).is_none());
         SERVICE.with(|service| {
             let service = service.borrow();
             assert_eq!(service.requests.len(), 3);
@@ -825,10 +840,10 @@ mod tests {
             info.sprite_id = 77;
         });
         images.poll();
-        assert!(images.favicon().is_some());
+        assert!(images.favicon(false).is_some());
         SERVICE.with(|service| service.borrow_mut().release_busy = true);
-        images.disable_favicon();
-        assert!(images.favicon().is_none());
+        images.favicon_draw_failed(Error::NotFound);
+        assert!(images.favicon(false).is_none());
         for _ in 0..8 {
             images.poll();
         }
@@ -1179,12 +1194,20 @@ mod tests {
     }
 
     #[test]
-    fn image_busy_disables_paint_and_recovers_retained_or_canceled_leases() {
+    fn image_busy_preserves_sources_and_recovers_retained_or_canceled_leases() {
         for cancel in [false, true] {
             let mut images = collect("<img src='a.png'><img src='pending.png'>");
             images.published();
             images.poll();
             images.poll();
+            SERVICE.with(|service| {
+                let mut service = service.borrow_mut();
+                let ready = service.live.get_mut(&1).unwrap();
+                ready.state = HULL_IMAGE_READY;
+                ready.sprite_id = 42;
+            });
+            assert!(images.poll());
+            assert_eq!(images.assets[0].sprite, Some(42));
             let mut viewport = Viewport::default();
             viewport.resize(800, 600);
             let mut target = SceneTarget {
@@ -1194,19 +1217,24 @@ mod tests {
                 ..Default::default()
             };
             assert!(images.draw(&viewport, &mut target));
-            assert!(images.paint_disabled);
-            assert!(
-                images
-                    .assets
-                    .iter()
-                    .all(|asset| asset.finished && asset.sprite.is_none())
-            );
-            SERVICE.with(|service| assert!(service.borrow().live.is_empty()));
+            assert!(!images.paint_disabled);
+            assert_eq!(images.assets[0].sprite, Some(42));
+            assert!(!images.assets[1].finished);
+            SERVICE.with(|service| {
+                let service = service.borrow();
+                assert_eq!(service.live.len(), 2);
+                assert!(service.released.is_empty());
+            });
             assert_eq!(target.lease, !cancel);
             assert_eq!(recover_frame(&mut target), Ok(()));
             assert_eq!(target.text_probe(), Ok(()));
+            // The next full-page repaint uses the original sprite and pending
+            // ticket without another fetch or navigation.
+            target.draw_error = None;
             assert!(!images.draw(&viewport, &mut target));
-            assert_eq!(target.sprite_calls, 1);
+            assert_eq!(target.sprite_calls, 2);
+            assert!(target.draws.iter().any(|quad| quad.sprite_id == 42));
+            SERVICE.with(|service| assert_eq!(service.borrow().requests.len(), 2));
         }
     }
 
