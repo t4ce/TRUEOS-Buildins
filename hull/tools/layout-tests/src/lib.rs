@@ -1,11 +1,18 @@
 #![allow(dead_code)]
 extern crate self as trueos;
 pub mod logl {
+    use std::cell::RefCell;
+    thread_local! { static MESSAGES: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) }; }
     pub mod level {
         pub const INFO: u32 = 1;
         pub const ERROR: u32 = 2;
     }
-    pub fn log(_: u32, _: std::fmt::Arguments<'_>) {}
+    pub fn log(_: u32, message: std::fmt::Arguments<'_>) {
+        MESSAGES.with(|messages| messages.borrow_mut().push(message.to_string()));
+    }
+    pub fn take_messages() -> Vec<String> {
+        MESSAGES.with(|messages| std::mem::take(&mut *messages.borrow_mut()))
+    }
 }
 pub mod netfs {
     use std::cell::RefCell;
@@ -1509,6 +1516,84 @@ mod image_layout_tests {
         let mut css = css::Css::default();
         css.parse_document(&document, "https://example.com/");
         layout::compute(&document, &css, (1280, 720)).unwrap()
+    }
+    #[test]
+    fn malformed_unrelated_selector_keeps_responsive_images_and_surrounding_rules() {
+        // The invalid selector came from a generated public stylesheet. It is
+        // unrelated to these images and is inside a query inactive at every
+        // tested width, so discarding that one rule must not discard the sheet.
+        let source = "https://responsive.example/site.css";
+        let document = rp5::parse(
+            "<link rel=stylesheet href='/site.css'>\
+             <p class=before>before</p>\
+             <picture class='hide-phone show-tablet'><img id=desktop src=desktop.jpg width=1200 height=320></picture>\
+             <picture class='show-phone hide-tablet'><img id=mobile src=mobile.jpg width=768 height=710></picture>\
+             <p class=after>after</p>",
+        );
+        let mut css = css::Css::default();
+        logl::take_messages();
+        css.parse_document(&document, "https://responsive.example/");
+        netfs::complete(
+            source,
+            ".before{color:rgb(12,34,56)}\
+             @media(max-width:412px){.offer-widget-banner:not(:has(picture))-content-offer-box{width:98%}}\
+             .show-phone,.show-tablet{display:none!important}\
+             .hide-phone{display:block!important}\
+             @media(max-width:768px){.hide-phone{display:none!important}.show-phone{display:block!important}}\
+             @media(min-width:769px){.hide-tablet{display:none!important}.show-tablet{display:block!important}}\
+             .after{color:rgb(65,43,21)}",
+        );
+        css.poll_downloads();
+        assert!(logl::take_messages().iter().any(|message| {
+            message.contains(source) && message.contains("recovered invalid CSS")
+        }), "discarded invalid selectors must remain visible in CSS diagnostics");
+        assert_eq!(
+            css.sheets.len(),
+            1,
+            "one malformed rule must not discard its valid stylesheet"
+        );
+        for (width, expected_image) in [(768, "mobile"), (769, "desktop"), (1280, "desktop")] {
+            let output = layout::compute(&document, &css, (width, 720)).unwrap();
+            assert_eq!(
+                output.image_boxes.len(),
+                1,
+                "viewport width {width}: hidden picture descendants must not paint"
+            );
+            let (_, _, attrs) = document.element(output.image_boxes[0].node).unwrap();
+            let actual_image = attrs
+                .iter()
+                .find(|attr| attr.name == "id")
+                .unwrap()
+                .value
+                .as_str();
+            assert_eq!(actual_image, expected_image, "viewport width {width}");
+            assert!(
+                output
+                    .text_runs
+                    .iter()
+                    .any(|run| run.text == "before" && run.color == [12, 34, 56, 255]),
+                "valid rule before the invalid selector was lost"
+            );
+            assert!(
+                output
+                    .text_runs
+                    .iter()
+                    .any(|run| run.text == "after" && run.color == [65, 43, 21, 255]),
+                "valid rule after the invalid selector was lost"
+            );
+        }
+    }
+    #[test]
+    fn malformed_inline_declaration_keeps_valid_dimensions_before_and_after_it() {
+        logl::take_messages();
+        let result = output(
+            "<img src=hero.jpg width=500 height=300 style='width:73px;broken-declaration;height:41px'>",
+        );
+        assert_eq!(result.image_boxes.len(), 1);
+        assert_eq!(result.image_boxes[0].rect[2..], [73., 41.]);
+        assert!(logl::take_messages().iter().any(|message| {
+            message.contains("inline CSS node=") && message.contains("recovered invalid CSS")
+        }), "discarded inline declarations must remain visible in CSS diagnostics");
     }
     #[test]
     fn image_css_dimensions_override_html_and_aspect_ratio_fills_missing_axis() {

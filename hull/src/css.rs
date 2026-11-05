@@ -1,5 +1,6 @@
 //! One-shot CSS parsing. HTML extraction stays in rp5; CSS syntax belongs to Lightning CSS.
 use std::collections::{HashMap, HashSet};
+use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 
 use lightningcss::rules::CssRule;
@@ -30,6 +31,7 @@ pub(super) struct Css {
 const MAX_STYLESHEETS: usize = 16;
 const MAX_SHEET_BYTES: usize = 4 * 1024 * 1024;
 const MAX_CSS_BYTES: usize = 8 * 1024 * 1024;
+const MAX_PARSE_WARNINGS: usize = 8;
 const CSS_WAIT: Duration = Duration::from_millis(2_000);
 
 pub(super) struct RootStylesheet {
@@ -85,7 +87,16 @@ impl Css {
                     origin: base.to_string(),
                     code: code.to_owned(),
                 });
-                match StyleAttribute::parse(code, ParserOptions::default()) {
+                let warnings = Arc::new(RwLock::new(Vec::new()));
+                let options = ParserOptions {
+                    filename: base.to_string(),
+                    error_recovery: true,
+                    warnings: Some(warnings.clone()),
+                    ..ParserOptions::default()
+                };
+                let result = StyleAttribute::parse(code, options);
+                report_recoveries(&warnings, format_args!("inline CSS node={id}"));
+                match result {
                     Ok(style) => self.add_attribute(id, style.into_owned()),
                     Err(error) => report(format_args!("inline CSS node={id}: {error}")),
                 }
@@ -133,11 +144,18 @@ impl Css {
     }
 
     fn parse_sheet(&mut self, code: &str, source: &Url) -> Option<usize> {
+        let warnings = Arc::new(RwLock::new(Vec::new()));
         let options = ParserOptions {
             filename: source.to_string(),
+            // Web stylesheets recover at invalid rules and declarations, so one
+            // malformed selector must not discard unrelated responsive rules.
+            error_recovery: true,
+            warnings: Some(warnings.clone()),
             ..ParserOptions::default()
         };
-        match StyleSheet::parse(code, options) {
+        let result = StyleSheet::parse(code, options);
+        report_recoveries(&warnings, format_args!("CSS {source}"));
+        match result {
             Ok(sheet) => {
                 // Only stylesheet imports are downloaded. Images, fonts and scripts are untouched.
                 for rule in &sheet.rules.0 {
@@ -301,6 +319,27 @@ fn attribute<'a>(attrs: &'a [rp5::Attribute], name: &str) -> Option<&'a str> {
 
 fn report(message: std::fmt::Arguments<'_>) {
     logl::log(logl::level::ERROR, format_args!("hull: {message}"));
+}
+
+fn report_recoveries<T: std::fmt::Display>(
+    warnings: &Arc<RwLock<Vec<T>>>,
+    context: std::fmt::Arguments<'_>,
+) {
+    let Ok(mut warnings) = warnings.write() else {
+        report(format_args!("{context}: CSS parse warnings unavailable"));
+        return;
+    };
+    let suppressed = warnings.len().saturating_sub(MAX_PARSE_WARNINGS);
+    // Source byte budgets bound parsing. Bound diagnostic output separately and
+    // clear warnings before into_owned would copy them into the retained sheet.
+    for warning in warnings.drain(..).take(MAX_PARSE_WARNINGS) {
+        report(format_args!("{context}: recovered invalid CSS: {warning}"));
+    }
+    if suppressed != 0 {
+        report(format_args!(
+            "{context}: {suppressed} additional CSS parse warnings suppressed"
+        ));
+    }
 }
 
 fn parse_media(value: Option<&str>) -> Option<lightningcss::media_query::MediaList<'static>> {

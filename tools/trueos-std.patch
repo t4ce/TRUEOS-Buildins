@@ -569,6 +569,44 @@
      target_os = "vxworks",
      miri
  )))]
+--- a/std/src/sys/pal/unix/sync/mutex.rs
++++ b/std/src/sys/pal/unix/sync/mutex.rs
+@@ -1,5 +1,6 @@
+ use super::super::cvt_nz;
+ use crate::cell::UnsafeCell;
+ use crate::io::Error;
++#[cfg(not(target_os = "trueos"))]
+ use crate::mem::MaybeUninit;
+ use crate::pin::Pin;
+@@ -20,6 +21,13 @@
+     /// # Safety
+     /// May only be called once per instance of `Self`.
+     pub unsafe fn init(self: Pin<&mut Self>) {
++        #[cfg(target_os = "trueos")]
++        unsafe {
++            // TRUEOS defines null attributes as NORMAL, including deadlock on
++            // recursive locking. No attribute object is needed for that mode.
++            cvt_nz(libc::pthread_mutex_init(self.raw(), crate::ptr::null())).unwrap();
++        }
++
+         // Issue #33770
+         //
+         // A pthread mutex initialized with PTHREAD_MUTEX_INITIALIZER will have
+@@ -45,5 +53,6 @@
+         // PTHREAD_MUTEX_NORMAL which is guaranteed to deadlock if we try to
+         // re-lock it from the same thread, thus avoiding undefined behavior.
++        #[cfg(not(target_os = "trueos"))]
+         unsafe {
+             let mut attr = MaybeUninit::<libc::pthread_mutexattr_t>::uninit();
+             cvt_nz(libc::pthread_mutexattr_init(attr.as_mut_ptr())).unwrap();
+@@ -126 +135,2 @@
++#[cfg(not(target_os = "trueos"))]
+ struct AttrGuard<'a>(pub &'a mut MaybeUninit<libc::pthread_mutexattr_t>);
+@@ -128,3 +138,4 @@
++#[cfg(not(target_os = "trueos"))]
+ impl Drop for AttrGuard<'_> {
+     fn drop(&mut self) {
+         unsafe {
 --- a/std/src/sys/pal/unix/time.rs
 +++ b/std/src/sys/pal/unix/time.rs
 @@ -73,6 +73,23 @@
