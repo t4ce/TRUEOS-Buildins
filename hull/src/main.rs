@@ -404,7 +404,25 @@ impl Hull {
                 logl::level::ERROR,
                 format_args!("hull: HTML exceeds 4 MiB page budget"),
             ),
-            Ok(_) => match netfs::fetch_bytes_read(operation) {
+            Ok(_) => {
+                // Metadata must precede the final body read, which consumes
+                // the operation. All document resources inherit this base.
+                let response_url = netfs::fetch_bytes_final_url(operation)
+                    .and_then(|url| resource_url::document_response_url(&url));
+                let response_url = match response_url {
+                    Ok(url) => url,
+                    Err(code) => {
+                        logl::log(logl::level::ERROR, format_args!("hull: response URL unavailable: {code}"));
+                        let _ = netfs::fetch_bytes_discard(operation);
+                        self.download = None;
+                        return;
+                    }
+                };
+                if self.page_url != response_url {
+                    self.page_url = response_url;
+                    self.images.start_favicon(&self.page_url);
+                }
+                match netfs::fetch_bytes_read(operation) {
                 Ok(bytes) => {
                     logl::log(
                         logl::level::INFO,
@@ -446,7 +464,8 @@ impl Hull {
                     logl::level::ERROR,
                     format_args!("hull: download read failed: {code}"),
                 ),
-            },
+                }
+            }
         }
         let _ = netfs::fetch_bytes_discard(operation);
         self.download = None;

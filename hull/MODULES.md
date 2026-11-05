@@ -53,10 +53,19 @@ cap of 5.25 seconds. Late imports use remaining page budgets and do not cause a
 second render snapshot. No general fetch, XHR, filesystem, timer or process API
 is exported. Source/count/wait failures and unhandled rejections are reported.
 
-This is not a full browser fetch policy. The current netfs body-ticket API does
-not expose response MIME/CORS/final redirect URL metadata; it uses requested URLs
-for resolution and cannot enforce those browser response checks. Canonical CDN
-endpoints work without redirect metadata. Parser-time async/defer scheduling,
+Document downloads read the completed GET's final transport URL through
+`netfs::fetch_bytes_final_url(ticket)` before the final body read consumes the
+ticket. Hull adopts that validated response URL as its document base, so relative
+page scripts, styles, images, favicons, and JavaScript document origin follow the
+redirect destination. The metadata read is non-consuming; legacy body and
+discard behavior remains intact.
+
+This is not a full browser fetch policy. The netfs API does not expose response
+MIME/CORS metadata and cannot enforce those browser response checks. Individual
+script/module loaders still use their requested source URL for relative module
+resolution after a source redirect; only the page document base currently
+adopts the final URL. Canonical CDN endpoints avoid that remaining source-loader
+limitation. Parser-time async/defer scheduling,
 dynamic script-element insertion, scoped import maps and JSON/CSS module types
 are not implemented. Other missing DOM/window APIs still fail normally.
 
