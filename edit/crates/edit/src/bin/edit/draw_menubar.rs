@@ -11,6 +11,8 @@ use crate::settings::Settings;
 use crate::state::*;
 
 pub fn draw_menubar(ctx: &mut Context, state: &mut State) {
+    #[cfg(target_os = "trueos")]
+    crate::font_size::begin_header(ctx, state.menubar_color_bg, state.menubar_color_fg);
     ctx.menubar_begin();
     ctx.attr_background_rgba(state.menubar_color_bg);
     ctx.attr_foreground_rgba(state.menubar_color_fg);
@@ -59,6 +61,8 @@ pub fn draw_menubar(ctx: &mut Context, state: &mut State) {
         }
     }
     ctx.menubar_end();
+    #[cfg(target_os = "trueos")]
+    crate::font_size::end_header(ctx, &mut state.font_size);
 }
 
 #[cfg(feature = "ide")]

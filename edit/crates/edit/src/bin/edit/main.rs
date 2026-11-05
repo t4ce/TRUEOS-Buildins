@@ -10,6 +10,8 @@ mod draw_menubar;
 #[cfg(feature = "ide")]
 mod draw_projectpicker;
 mod draw_statusbar;
+#[cfg(any(target_os = "trueos", test))]
+mod font_size;
 mod localization;
 mod settings;
 #[cfg(feature = "ide")]
@@ -215,6 +217,7 @@ fn run() -> apperr::Result<()> {
                 setup_collapse_icon();
                 sys::write_stdout("\x1b[0m\x1b[r\x1b[2J\x1b[H");
                 tui.invalidate_terminal();
+                state.font_size.invalidate_terminal();
             }
 
             let vt_iter = vt_parser.parse(&input);
@@ -306,6 +309,8 @@ fn run() -> apperr::Result<()> {
                 last_latency_width = cols;
             }
 
+            #[cfg(target_os = "trueos")]
+            state.font_size.append_report(&scratch, &mut output);
             sys::write_stdout(&output);
         }
     }
@@ -447,6 +452,10 @@ fn draw(ctx: &mut Context, state: &mut State) {
 
     draw_menubar(ctx, state);
     draw_editor(ctx, state);
+    #[cfg(target_os = "trueos")]
+    if state.font_size.take_page_focus() && state.documents.active().is_some() {
+        ctx.steal_focus();
+    }
     draw_statusbar(ctx, state);
 
     if state.wants_close {
