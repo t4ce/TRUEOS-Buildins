@@ -125,12 +125,13 @@ pub(crate) mod test_support {
         pub output: Vec<u8>,
         pub write_limit: usize,
         pub wait_status: i32,
+        pub logs: Vec<(u32, Vec<u8>, Vec<u8>)>,
     }
 
     pub(crate) static STATE: Mutex<State> = Mutex::new(State {
         claim_status: 0, surface_status: 0, surface: (1, 120, 40),
         generation: 1, bytes: VecDeque::new(), output: Vec::new(),
-        write_limit: usize::MAX, wait_status: 0,
+        write_limit: usize::MAX, wait_status: 0, logs: Vec::new(),
     });
 
     #[unsafe(no_mangle)]
@@ -190,6 +191,23 @@ pub(crate) mod test_support {
             unsafe { std::ptr::copy_nonoverlapping(value.as_ptr(), out, count); }
         }
         value.len() as isize
+    }
+
+    #[unsafe(no_mangle)]
+    unsafe extern "C" fn trueos_cabi_log(level: u32, target: *const u8, target_len: usize, message: *const u8, message_len: usize) -> i32 {
+        let target = unsafe { std::slice::from_raw_parts(target, target_len) }.to_vec();
+        let message = unsafe { std::slice::from_raw_parts(message, message_len) }.to_vec();
+        STATE.lock().unwrap().logs.push((level, target, message));
+        0
+    }
+
+    #[test]
+    fn initialization_diagnostics_keep_the_error_in_native_logging() {
+        let _serial = SERIAL.lock().unwrap();
+        STATE.lock().unwrap().logs.clear();
+        super::log_error(format_args!("input source initialization failed: {}", "not attached"));
+        assert_eq!(STATE.lock().unwrap().logs,
+            vec![(1, b"crossterm".to_vec(), b"input source initialization failed: not attached".to_vec())]);
     }
 
     #[test]

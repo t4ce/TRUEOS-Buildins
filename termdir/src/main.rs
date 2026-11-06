@@ -859,6 +859,11 @@ fn run_terminal_session(
                 // position once instead of every intermediate position.
                 for batch_index in 0..MAX_EVENT_BATCH {
                     let terminal_event = event::read()?;
+                    if matches!(&terminal_event, Event::Resize(..)) {
+                        // Surface generations also change for same-size lease
+                        // reentry, where the transport has lost our old cells.
+                        renderer.invalidate();
+                    }
                     handle_event(app, terminal_event)?;
                     if app.should_exit || batch_index + 1 == MAX_EVENT_BATCH {
                         break;

@@ -241,6 +241,12 @@ pub struct Renderer {
 }
 
 impl Renderer {
+    /// The terminal may have been cleared or replaced without changing its
+    /// dimensions. Its next presentation must restore the whole frame.
+    pub fn invalidate(&mut self) {
+        self.previous = None;
+    }
+
     pub fn present<W: Write>(&mut self, out: &mut W, next: Frame) -> io::Result<()> {
         match self.previous.as_ref() {
             None => {
@@ -442,6 +448,26 @@ mod tests {
         let output = output.into_inner().unwrap();
         assert_eq!(output.writes, 1);
         assert!(output.bytes.windows(2).any(|window| window == b"td"));
+    }
+
+    #[test]
+    fn invalidation_restores_unchanged_content_after_same_size_reentry() {
+        let mut frame = Frame::new(32, 4);
+        frame.put_str(0, 0, "retained menu", Style::default());
+        frame.put_str(0, 2, "graph", Style::default());
+        let mut renderer = Renderer::default();
+        let mut initial = Vec::new();
+        renderer.present(&mut initial, frame.clone()).unwrap();
+
+        let mut unchanged = Vec::new();
+        renderer.present(&mut unchanged, frame.clone()).unwrap();
+        assert!(!unchanged.windows(b"retained menu".len())
+            .any(|bytes| bytes == b"retained menu"));
+
+        renderer.invalidate();
+        let mut restored = Vec::new();
+        renderer.present(&mut restored, frame).unwrap();
+        assert_eq!(restored, initial, "reentry must restore the complete original frame");
     }
 
     #[test]
