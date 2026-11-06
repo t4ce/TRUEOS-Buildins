@@ -992,3 +992,7 @@ mod tests {
         assert!(error.contains("missing-module"), "{error}");
     }
 }
+
+/// Unsafe engine API for hosts that own their interpreter lifecycle.
+#[cfg(feature = "raw")]
+pub mod raw;

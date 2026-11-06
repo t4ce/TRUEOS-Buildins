@@ -4,6 +4,7 @@ use std::{env, fs, path::PathBuf};
 // No JSValue or inline ownership operation crosses the Rust/C boundary.
 const ADAPTER: &str = r#"
 #include "quickjs.h"
+#include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -38,6 +39,12 @@ typedef struct HullImport {
     struct HullImport *next;
 } HullImport;
 typedef struct HullRejection { JSValue promise, reason; int used; } HullRejection;
+
+/* The optional Rust raw API uses this same full-pointer layout. */
+_Static_assert(sizeof(JSValue) == 16, "raw JSValue size");
+_Static_assert(offsetof(JSValue, tag) == 8, "raw JSValue tag offset");
+void hull_quickjs_raw_free_value(JSContext *ctx, JSValue value) { JS_FreeValue(ctx, value); }
+JSValue hull_quickjs_raw_dup_value(JSContext *ctx, JSValue value) { return JS_DupValue(ctx, value); }
 
 typedef struct HullQuickJs {
     JSRuntime *runtime;

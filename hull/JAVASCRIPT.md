@@ -8,7 +8,11 @@ not. Tokio notifications wake input, navigation, pasted scripts and media
 receipts; timer deadlines wake the lane independently of UI polling. Resource
 tickets are checked at bounded intervals, and idle waits check native worker
 cancellation at least every 50 ms. The standalone QuickJS crate has an
-opaque native value boundary and no dependency on the old workbench/experiments.
+opaque native value boundary for browser callers and no dependency on the old
+workbench/experiments. Its optional `raw` feature also serves Codex Code Mode,
+which owns separate contexts, tool callbacks, cancellation and job pumping.
+Both hosts compile the same pinned sources and C ownership wrappers; Code Mode
+does not install Hull’s DOM or browser globals.
 Its C sources and adapter use QuickJS's full-pointer value representation in
 both host tests and TRUEOS. The upstream 47-bit NaN box cannot retain TRUEOS's
 canonical high-half heap pointers; a native pointer round-trip regression checks

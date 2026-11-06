@@ -10,3 +10,7 @@ build = "build.rs"
 cc = "1.0"
 
 [workspace]
+
+[features]
+default = []
+raw = []
