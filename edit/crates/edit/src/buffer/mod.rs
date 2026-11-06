@@ -58,10 +58,6 @@ const MARGIN_TEMPLATE: &str = "                    │ ";
 /// Just a bunch of whitespace you can use for turning tabs into spaces.
 /// Happens to reuse MARGIN_TEMPLATE, because it has sufficient whitespace.
 const TAB_WHITESPACE: &str = MARGIN_TEMPLATE;
-const VISUAL_SPACE: &str = "･";
-const VISUAL_SPACE_PREFIX_ADD: usize = '･'.len_utf8() - 1;
-const VISUAL_TAB: &str = "￫       ";
-const VISUAL_TAB_PREFIX_ADD: usize = '￫'.len_utf8() - 1;
 
 pub enum IoError {
     Io(io::Error),
@@ -1903,8 +1899,6 @@ impl TextBuffer {
                 }
             }
 
-            let mut selection_off = 0..0;
-
             // Figure out the selection range on this line, if any.
             if cursor_beg.visual_pos.y == visual_line
                 && selection_beg <= cursor_end.logical_pos
@@ -1915,15 +1909,12 @@ impl TextBuffer {
                 // By default, we assume the entire line is selected.
                 let mut selection_pos_beg = 0;
                 let mut selection_pos_end = COORD_TYPE_SAFE_MAX;
-                selection_off.start = cursor_beg.offset;
-                selection_off.end = cursor_end.offset;
 
                 // The start of the selection is within this line. We need to update selection_beg.
                 if selection_beg <= cursor_end.logical_pos
                     && selection_beg >= cursor_beg.logical_pos
                 {
                     cursor = self.cursor_move_to_logical_internal(cursor, selection_beg);
-                    selection_off.start = cursor.offset;
                     selection_pos_beg = cursor.visual_pos.x;
                 }
 
@@ -1932,7 +1923,6 @@ impl TextBuffer {
                     && selection_end >= cursor_beg.logical_pos
                 {
                     cursor = self.cursor_move_to_logical_internal(cursor, selection_end);
-                    selection_off.end = cursor.offset;
                     selection_pos_end = cursor.visual_pos.x;
                 }
 
@@ -1996,13 +1986,11 @@ impl TextBuffer {
 
                         if ch == ' ' || ch == '\t' {
                             let is_tab = ch == '\t';
-                            let visualize = selection_off.contains(&global_off);
-                            let mut whitespace = TAB_WHITESPACE;
-                            let mut prefix_add = 0;
 
-                            if is_tab || visualize {
-                                // We need the character's visual position in order to either compute the tab size,
-                                // or set the foreground color of the visualizer, respectively.
+                            if is_tab {
+                                // Tabs need their visual position for the tab stop.
+                                // Spaces stay ordinary spaces;
+                                // the selection background already highlights them.
                                 // TODO: Doing this char-by-char is of course also bad for performance.
                                 cursor_line =
                                     self.cursor_move_to_offset_internal(cursor_line, global_off);
@@ -2011,31 +1999,7 @@ impl TextBuffer {
                             let tab_size =
                                 if is_tab { self.tab_size_eval(cursor_line.column) } else { 1 };
 
-                            if visualize {
-                                // If the whitespace is part of the selection,
-                                // we replace " " with "･" and "\t" with "￫".
-                                (whitespace, prefix_add) = if is_tab {
-                                    (VISUAL_TAB, VISUAL_TAB_PREFIX_ADD)
-                                } else {
-                                    (VISUAL_SPACE, VISUAL_SPACE_PREFIX_ADD)
-                                };
-
-                                // Make the visualized characters slightly gray.
-                                let visualizer_rect = {
-                                    let left = destination.left
-                                        + self.margin_width
-                                        + cursor_line.visual_pos.x
-                                        - origin.x;
-                                    let top = destination.top + cursor_line.visual_pos.y - origin.y;
-                                    Rect { left, top, right: left + 1, bottom: top + 1 }
-                                };
-                                fb.blend_fg(
-                                    visualizer_rect,
-                                    fb.indexed_alpha(IndexedColor::Foreground, 1, 2),
-                                );
-                            }
-
-                            line.push_str(&*scratch, &whitespace[..prefix_add + tab_size as usize]);
+                            line.push_str(&*scratch, &TAB_WHITESPACE[..tab_size as usize]);
                         } else if ch <= '\x1f' || ('\u{7f}'..='\u{9f}').contains(&ch) {
                             // Append a Unicode representation of the C0 or C1 control character.
                             visualizer_buf[2] = if ch <= '\x1f' {
@@ -2077,6 +2041,8 @@ impl TextBuffer {
             }
 
             fb.replace_text(destination.top + y, destination.left, destination.right, &line);
+            #[cfg(any(target_os = "trueos", test))]
+            self.render_tab_labels(visual_line, origin, destination, cursor_beg, cursor_end, fb);
 
             cursor = cursor_end;
         }
@@ -2148,6 +2114,59 @@ impl TextBuffer {
         }
 
         Some(RenderResult { visual_pos_x_max })
+    }
+
+    /// Selection annotations use the tab's existing cell span, independently
+    /// of document text. Recover the group containing the viewport's left edge
+    /// so horizontal scrolling never changes where groups of four are split.
+    #[cfg(any(target_os = "trueos", test))]
+    fn render_tab_labels(&self, visual_line: CoordType, origin: Point, destination: Rect,
+        cursor_beg: Cursor, cursor_end: Cursor, fb: &mut Framebuffer) {
+        let Some((selection_beg, selection_end)) = self.selection_range() else { return; };
+        let row_start = self.cursor_move_to_visual_internal(cursor_beg, Point { x: 0, y: visual_line });
+        let left = self.cursor_move_to_visual_internal(cursor_beg, Point { x: origin.x, y: visual_line });
+        let mut offset = left.offset.max(selection_beg.offset);
+        let stop = cursor_end.offset.min(selection_end.offset);
+        let lower = row_start.offset.max(selection_beg.offset);
+        if offset < stop && self.read_forward(offset).first() == Some(&b'\t') {
+            let mut back = offset;
+            while back > lower {
+                let bytes = self.read_backward(back);
+                let available = bytes.len().min(back - lower);
+                let tabs = bytes[bytes.len() - available..].iter().rev()
+                    .take_while(|&&byte| byte == b'\t').count();
+                back -= tabs;
+                if tabs != available { break; }
+            }
+            offset -= (offset - back) % 4;
+        }
+        let mut cursor = left;
+        while offset < stop {
+            let bytes = self.read_forward(offset);
+            let bytes = &bytes[..bytes.len().min(stop - offset)];
+            if bytes.first() != Some(&b'\t') {
+                offset += bytes.iter().position(|&byte| byte == b'\t').unwrap_or(bytes.len());
+                continue;
+            }
+            cursor = self.cursor_move_to_offset_internal(cursor, offset);
+            if cursor.visual_pos.y != visual_line { offset += 1; continue; }
+            let first = cursor;
+            let mut columns = 0;
+            let mut count = 0;
+            while count < 4 && offset < selection_end.offset
+                && self.read_forward(offset).first() == Some(&b'\t') {
+                cursor = self.cursor_move_to_offset_internal(cursor, offset);
+                if cursor.visual_pos.y != visual_line { break; }
+                columns += self.tab_size_eval(cursor.column);
+                count += 1;
+                offset += 1;
+            }
+            let row = destination.top + visual_line - origin.y;
+            let column = destination.left + self.margin_width + first.visual_pos.x - origin.x;
+            fb.tab_label(row, column, columns, count, Rect {
+                left: destination.left + self.margin_width, ..destination
+            });
+        }
     }
 
     fn render_apply_highlights(
@@ -3187,6 +3206,64 @@ fn detect_bom(bytes: &[u8]) -> Option<&'static str> {
 #[cfg(test)]
 mod tests {
     use super::{SearchOptions, TextBuffer};
+
+    fn selected_tab_frame(text: &[u8], start: isize, end: isize, origin_x: isize) -> String {
+        use crate::{framebuffer::Framebuffer, helpers::{Point, Rect, Size}};
+        let mut buffer = TextBuffer::new(false).unwrap();
+        buffer.set_margin_enabled(false);
+        buffer.write_raw(text);
+        buffer.set_selection(Some(super::TextBufferSelection {
+            beg: Point { x: start, y: 0 }, end: Point { x: end, y: 0 },
+        }));
+        let mut fb = Framebuffer::new();
+        fb.flip(Size { width: 80, height: 1 });
+        buffer.render(Point { x: origin_x, y: 0 },
+            Rect { left: 0, top: 0, right: 80, bottom: 1 }, false, &mut fb);
+        let arena = stdext::arena::Arena::new(1024 * 1024).unwrap();
+        let output = fb.render(&arena).to_string();
+        assert_eq!(buffer_contents(&mut buffer).trim_end_matches('\n').as_bytes(), text);
+        output
+    }
+
+    #[test]
+    fn selected_tabs_label_runs_in_groups_of_at_most_four() {
+        for count in 1..=12 {
+            let mut text = b"Hello".to_vec();
+            text.extend(std::iter::repeat_n(b'\t', count));
+            text.extend_from_slice(b"Hello");
+            let output = selected_tab_frame(&text, 5, (5 + count) as isize, 0);
+            let labels: Vec<_> = output.split("\x1b]777;edit-tabs;1;")
+                .skip(1).map(|part| part.split('\x07').next().unwrap()).collect();
+            assert_eq!(labels[0], "clear");
+            assert_eq!(labels.len(), 1 + count.div_ceil(4));
+            for (index, label) in labels[1..].iter().enumerate() {
+                let n = (count - index * 4).min(4);
+                let column = 5 + index * 16 - usize::from(index > 0);
+                let width = n * 4 - usize::from(index == 0);
+                assert_eq!(*label, format!("0;{column};{width};{n};{column};{}", column + width));
+            }
+            assert!(!output.contains('￫'));
+            assert!(!output.contains('→'));
+            assert_eq!(output, selected_tab_frame(&text, (5+count) as isize, 5, 0));
+        }
+    }
+
+    #[test]
+    fn selected_spaces_stay_blank_and_break_tab_runs() {
+        let output = selected_tab_frame(b"Hello   Hello", 5, 8, 0);
+        assert!(!output.contains("edit-tabs"));
+        assert!(!output.contains('･'));
+        let output = selected_tab_frame(b"\t\t \t", 0, 4, 0);
+        assert!(output.contains("edit-tabs;1;0;0;8;2;0;8\x07"));
+        assert!(output.contains("edit-tabs;1;0;9;3;1;9;12\x07"));
+    }
+
+    #[test]
+    fn tab_label_groups_keep_their_center_when_horizontally_clipped() {
+        let output = selected_tab_frame(b"Hello\t\t\t\t\t\t\t\tHello", 5, 13, 10);
+        assert!(output.contains("edit-tabs;1;0;-5;15;4;0;10\x07"));
+        assert!(output.contains("edit-tabs;1;0;10;16;4;10;26\x07"));
+    }
 
     fn buffer_contents(buf: &mut TextBuffer) -> String {
         let mut str = String::new();

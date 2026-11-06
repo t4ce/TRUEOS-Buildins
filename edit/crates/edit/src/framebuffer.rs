@@ -116,6 +116,10 @@ pub struct Framebuffer {
     contrast_colors: [Cell<(StraightRgba, StraightRgba)>; CACHE_TABLE_SIZE],
     background_fill: StraightRgba,
     foreground_fill: StraightRgba,
+    #[cfg(any(target_os = "trueos", test))]
+    tab_labels: Vec<(CoordType, CoordType, CoordType, u8, CoordType, CoordType)>,
+    #[cfg(any(target_os = "trueos", test))]
+    previous_tab_labels: Vec<(CoordType, CoordType, CoordType, u8, CoordType, CoordType)>,
 }
 
 impl Framebuffer {
@@ -135,6 +139,10 @@ impl Framebuffer {
                 CACHE_TABLE_SIZE],
             background_fill: DEFAULT_THEME[IndexedColor::Background as usize],
             foreground_fill: DEFAULT_THEME[IndexedColor::Foreground as usize],
+            #[cfg(any(target_os = "trueos", test))]
+            tab_labels: Vec::new(),
+            #[cfg(any(target_os = "trueos", test))]
+            previous_tab_labels: Vec::new(),
         }
     }
 
@@ -173,7 +181,10 @@ impl Framebuffer {
 
     /// Begins a new frame with the given `size`.
     pub fn flip(&mut self, size: Size) {
+        #[cfg(any(target_os = "trueos", test))]
+        self.tab_labels.clear();
         if size != self.buffers[0].bg_bitmap.size {
+            self.force_redraw = true;
             for buffer in &mut self.buffers {
                 buffer.text = LineBuffer::new(size);
                 buffer.bg_bitmap = Bitmap::new(size);
@@ -209,8 +220,21 @@ impl Framebuffer {
         clip_right: CoordType,
         text: &str,
     ) {
+        #[cfg(any(target_os = "trueos", test))]
+        self.tab_labels.retain(|&(row, _, _, _, left, right)|
+            row != y || right <= origin_x || left >= clip_right);
         let back = &mut self.buffers[self.frame_counter & 1];
         back.text.replace_text(y, origin_x, clip_right, text)
+    }
+
+    #[cfg(any(target_os = "trueos", test))]
+    pub(crate) fn tab_label(&mut self, row: CoordType, column: CoordType,
+        columns: CoordType, count: u8, clip: Rect) {
+        let left = column.max(clip.left);
+        let right = (column + columns).min(clip.right);
+        if left < right && row >= clip.top && row < clip.bottom {
+            self.tab_labels.push((row, column, columns, count, left, right));
+        }
     }
 
     /// Draws a scrollbar in the given `track` rectangle.
@@ -577,6 +601,16 @@ impl Framebuffer {
             }
         }
 
+        #[cfg(any(target_os = "trueos", test))]
+        if self.tab_labels != self.previous_tab_labels
+            || (self.force_redraw && !self.tab_labels.is_empty()) {
+            result.push_str(arena, "\x1b]777;edit-tabs;1;clear\x07");
+            for &(row, column, columns, count, left, right) in &self.tab_labels {
+                arena_write_fmt!(arena, result,
+                    "\x1b]777;edit-tabs;1;{row};{column};{columns};{count};{left};{right}\x07");
+            }
+            self.previous_tab_labels.clone_from(&self.tab_labels);
+        }
         self.force_redraw = false;
         result
     }
@@ -956,6 +990,35 @@ impl Cursor {
 #[cfg(test)]
 mod terminal_reentry_tests {
     use super::*;
+
+    #[test]
+    fn selection_labels_clear_republish_after_resize_and_disappear_under_popups() {
+        let arena = Arena::new(1024 * 1024).unwrap();
+        let mut fb = Framebuffer::new();
+        let size = Size { width: 24, height: 1 };
+        for pass in 0..3 {
+            fb.flip(size);
+            fb.tab_label(0, 4, 16, 4, size.as_rect());
+            let output = fb.render(&arena);
+            if pass == 0 { assert!(output.contains("edit-tabs;1;0;4;16;4;4;20")); }
+            else { assert!(output.is_empty()); }
+        }
+        let size = Size { width: 25, height: 1 };
+        fb.flip(size);
+        fb.tab_label(0, 4, 16, 4, size.as_rect());
+        assert!(fb.render(&arena).contains("edit-tabs;1;0;4;16;4;4;20"));
+        fb.flip(size);
+        fb.tab_label(0, 4, 16, 4, size.as_rect());
+        fb.replace_text(0, 8, 16, " popup ");
+        let output = fb.render(&arena);
+        assert!(output.contains("edit-tabs;1;clear"));
+        assert!(!output.contains("edit-tabs;1;0;4;16;4;4;20"));
+        fb.flip(size);
+        fb.tab_label(0, 4, 16, 4, size.as_rect());
+        assert!(fb.render(&arena).contains("edit-tabs;1;0;4;16;4;4;20"));
+        fb.flip(size);
+        assert!(fb.render(&arena).contains("edit-tabs;1;clear"));
+    }
 
     #[test]
     fn explicit_white_default_survives_queried_gray_and_keeps_syntax_colors() {
