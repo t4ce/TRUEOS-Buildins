@@ -27,7 +27,7 @@ impl Default for InternalEventReader {
 
         #[cfg(target_os = "trueos")]
         if let Err(error) = &source {
-            eprintln!("[codex-startup] input source initialization failed: {error}");
+            crate::trueos::log_error(format_args!("input source initialization failed: {error}"));
         }
 
         let source = source.ok().map(|x| Box::new(x) as Box<dyn EventSource>);

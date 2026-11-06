@@ -108,8 +108,11 @@ def private_sysroot(output: Path, kernel: Path, rustc: Path, env: dict) -> Path:
     patch = ROOT / "tools/trueos-std.patch"
     backend = kernel / "tools/testpy/apply_trueos_rust_std_thread_backend.py"
     reference = kernel / "tools/rust-std/trueos_thread.rs"
+    sync_reference = kernel / "tools/rust-std/trueos_futex.rs"
+    tls_reference = kernel / "tools/rust-std/trueos_tls_key.rs"
+    tls_guard_reference = kernel / "tools/rust-std/trueos_tls_guard.rs"
     key = hashlib.sha256()
-    for path in (patch, backend, reference):
+    for path in (patch, backend, reference, sync_reference, tls_reference, tls_guard_reference):
         key.update(path.read_bytes())
     key.update(str(installed).encode())
     destination = output / "sysroots" / key.hexdigest()[:16]
@@ -342,7 +345,9 @@ def input_roots(kernel: Path):
             kernel / "src/hv/blueprint/blueprint.rs", kernel / "src/hv/blueprint/prebind.rs", kernel / "src/unix_compat.rs",
             kernel / "tools/appdb-seed",
             kernel / "Cargo.toml",
-            kernel / "tools/testpy/apply_trueos_rust_std_thread_backend.py", kernel / "tools/rust-std/trueos_thread.rs"]
+            kernel / "tools/testpy/apply_trueos_rust_std_thread_backend.py", kernel / "tools/rust-std/trueos_thread.rs",
+            kernel / "tools/rust-std/trueos_futex.rs", kernel / "tools/rust-std/trueos_tls_key.rs",
+            kernel / "tools/rust-std/trueos_tls_guard.rs"]
 
 
 def external_dependency_roots():

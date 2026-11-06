@@ -73,9 +73,11 @@ impl Colored {
     /// Checks whether ansi color sequences are disabled by setting of NO_COLOR
     /// in environment as per <https://no-color.org/>
     pub fn ansi_color_disabled() -> bool {
-        !std::env::var("NO_COLOR")
-            .unwrap_or("".to_string())
-            .is_empty()
+        #[cfg(target_os = "trueos")]
+        let value = crate::trueos::env_var("NO_COLOR");
+        #[cfg(not(target_os = "trueos"))]
+        let value = std::env::var("NO_COLOR").ok();
+        value.is_some_and(|value| !value.is_empty())
     }
 
     pub fn ansi_color_disabled_memoized() -> bool {

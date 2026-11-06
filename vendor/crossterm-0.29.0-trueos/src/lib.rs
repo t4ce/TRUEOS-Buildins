@@ -255,3 +255,6 @@ pub mod clipboard;
 
 mod command;
 pub(crate) mod macros;
+
+#[cfg(target_os = "trueos")]
+mod trueos;

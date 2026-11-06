@@ -111,8 +111,10 @@
 //! );
 //! ```
 
+#[cfg(not(target_os = "trueos"))]
+use std::env;
+
 use std::{
-    env,
     fmt::{self, Display},
 };
 
@@ -171,9 +173,12 @@ pub fn available_color_count() -> u16 {
     }
 
     const DEFAULT: u16 = 8;
-    env::var("COLORTERM")
-        .or_else(|_| env::var("TERM"))
-        .map_or(DEFAULT, |x| match x {
+    #[cfg(target_os = "trueos")]
+    let color_term = crate::trueos::env_var("COLORTERM")
+        .or_else(|| crate::trueos::env_var("TERM"));
+    #[cfg(not(target_os = "trueos"))]
+    let color_term = env::var("COLORTERM").or_else(|_| env::var("TERM")).ok();
+    color_term.map_or(DEFAULT, |x| match x {
             _ if x.contains("24bit") || x.contains("truecolor") => u16::MAX,
             _ if x.contains("256") => 256,
             _ => DEFAULT,

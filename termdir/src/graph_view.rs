@@ -329,6 +329,10 @@ pub struct GraphView {
 
 impl GraphView {
     pub fn from_current_dir() -> io::Result<Self> {
+        #[cfg(target_os = "trueos")]
+        let root = PathBuf::from(trueos::env::current_dir()
+            .map_err(|error| io::Error::other(format!("current directory unavailable ({error:?})")))?);
+        #[cfg(not(target_os = "trueos"))]
         let root = std::env::current_dir()?;
         Self::from_path(&root)
     }

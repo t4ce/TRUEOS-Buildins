@@ -9,6 +9,7 @@ mod layout;
 mod menu_view;
 mod minimap;
 mod screen;
+mod terminal_output;
 
 fn archive_log(message: std::fmt::Arguments<'_>) {
     // Host UI tests have no kernel log C ABI. Production records go through
@@ -21,12 +22,16 @@ fn archive_log(message: std::fmt::Arguments<'_>) {
 
 use std::{
     collections::VecDeque,
-    env,
-    io::{self, BufWriter, stdout},
+    io::{self, BufWriter},
     path::{Component, Path, PathBuf},
     time::Duration,
 };
 use std::time::Instant;
+#[cfg(target_os = "trueos")]
+use trueos::env;
+#[cfg(not(target_os = "trueos"))]
+use std::env;
+use terminal_output::stdout;
 
 use std::io::Write;
 use backend::Backend;
@@ -808,8 +813,7 @@ fn run_terminal_session(
     app.dirty = true;
 
     let mut terminal_guard = TerminalGuard::enter()?;
-    let stdout = stdout();
-    let mut out = BufWriter::with_capacity(FRAME_OUTPUT_BUFFER_CAPACITY, stdout.lock());
+    let mut out = BufWriter::with_capacity(FRAME_OUTPUT_BUFFER_CAPACITY, stdout());
     let mut renderer = Renderer::default();
     let mut first_frame = true;
     let mut archive_modal_presented = false;
@@ -1839,7 +1843,7 @@ fn cycle_terminal_zoom(app: &mut App) -> io::Result<()> {
     let next = (app.zoom_step + 1) % ZOOM_LEVELS.len();
     let percent = ZOOM_LEVELS[next];
     if app.native_extent.is_none() {
-        let mut output = stdout().lock();
+        let mut output = stdout();
         write!(output, "\x1b]777;terminal_zoom={percent}\x07")?;
         output.flush()?;
     }
