@@ -34,6 +34,7 @@ struct State {
     sent_size: (u32, u32),
     eof: bool,
     input_closed: bool,
+    defunct: bool,
     exit: Option<String>,
     key_offered: bool,
     last_activity: Instant,
@@ -52,6 +53,7 @@ impl State {
             sent_size: (0, 0),
             eof: false,
             input_closed: false,
+            defunct: false,
             exit: None,
             key_offered: false,
             last_activity: Instant::now(),
@@ -137,7 +139,7 @@ async fn drive<W: Wire, S: Store, C: Console>(
         let mut progress = false;
         for _ in 0..WORK {
             progress |= io_step(wire, runner, state, terminal)?;
-            if runner.read_channel_ready().is_some() {
+            if runner.read_channel_ready().is_some() || state.defunct {
                 break;
             } // Terminal must accept its retained prefix first.
             let prompt_deadline = if runner.initial_kex_complete() {
@@ -247,7 +249,7 @@ async fn drive<W: Wire, S: Store, C: Console>(
                                 }
                             })
                         }
-                        CliEvent::Defunct => return Ok(()),
+                        CliEvent::Defunct => state.defunct = true,
                         CliEvent::PollAgain => {}
                     }
                 }
@@ -305,21 +307,25 @@ async fn drive<W: Wire, S: Store, C: Console>(
                     }
                 }
             }
-            if state.exit.is_some() {
-                return Ok(());
-            }
-            if state
-                .channel
-                .as_ref()
-                .is_some_and(|c| runner.is_channel_closed(c))
-            {
+            // ExitStatus is metadata, not a byte-stream boundary. Servers may
+            // still send normal/stderr data after it. Drain through remote EOF
+            // or close, then wait for every retained terminal byte to be accepted.
+            if remote_finished(runner, state) {
                 return Ok(());
             }
             if !runner.is_input_ready() && !runner.is_output_pending() {
                 break;
             }
         }
-        if state.shell_sent {
+        if remote_finished(runner, state) {
+            return Ok(());
+        }
+        let remote_ended = state.defunct
+            || state
+                .channel
+                .as_ref()
+                .is_some_and(|channel| runner.is_channel_eof(channel));
+        if state.shell_sent && !remote_ended {
             let channel = state
                 .channel
                 .as_ref()
@@ -390,6 +396,18 @@ async fn drive<W: Wire, S: Store, C: Console>(
             .await?
         }
     }
+}
+
+fn remote_finished(runner: &Runner<'_, Client>, state: &State) -> bool {
+    let boundary = state.defunct
+        || state.channel.as_ref().is_some_and(|channel| {
+            runner.is_channel_closed(channel)
+                || (state.exit.is_some() && runner.is_channel_eof(channel))
+        });
+    boundary
+        && state.output.is_empty()
+        && state.rx.is_empty()
+        && runner.read_channel_ready().is_none()
 }
 
 fn io_step<W: Wire, C: Console>(

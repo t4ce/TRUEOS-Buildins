@@ -208,7 +208,7 @@ mod tests {
             Ok(())
         }
     }
-    fn key() -> SignKey {
+    fn make_key() -> SignKey {
         SignKey::generate(KeyType::Ed25519, None).unwrap()
     }
     fn entry(host: &str, key: &SignKey) -> Vec<u8> {
@@ -216,8 +216,8 @@ mod tests {
     }
     #[tokio::test]
     async fn known_hosts_accepts_match_and_refuses_changed_or_malformed_matching_entry() {
-        let key = key();
-        let foreign = key();
+        let key = make_key();
+        let foreign = make_key();
         let mut bytes = b"# keep comment\n".to_vec();
         bytes.extend(entry("other,host", &key));
         let snapshot = Snapshot {
@@ -245,8 +245,8 @@ mod tests {
     }
     #[tokio::test]
     async fn concurrent_unrelated_trust_append_retries_without_losing_existing_lines() {
-        let key = key();
-        let other = key();
+        let key = make_key();
+        let other = make_key();
         let original = entry("old", &other);
         let mut raced = original.clone();
         raced.extend(entry("racing", &other));
@@ -265,8 +265,8 @@ mod tests {
     }
     #[tokio::test]
     async fn racing_changed_host_is_not_overwritten_or_accepted() {
-        let key = key();
-        let other = key();
+        let key = make_key();
+        let other = make_key();
         let foreign = entry("host", &other);
         let mut store = MemoryStore::default();
         store
@@ -282,7 +282,7 @@ mod tests {
     }
     #[tokio::test]
     async fn failed_trust_publication_and_read_error_fail_closed() {
-        let key = key();
+        let key = make_key();
         let mut store = MemoryStore::default();
         store.races.push_back(Race::Fail);
         assert!(
@@ -301,7 +301,7 @@ mod tests {
     }
     #[tokio::test]
     async fn identity_create_race_loads_the_durable_winner() {
-        let winner = key();
+        let winner = make_key();
         let private = winner.to_openssh_private().unwrap();
         let mut store = MemoryStore::default();
         store
