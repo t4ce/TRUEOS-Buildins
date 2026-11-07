@@ -24,16 +24,12 @@ fn main() {
             format_args!("Paper: failed errno={error}"),
         );
     }
-    trueos::vshell::shutdown_current_blueprint("Paper closed");
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn _start() -> ! {
     main();
-    unsafe extern "C" {
-        fn exit(code: core::ffi::c_int) -> !;
-    }
-    unsafe { exit(0) }
+    trueos::entry::finish()
 }
 
 fn ui(error: Error) -> i32 {

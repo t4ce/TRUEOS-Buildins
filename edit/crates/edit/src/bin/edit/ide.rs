@@ -57,7 +57,6 @@ pub struct IdeSession {
 pub struct IdeProject {
     database: SourceDatabase,
     pub source: LoadedSource,
-    preview_root: Option<std::path::PathBuf>,
     // The project lease outlives document-held handles. The kernel owns redb.
     #[cfg(target_os = "trueos")]
     _registration: OwnerRegistration,
@@ -90,7 +89,7 @@ impl IdeSession {
         let (source, config) = select_project(&mut database, project, mode)?;
         Ok(Self {
             project: Rc::new(RefCell::new(IdeProject {
-                database, source, preview_root: None,
+                database, source,
                 #[cfg(target_os = "trueos")]
                 _registration: registration,
             })),
@@ -174,7 +173,6 @@ impl IdeSession {
         { self.tracker = BuildTracker::new(workspace_epoch()); }
         #[cfg(target_os = "trueos")]
         self.preview.take();
-        self.project.borrow_mut().preview_root = None;
         self.project.borrow_mut().source = source;
         self.backend = config.compiler;
         self.kind = config.kind;
@@ -779,7 +777,6 @@ impl IdeProject {
                 path: file.path, bytes: file.bytes, mode: file.mode,
             }).collect(),
         };
-        if let Some(root) = &self.preview_root { trueos_ide::workspace::publish_html(root, &self.source)?; }
         Ok(())
     }
 }
@@ -807,29 +804,21 @@ mod tests {
     }
 
     #[test]
-    fn html_project_reopens_and_saves_into_the_preview_folder() {
+    fn html_project_reopens_and_saves_directly_into_the_source_store() {
         let database = TestDatabase::new();
         let session = IdeSession::open_project(&database.0, "web", ProjectOpen::NewHtml).unwrap();
         assert!(session.is_html());
         assert_eq!(session.backend, None);
-        let folder = database.0.with_extension("preview");
-        let root = folder.join("public");
-        let source = session.project.borrow().source.clone();
-        assert_eq!(source.files.len(), 3);
-        assert!(source.file("index.html").unwrap().bytes.starts_with(b"<!doctype html>"));
-        assert!(source.file("main.js").unwrap().bytes.windows(20).any(|w| w == b"template console log"));
-        trueos_ide::workspace::publish_html(&root, &source).unwrap();
-        session.project.borrow_mut().preview_root = Some(root.clone());
+        assert_eq!(session.project.borrow().source.files.len(), 3);
+        assert!(session.project.borrow().source.file("index.html").unwrap().bytes.starts_with(b"<!doctype html>"));
         session.project.borrow_mut().save_file("style.css", b"body { background: red; }".to_vec()).unwrap();
-        assert_eq!(std::fs::read(root.join("style.css")).unwrap(), b"body { background: red; }");
-        assert!(!root.join("style.css.preview-tmp").exists());
+        assert_eq!(session.project.borrow().source.file("style.css").unwrap().bytes, b"body { background: red; }");
         drop(session);
         let mut reopened = IdeSession::open_project(&database.0, "web", ProjectOpen::Open).unwrap();
         assert!(reopened.is_html());
+        assert_eq!(reopened.project.borrow().source.file("style.css").unwrap().bytes, b"body { background: red; }");
         assert!(reopened.compile().unwrap_err().to_string().contains("Preview"));
         assert_eq!(reopened.entry, "index.html");
-        drop(reopened);
-        std::fs::remove_dir_all(folder).unwrap();
     }
 
     #[test]

@@ -3,6 +3,8 @@
 
 #[path = "../../../src/resource_url.rs"]
 mod resource_url;
+#[path = "../../../src/ide_preview.rs"]
+mod ide_preview;
 
 extern crate self as trueos;
 extern crate self as winit;

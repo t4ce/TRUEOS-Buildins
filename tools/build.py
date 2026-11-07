@@ -37,6 +37,10 @@ KERNEL_PLATFORM_SOURCES = {"hyper": "hyper-1.10.0", "mio": "mio-1.2.0", "httpdat
 KERNEL_OVERLAYS = {"crc32fast", "futures-util", "http", "http-body", "httpdate", "hyper", "mio", "getrandom", "rand_core", "ring", "want"}
 # Bump when the stripping or container recipe changes, independently of Rust inputs.
 PACKAGE_REVISION = 3
+# These apps have an audited core/alloc target dependency closure. Keep this
+# admission explicit: an entry's no_std attribute alone cannot establish that
+# its dependencies avoid std or support a target without Unix platform cfgs.
+NATIVE_CORE_ALLOC_BUILTINS = frozenset({"img", "paper"})
 
 
 def run(args, **kwargs):
@@ -280,6 +284,15 @@ def settings(name: str):
     return manifest, source, needs_std, sorted(features), doc
 
 
+def object_target(name: str, needs_std: bool) -> Path:
+    if name in NATIVE_CORE_ALLOC_BUILTINS:
+        if needs_std:
+            raise ValueError(f"{name}: native core/alloc builtin now requires std; "
+                             "audit its dependency closure before changing its target")
+        return ROOT / "tools/trueos-object-native.json"
+    return ROOT / "tools/trueos-object.json"
+
+
 def stage_app(name: str, output: Path, manifest: Path, source: Path):
     stage = output / "sources" / name
     transformed = {}
@@ -287,14 +300,15 @@ def stage_app(name: str, output: Path, manifest: Path, source: Path):
         if not any(part in IGNORED for part in original.relative_to(ROOT / name).parts):
             transformed[original] = staged_manifest(stage / original.relative_to(ROOT / name), original)
     text = source.read_text()
+    if name in NATIVE_CORE_ALLOC_BUILTINS and not re.search(r"(?m)^\s*#!\[no_std\]\s*$", text):
+        raise ValueError(f"{name}: native core/alloc entry must declare #![no_std]")
     if not re.search(r'(?m)^\s*#!\[(?:no_main|cfg_attr\(target_os\s*=\s*"trueos",\s*no_main\))\]', text):
         text = '#![no_main]\n' + text + '''
 #[allow(unsafe_code)]
 #[unsafe(no_mangle)]
 pub extern "C" fn _start() -> ! {
     let _ = main();
-    unsafe extern "C" { fn exit(code: core::ffi::c_int) -> !; }
-    unsafe { exit(0) }
+    trueos::entry::finish()
 }
 '''
         transformed[source] = text.encode()
@@ -519,10 +533,11 @@ def prune_obsolete_packages(output: Path, names):
 
 def build_app(name: str, output: Path, profile: str, cargo: Path, binaries: Path, env: dict, overlays):
     manifest, source, needs_std, features, doc = settings(name)
+    target = object_target(name, needs_std)
     staged = stage_app(name, output, manifest, source)
     args = [cargo, "build", "--message-format=json-render-diagnostics",
             "-Zbuild-std=" + ("core,compiler_builtins,alloc,std,panic_abort" if needs_std else "core,compiler_builtins,alloc"),
-            "-Zbuild-std-features=compiler-builtins-mem", "-Zjson-target-spec", "--target", ROOT / "tools/trueos-object.json",
+            "-Zbuild-std-features=compiler-builtins-mem", "-Zjson-target-spec", "--target", target,
             "--manifest-path", staged, "--bin", name]
     config = output / "overlays.toml"
     lines = ["[patch.crates-io]"]
@@ -540,7 +555,7 @@ def build_app(name: str, output: Path, profile: str, cargo: Path, binaries: Path
     work = output / "objects" / name
     package = output / "dist" / f"{name}.bp"
     log = output / f"{name}.log"
-    print(f"buildins: checking {name} ({profile})", flush=True)
+    print(f"buildins: checking {name} ({profile}, {target.stem})", flush=True)
     checkpoint(output, name, "compile start")
     artifacts = set()
     errors = []

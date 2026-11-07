@@ -18,6 +18,27 @@ spec.loader.exec_module(build)
 
 
 class BuildInputs(unittest.TestCase):
+    def test_native_target_keeps_object_abi_without_unix_or_musl_platform_cfgs(self):
+        legacy = json.loads((build.ROOT / "tools/trueos-object.json").read_text())
+        native = json.loads((build.ROOT / "tools/trueos-object-native.json").read_text())
+        self.assertNotIn("target-family", native)
+        self.assertNotIn("env", native)
+        self.assertEqual(native, {key: value for key, value in legacy.items()
+                                  if key not in {"target-family", "env"}})
+
+    def test_only_audited_core_alloc_apps_select_the_native_target(self):
+        names = json.loads((build.ROOT / "buildins.json").read_text())["buildins"]
+        self.assertEqual(set(build.NATIVE_CORE_ALLOC_BUILTINS), {"img", "paper"})
+        for name in names:
+            needs_std = build.settings(name)[2]
+            expected = "trueos-object-native.json" if name in {"img", "paper"} else "trueos-object.json"
+            self.assertEqual(build.object_target(name, needs_std).name, expected, name)
+        self.assertEqual(build.object_target("unreviewed-no-std-app", False).name, "trueos-object.json")
+
+    def test_native_core_alloc_admission_rejects_an_entry_that_now_requires_std(self):
+        with self.assertRaisesRegex(ValueError, "native core/alloc builtin now requires std"):
+            build.object_target("img", True)
+
     def test_rust_safety_qualifiers_preserve_cabi_contracts(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "abi.rs"
@@ -73,7 +94,7 @@ class BuildInputs(unittest.TestCase):
     def test_staging_keeps_unchanged_mtimes_and_tracks_edits_and_deletions(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            app = root / "paper"
+            app = root / "example"
             (app / "src").mkdir(parents=True)
             manifest = app / "Cargo.toml"
             manifest.write_text('[package]\nname="paper"\nversion="0.1.0"\n[dependencies]\ntrueos={workspace=true}\n')
@@ -85,19 +106,35 @@ class BuildInputs(unittest.TestCase):
             original_root, build.ROOT = build.ROOT, root
             self.addCleanup(setattr, build, "ROOT", original_root)
             output = root / "output"
-            staged = build.stage_app("paper", output, manifest, source)
+            staged = build.stage_app("example", output, manifest, source)
             entry = staged.parent / "src/main.rs"
             self.assertTrue(entry.read_text().startswith("#![no_main]\n"))
             self.assertIn('fn _start()', entry.read_text())
+            self.assertIn('trueos::entry::finish()', entry.read_text())
+            self.assertNotIn('fn exit(', entry.read_text())
             before = (staged.stat().st_mtime_ns, entry.stat().st_mtime_ns)
-            build.stage_app("paper", output, manifest, source)
+            build.stage_app("example", output, manifest, source)
             self.assertEqual(before, (staged.stat().st_mtime_ns, entry.stat().st_mtime_ns))
             source.write_text(source.read_text() + "// changed\n")
             removed.unlink()
-            build.stage_app("paper", output, manifest, source)
+            build.stage_app("example", output, manifest, source)
             self.assertEqual(before[0], staged.stat().st_mtime_ns)
             self.assertIn("// changed", entry.read_text())
             self.assertFalse((entry.parent / "old.rs").exists())
+
+    def test_native_staging_requires_real_no_std_and_finishes_without_c_exit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)
+            manifest, source, _, _, _ = build.settings("img")
+            staged = build.stage_app("img", output, manifest, source)
+            entry = (staged.parent / source.relative_to(manifest.parent)).read_text()
+            self.assertIn("#![no_std]", entry)
+            self.assertIn("trueos::entry::finish()", entry)
+            self.assertNotIn("fn exit(", entry)
+            invalid = output / "invalid.rs"
+            invalid.write_text("// #![no_std]\nfn main() {}\n")
+            with self.assertRaisesRegex(ValueError, "entry must declare #!\\[no_std\\]"):
+                build.stage_app("img", output, manifest, invalid)
 
 
 @unittest.skipUnless(shutil.which("patch"), "std preparation requires the patch utility")
@@ -221,9 +258,10 @@ class CargoObjects(unittest.TestCase):
         self.manifest.write_text('[package]\nname="paper"\nversion="0.1.0"\n')
         self.source = self.manifest.parent / "src/main.rs"
         self.source.parent.mkdir()
-        self.source.write_text("fn main() {}\n")
+        self.source.write_text("#![no_std]\nfn main() {}\n")
         (self.root / "tools").mkdir()
         (self.root / "tools/trueos-object.json").write_text('{"exe-suffix":".o"}\n')
+        (self.root / "tools/trueos-object-native.json").write_text('{"exe-suffix":".o"}\n')
         (self.root / "tools/rel-coalesce.ld").write_text("fixture linker recipe\n")
         (self.root / "tools/elf_layout.py").write_text("fixture validator\n")
         self.current = self.output / "cargo/trueos-object/debug/paper.o"
@@ -358,7 +396,9 @@ class CargoObjects(unittest.TestCase):
         self.assertTrue(package.read_bytes().endswith(b"packed:stripped:" + self.current.read_bytes()))
         command = self.popen.call_args.args[0]
         self.assertEqual(command[1], "build")
-        self.assertIn(str(self.root / "tools/trueos-object.json"), command)
+        self.assertIn(str(self.root / "tools/trueos-object-native.json"), command)
+        self.assertIn("-Zbuild-std=core,compiler_builtins,alloc", command)
+        self.assertFalse(any(arg.startswith("-Zbuild-std=") and ",std" in arg for arg in command))
         self.assertNotIn("rustc", command)
         self.assertNotIn("-Zno-link", command)
         self.assertNotIn("--emit=obj", command)

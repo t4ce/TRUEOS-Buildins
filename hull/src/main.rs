@@ -21,6 +21,7 @@ mod console;
 mod css;
 mod favicon;
 mod images;
+mod ide_preview;
 mod video;
 mod javascript;
 mod javascript_dom;
@@ -60,6 +61,7 @@ struct Hull {
     viewport: viewport::Viewport,
     shift_scroll: bool,
     download: Option<u32>,
+    ide_preview: Option<ide_preview::Watch>,
     html: Option<Vec<u8>>,
     document: Option<rp5::Document>,
     css: css::Css,
@@ -222,6 +224,8 @@ impl Hull {
     }
 
     fn start_page(&mut self, url: String) {
+        self.ide_preview = None;
+        if let Some(operation) = self.download.take() { let _ = netfs::fetch_bytes_discard(operation); }
         let download = netfs::fetch_bytes_happy_eyeballs(url.as_bytes());
         match download {
             Ok(operation) => {
@@ -436,6 +440,7 @@ impl Hull {
                         self.submit_received(self.page_url.clone(), None, Some(bytes));
                         return;
                     }
+                    self.ide_preview = ide_preview::Watch::from_page(&self.page_url, &bytes);
                     let document = rp5::parse(&String::from_utf8_lossy(&bytes));
                     logl::log(
                         logl::level::INFO,
@@ -624,6 +629,9 @@ impl ApplicationHandler for Hull {
         self.poll_console(event_loop);
         self.poll_download_submission();
         self.poll_download();
+        if !self.page_pending() && self.ide_preview.as_mut().is_some_and(|watch| watch.poll()) {
+            self.start_page(self.page_url.clone());
+        }
         self.css.poll_downloads();
         // Images and persistence can only begin after this navigation's initial
         // layout and text have successfully published. Neither gates navigation.
