@@ -13,6 +13,6 @@ sha2 = { version = "=0.10.9", default-features = false }
 http = "=1.4.0"
 url = { version = "=2.5.8", default-features = false }
 trueos-path = { path = "../../../TRUEOS/crates/trueos-path" }
-tokio = { version = "=1.54.1", default-features = false, features = ["rt", "time", "macros", "test-util"] }
+tokio = { version = "=1.54.1", default-features = false, features = ["rt", "time", "macros", "test-util", "io-util"] }
 base64 = { version = "0.22", default-features = false, features = ["alloc"] }
 percent-encoding = { version = "2.3", default-features = false, features = ["alloc"] }

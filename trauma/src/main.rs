@@ -3,6 +3,8 @@
 extern crate alloc;
 #[macro_use]
 mod output;
+#[cfg(target_os = "trueos")]
+mod terminal_line;
 
 use alloc::string::{String, ToString};
 #[cfg(not(target_os = "trueos"))]
@@ -37,12 +39,17 @@ fn run() -> Result<(), String> {
     }
     #[cfg(target_os = "trueos")]
     let mut lease = trueos::vshell::terminal_initial_lease().map_err(|e| e.to_string())?;
+    #[cfg(target_os = "trueos")]
+    let mut input = terminal_line::LineReader::new(trueos::io::stdin());
     loop {
         println!("Trauma — enter an HTTP(S) URL; an empty line returns to the shell.");
         #[cfg(not(target_os = "trueos"))]
         io::stdout().flush().map_err(|e| e.to_string())?;
         #[cfg(target_os = "trueos")]
         lease.acknowledge_ready().map_err(|e| e.to_string())?;
+        #[cfg(target_os = "trueos")]
+        let result = session(&runtime, &mut input);
+        #[cfg(not(target_os = "trueos"))]
         let result = session(&runtime);
         #[cfg(target_os = "trueos")]
         let ticket = lease.release_to_shell().map_err(|e| e.to_string())?;
@@ -57,20 +64,17 @@ fn run() -> Result<(), String> {
 }
 
 #[cfg(target_os = "trueos")]
-fn session(runtime: &tokio::runtime::Runtime) -> Result<(), String> {
-    use tokio::io::{AsyncBufReadExt, BufReader};
+fn session(
+    runtime: &tokio::runtime::Runtime,
+    input: &mut terminal_line::LineReader<trueos::io::Stdin>,
+) -> Result<(), String> {
     runtime.block_on(async {
-        let mut input = BufReader::new(trueos::io::stdin());
         loop {
             trueos::vsys::log_info("URL> ");
-            let mut line = String::new();
-            if input
-                .read_line(&mut line)
-                .await
-                .map_err(|e| e.to_string())?
-                == 0
-                || line.trim().is_empty()
-            {
+            let Some(line) = input.read_line(trueos::vsys::log_info).await? else {
+                return Ok(());
+            };
+            if line.trim().is_empty() {
                 return Ok(());
             }
             let download = Download::builder()

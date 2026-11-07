@@ -15,6 +15,8 @@ pub mod path {
 mod native_http;
 #[path = "../../src/native_storage.rs"]
 mod storage;
+#[path = "../../src/terminal_line.rs"]
+mod terminal_line;
 mod transport {
     pub use http::{header, HeaderMap};
     pub use url::Url;
@@ -859,5 +861,65 @@ mod tests {
                 .any(|h| h.name == "cookie2" || h.name == "referer"));
             assert_eq!(s.active, 0);
         });
+    }
+    #[tokio::test]
+    async fn native_terminal_accepts_cr_lf_and_crlf_without_reading_the_next_line() {
+        let mut reader =
+            terminal_line::LineReader::new(&b"\rhttps://fixture.test/file\r\n\nnext\n"[..]);
+        let mut echo = String::new();
+        assert_eq!(
+            reader
+                .read_line(|text| echo.push_str(text))
+                .await
+                .unwrap()
+                .unwrap(),
+            ""
+        );
+        // This is the same reader after terminal park/reentry. CR must not
+        // consume the URL bytes that belong to the next session.
+        assert_eq!(
+            reader
+                .read_line(|text| echo.push_str(text))
+                .await
+                .unwrap()
+                .unwrap(),
+            "https://fixture.test/file"
+        );
+        assert_eq!(
+            reader
+                .read_line(|text| echo.push_str(text))
+                .await
+                .unwrap()
+                .unwrap(),
+            ""
+        );
+        assert_eq!(
+            reader
+                .read_line(|text| echo.push_str(text))
+                .await
+                .unwrap()
+                .unwrap(),
+            "next"
+        );
+        assert!(reader.read_line(|_| {}).await.unwrap().is_none());
+        assert_eq!(echo.matches("\r\n").count(), 4);
+    }
+    #[tokio::test]
+    async fn native_terminal_edits_utf8_and_ignores_arrow_sequences() {
+        let input = "hxx\u{8}\u{7f}ttps://fixture.test/é\u{7f}ok\u{1b}[D\r";
+        let mut reader = terminal_line::LineReader::new(input.as_bytes());
+        let mut echo = String::new();
+        assert_eq!(
+            reader
+                .read_line(|text| echo.push_str(text))
+                .await
+                .unwrap()
+                .unwrap(),
+            "https://fixture.test/ok"
+        );
+        assert!(echo.contains("é\u{8} \u{8}"));
+        assert!(!echo.contains("[D"));
+        let mut invalid = terminal_line::LineReader::new(&b"bad\xff\r"[..]);
+        assert!(invalid.read_line(|_| {}).await.is_err());
     }
 }
