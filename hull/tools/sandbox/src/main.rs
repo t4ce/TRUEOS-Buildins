@@ -2,9 +2,16 @@
 #![allow(dead_code)]
 extern crate self as trueos;
 pub use tokio;
+pub mod runtime {
+    pub fn current_thread() -> tokio::runtime::Builder {
+        let mut builder = tokio::runtime::Builder::new_current_thread();
+        builder.enable_time();
+        builder
+    }
+}
 extern crate alloc;
-#[path = "../../../src/platform.rs"]
-mod platform;
+#[path = "../../../src/execution.rs"]
+mod execution;
 #[allow(unexpected_cfgs)]
 #[path = "../../../../../TRUEOS-Blueprints/api/src/worker.rs"]
 pub mod native_worker;

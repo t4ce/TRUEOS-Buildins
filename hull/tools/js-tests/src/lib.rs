@@ -21,8 +21,8 @@ pub mod window {
 
 pub use tokio;
 extern crate alloc;
-#[path = "../../../src/platform.rs"]
-mod platform;
+#[path = "../../../src/execution.rs"]
+mod execution;
 #[allow(unexpected_cfgs)]
 #[path = "../../../../../TRUEOS-Blueprints/api/src/worker.rs"]
 pub mod native_worker;

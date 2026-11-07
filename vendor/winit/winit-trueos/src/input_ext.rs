@@ -1,4 +1,4 @@
-use alloc::{vec::Vec};
+use alloc::vec::Vec;
 use alloc::collections::VecDeque;
 use crate::platform::Mutex;
 

@@ -198,6 +198,8 @@
 //! * `rwh_06`: Implement `raw-window-handle v0.6` traits.
 //! * `serde`: Enables serialization/deserialization of certain types with [Serde](https://crates.io/crates/serde).
 //! * `mint`: Enables mint (math interoperability standard types) conversions.
+//! * `trueos-native`: On TRUEOS, use core/alloc and native synchronization,
+//!   monotonic time, UTF-8 paths and I/O types. Hosted backends keep their std APIs.
 //!
 //! See the [`platform`] module for documentation on platform-specific cargo
 //! features.

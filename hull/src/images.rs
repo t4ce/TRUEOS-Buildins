@@ -5,7 +5,7 @@ use num_traits::Float;
 use alloc::{string::{String, ToString}, vec::Vec, borrow::ToOwned, format, vec};
 use alloc::collections::VecDeque;
 use hashbrown::{HashMap, HashSet};
-use crate::platform::{Duration, Instant};
+use crate::execution::{Duration, Instant};
 use trueos::logl;
 use trueos::ui4_scene::{
     HULL_IMAGE_FAILED, HULL_IMAGE_READY, hull_image_release, hull_image_request, hull_image_reset,

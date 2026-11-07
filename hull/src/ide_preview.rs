@@ -1,6 +1,8 @@
 //! Refresh only pages marked by IDEdit's local development Blueprint.
-use alloc::{string::String, format};
-use crate::platform::{Duration, Instant};
+#[cfg(test)]
+use alloc::format;
+use alloc::{string::String};
+use crate::execution::{Duration, Instant};
 use trueos::netfs;
 use trueos_ide::html_preview::{REVISION_MARKER, REVISION_PATH};
 

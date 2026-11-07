@@ -1,5 +1,5 @@
 //! One navigation-local box for cookies and Web Storage. No disk reads or network integration.
-use alloc::{string::{String, ToString}, vec::Vec, borrow::ToOwned, format};
+use alloc::{string::String, vec::Vec, borrow::ToOwned, format};
 use alloc::rc::Rc;
 use core::cell::RefCell;
 

@@ -1,5 +1,5 @@
 //! The event enums and assorted supporting types.
-use alloc::{string::String};
+use alloc::string::String;
 use core::cell::LazyCell;
 use core::cmp::Ordering;
 use core::f64;

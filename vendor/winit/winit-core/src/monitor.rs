@@ -5,7 +5,7 @@
 //! methods, which return an iterator of [`MonitorHandle`]:
 //! - [`ActiveEventLoop::available_monitors`][crate::event_loop::ActiveEventLoop::available_monitors].
 //! - [`Window::available_monitors`][crate::window::Window::available_monitors].
-use alloc::{boxed::Box};
+use alloc::boxed::Box;
 use core::any::Any;
 use alloc::borrow::Cow;
 use core::fmt;

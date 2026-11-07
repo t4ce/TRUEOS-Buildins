@@ -1,7 +1,7 @@
 //! Typed Lightning CSS -> Taffy bridge, with token substitution before property resolution.
 #[cfg(target_os = "trueos")]
 use num_traits::Float;
-use alloc::{string::{String, ToString}, vec::Vec, boxed::Box, borrow::ToOwned, format, vec};
+use alloc::{string::{String, ToString}, vec::Vec, borrow::ToOwned, format, vec};
 use super::css::Css;
 use crate::selectors::{MatchDom, matches_components};
 #[path = "custom_properties.rs"]
@@ -22,6 +22,29 @@ use rp5::{Document, NodeId as HtmlId, NodeKind};
 use hashbrown::HashMap;
 use core::fmt::Write;
 use taffy::prelude::*;
+
+#[derive(Debug)]
+pub(super) enum LayoutError {
+    Tree(taffy::TaffyError),
+    Diagnostics(serde_json::Error),
+}
+
+impl core::fmt::Display for LayoutError {
+    fn fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::Tree(error) => core::fmt::Display::fmt(error, formatter),
+            Self::Diagnostics(error) => core::fmt::Display::fmt(error, formatter),
+        }
+    }
+}
+
+impl From<taffy::TaffyError> for LayoutError {
+    fn from(error: taffy::TaffyError) -> Self { Self::Tree(error) }
+}
+
+impl From<serde_json::Error> for LayoutError {
+    fn from(error: serde_json::Error) -> Self { Self::Diagnostics(error) }
+}
 
 pub(super) struct Export {
     pub json: String,
@@ -108,7 +131,7 @@ pub(super) fn compute(
     document: &Document,
     css: &Css,
     viewport: (u32, u32),
-) -> Result<Export, Box<dyn core::error::Error>> {
+) -> Result<Export, LayoutError> {
     export(document, css, viewport, true)
 }
 
@@ -117,7 +140,7 @@ pub(super) fn compute_for_render(
     document: &Document,
     css: &Css,
     viewport: (u32, u32),
-) -> Result<Export, Box<dyn core::error::Error>> {
+) -> Result<Export, LayoutError> {
     export(document, css, viewport, false)
 }
 
@@ -126,11 +149,11 @@ fn export(
     css: &Css,
     viewport: (u32, u32),
     diagnostics: bool,
-) -> Result<Export, Box<dyn core::error::Error>> {
-    let started = crate::platform::Instant::now();
+) -> Result<Export, LayoutError> {
+    let started = crate::execution::Instant::now();
     let mut phase_started = started;
     let mut phase = |name: &str| {
-        let now = crate::platform::Instant::now();
+        let now = crate::execution::Instant::now();
         trueos::logl::log(
             trueos::logl::level::INFO,
             format_args!(

@@ -1,3 +1,8 @@
+// The exported macro must also work for std consumers that do not explicitly
+// import alloc. Resolve the owned pointer through the defining crate.
+#[doc(hidden)]
+pub use alloc::boxed::Box;
+
 #[macro_export]
 macro_rules! impl_dyn_casting {
     ($trait:ident) => {
@@ -21,9 +26,9 @@ macro_rules! impl_dyn_casting {
             /// Owned downcast to the backend concrete type.
             ///
             /// Returns `Err` with `self` if the object was not from that backend.
-            pub fn cast<T: $trait>(self: alloc::boxed::Box<Self>) -> Result<alloc::boxed::Box<T>, alloc::boxed::Box<Self>> {
+            pub fn cast<T: $trait>(self: $crate::casting::Box<Self>) -> Result<$crate::casting::Box<T>, $crate::casting::Box<Self>> {
                 if self.cast_ref::<T>().is_some() {
-                    let this: alloc::boxed::Box<dyn core::any::Any> = self;
+                    let this: $crate::casting::Box<dyn core::any::Any> = self;
                     // Unwrap is okay, we just checked the type of `self` is `T`.
                     Ok(this.downcast::<T>().unwrap())
                 } else {

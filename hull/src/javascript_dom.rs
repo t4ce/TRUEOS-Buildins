@@ -719,11 +719,11 @@ impl Gateway {
                     .copied()
                     .collect::<Vec<_>>();
                 let mut ids = Vec::new();
-                let until = crate::platform::Instant::now() + crate::platform::Duration::from_millis(20);
+                let until = crate::execution::Instant::now() + crate::execution::Duration::from_millis(20);
                 let mut visited = 0usize;
                 while let Some(candidate) = pending.pop() {
                     visited += 1;
-                    if visited % 256 == 0 && crate::platform::Instant::now() >= until {
+                    if visited % 256 == 0 && crate::execution::Instant::now() >= until {
                         return Err(failure(
                             "QuotaExceededError",
                             "Tag collection traversal budget exhausted",
@@ -748,7 +748,7 @@ impl Gateway {
                     }
                     pending.extend(document.nodes[candidate].children.iter().rev().copied());
                 }
-                if crate::platform::Instant::now() >= until {
+                if crate::execution::Instant::now() >= until {
                     return Err(failure(
                         "QuotaExceededError",
                         "Tag collection traversal budget exhausted",

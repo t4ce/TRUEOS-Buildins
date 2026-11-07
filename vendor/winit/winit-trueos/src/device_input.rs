@@ -1,4 +1,4 @@
-use alloc::{vec::Vec};
+use alloc::vec::Vec;
 use crate::{InputDevice, abi, input, input_ext};
 use alloc::collections::BTreeMap;
 use winit_core::event::{

@@ -3,7 +3,7 @@ use alloc::{vec::Vec};
 use serde_json::{Value, json};
 use alloc::rc::Rc;
 use core::cell::RefCell;
-use crate::platform::{Duration, Instant};
+use crate::execution::{Duration, Instant};
 const MAX_TIMERS: usize = 256;
 #[derive(Default)]
 pub(crate) struct Timers {

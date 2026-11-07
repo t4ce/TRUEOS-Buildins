@@ -71,7 +71,7 @@ class BuildInputs(unittest.TestCase):
 
     def test_only_audited_core_alloc_apps_select_the_native_target(self):
         names = json.loads((build.ROOT / "buildins.json").read_text())["buildins"]
-        admitted = {"apps", "backup", "commander", "edit", "img", "os", "paper", "termdir"}
+        admitted = {"apps", "backup", "commander", "edit", "hull", "img", "os", "paper", "termdir"}
         self.assertEqual(set(build.NATIVE_CORE_ALLOC_BUILTINS), admitted)
         for name in names:
             needs_std = build.settings(name)[2]

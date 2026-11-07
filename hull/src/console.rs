@@ -322,8 +322,20 @@ impl Drop for Console {
 }
 
 fn lease_error(error: vshell::TerminalLeaseError) -> io::Error {
-    io::Error::new(io::ErrorKind::Other, match error {
-        vshell::TerminalLeaseError::Unsupported => "terminal lease unsupported",
-        _ => "terminal lease operation failed",
-    })
+    use vshell::TerminalLeaseError;
+    let message = match error {
+        TerminalLeaseError::Unsupported => "terminal handoff is unsupported",
+        TerminalLeaseError::NotActive => "terminal lease is not active",
+        TerminalLeaseError::Stale => "terminal lease epoch is stale",
+        TerminalLeaseError::Detached => "terminal console is detached",
+        TerminalLeaseError::Busy => "terminal ownership could not be transferred",
+        TerminalLeaseError::Transport(code) => {
+            trueos::logl::log(
+                trueos::logl::level::ERROR,
+                format_args!("hull: terminal lease transport error {code}"),
+            );
+            "terminal lease transport error"
+        }
+    };
+    io::Error::new(io::ErrorKind::Other, message)
 }

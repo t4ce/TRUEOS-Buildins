@@ -3,7 +3,8 @@
 //! origin reserves window chrome without changing stored document coordinates.
 #[cfg(target_os = "trueos")]
 use num_traits::Float;
-use alloc::{vec::Vec};
+#[cfg(test)]
+use alloc::vec::Vec;
 
 #[derive(Default, Debug)]
 pub(super) struct Viewport {

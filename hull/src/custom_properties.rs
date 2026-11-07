@@ -81,7 +81,7 @@ impl Variables {
         let mut value = property.value.clone();
         let info = inspect(&mut value)?;
         let mut budget = info.count;
-        let mut vars = HashMap::new();
+        let mut vars = lightningcss::collections::HashMap::new();
         for name in info.names {
             if let Some(value) = self.0.get(&name) {
                 budget = budget.checked_add(inspect(&mut value.clone())?.count)?;
@@ -150,7 +150,7 @@ impl Resolver<'_> {
             return;
         }
         let mut budget = info.count;
-        let mut vars = HashMap::new();
+        let mut vars = lightningcss::collections::HashMap::new();
         for dependency in &info.names {
             if let Some((tokens, count)) = self.done.get(dependency) {
                 budget = budget.saturating_add(*count);

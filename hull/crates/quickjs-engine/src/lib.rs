@@ -11,6 +11,9 @@ compile_error!("the native QuickJS callback boundary requires panic=abort");
 // C owns in-place atomics; this adapter only bridges the native wait/clock ABI.
 extern crate alloc;
 
+#[cfg(all(test, feature = "native-string-test"))]
+mod native_string_tests;
+
 #[cfg(any(target_os = "trueos", feature = "native-allocator-test"))]
 mod native_alloc;
 

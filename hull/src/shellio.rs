@@ -12,8 +12,8 @@ thread_local! {
 }
 
 #[cfg(target_os = "trueos")]
-static OUTPUT: crate::platform::Mutex<VecDeque<String>> =
-    crate::platform::Mutex::new(VecDeque::new());
+static OUTPUT: crate::execution::Mutex<VecDeque<String>> =
+    crate::execution::Mutex::new(VecDeque::new());
 
 fn with_output<R>(f: impl FnOnce(&mut VecDeque<String>) -> R) -> R {
     #[cfg(target_os = "trueos")]

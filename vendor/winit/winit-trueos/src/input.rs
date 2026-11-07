@@ -1,4 +1,4 @@
-use alloc::{vec::Vec};
+use alloc::vec::Vec;
 use dpi::PhysicalPosition;
 use winit_core::event::{
     ButtonSource, ElementState, KeyEvent, Modifiers, MouseButton, MouseScrollDelta, PointerSource,

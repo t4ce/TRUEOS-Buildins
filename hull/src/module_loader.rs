@@ -4,7 +4,7 @@ use hull_quickjs::{Engine, ImportRequest};
 use alloc::{collections::VecDeque, rc::Rc, sync::Arc};
 use core::cell::RefCell;
 use hashbrown::{HashMap, HashSet};
-use crate::platform::{Duration, Instant};
+use crate::execution::{Duration, Instant};
 use trueos::netfs;
 use url::Url;
 

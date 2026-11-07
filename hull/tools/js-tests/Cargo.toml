@@ -16,8 +16,8 @@ hashbrown = { version = "0.17", default-features = false, features = ["default-h
 lightningcss = { version = "=1.0.0-alpha.72", default-features = false, features = ["into_owned", "substitute_variables", "trueos-native"] }
 parcel_selectors = "0.28.3"
 cssparser = "0.37"
-winit-trueos = { path = "../../../vendor/winit/winit-trueos" }
-winit-core = { path = "../../../vendor/winit/winit-core" }
+winit-trueos = { path = "../../../vendor/winit/winit-trueos", features = ["trueos-native"] }
+winit-core = { path = "../../../vendor/winit/winit-core", features = ["trueos-native"] }
 tokio = { path = "../../../vendor/tokio-1.54.1", default-features = false, features = ["rt", "sync", "time"] }
 
 [workspace]
@@ -31,3 +31,7 @@ parcel_selectors = { path = "../../../vendor/parcel_selectors-0.28.3" }
 static-self = { path = "../../../vendor/static-self-0.1.2" }
 static-self-derive = { path = "../../../vendor/static-self-derive-0.1.1" }
 cssparser-macros = { path = "../../../vendor/cssparser-macros-0.7.1" }
+precomputed-hash = { path = "../../../vendor/precomputed-hash-0.1.1" }
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("trueos"))'] }

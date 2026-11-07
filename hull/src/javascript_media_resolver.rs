@@ -10,7 +10,7 @@ use rp5::{Document, Namespace};
 use alloc::{collections::VecDeque, rc::Rc};
 use core::cell::{Cell, RefCell};
 use hashbrown::HashSet;
-use crate::platform::{Duration, Instant};
+use crate::execution::{Duration, Instant};
 #[derive(Default)]
 pub(super) struct Resolver {
     initialized: bool,

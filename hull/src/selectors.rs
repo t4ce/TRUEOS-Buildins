@@ -1,12 +1,14 @@
 //! Shared static CSS matching and bounded selectors for the script-visible DOM.
-use alloc::{string::String, vec::Vec, borrow::ToOwned, format, vec};
+#[cfg(test)]
+use alloc::format;
+use alloc::{string::String, vec::Vec, borrow::ToOwned, vec};
 use lightningcss::selector::{Component, Selector, SelectorList};
 use lightningcss::stylesheet::ParserOptions;
 use lightningcss::traits::ParseWithOptions;
 use rp5::{Document, NodeId as HtmlId, NodeKind};
 use core::cell::Cell;
 use hashbrown::HashMap;
-use crate::platform::{Duration, Instant};
+use crate::execution::{Duration, Instant};
 
 #[derive(Clone, Copy, Default)]
 struct SiblingPosition {

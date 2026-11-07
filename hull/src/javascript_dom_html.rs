@@ -1,5 +1,7 @@
 //! Fragment parsing and serialization use the same rp5 arena as ordinary nodes.
-use alloc::{string::String, vec::Vec, vec};
+#[cfg(test)]
+use alloc::vec;
+use alloc::{string::String, vec::Vec};
 use super::{DomResult, Gateway, MAX_STRING_BYTES, failure};
 use rp5::{Document, Namespace, NodeKind};
 

@@ -3,7 +3,7 @@ use alloc::{string::{String, ToString}, vec::Vec, borrow::ToOwned, vec};
 use super::{DomResult, Gateway, MAX_QUERY_RESULTS, MAX_STRING_BYTES, failure, input};
 use rp5::{Document, Namespace, NodeKind};
 use serde_json::{Value, json};
-use crate::platform::{Duration, Instant};
+use crate::execution::{Duration, Instant};
 
 fn hierarchy() -> (&'static str, String) {
     failure(

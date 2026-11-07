@@ -1,9 +1,11 @@
 //! Best-effort SVG persistence, polled cooperatively after the live frame exists.
-use alloc::{string::String, boxed::Box, format, vec};
+#[cfg(test)]
+use alloc::vec;
+use alloc::{string::String, boxed::Box, format};
 use core::future::Future;
 use core::pin::Pin;
 use core::task::{Context, Poll, Waker};
-use crate::platform::{Duration, Instant};
+use crate::execution::{Duration, Instant};
 use trueos::{async_fs, env, logl};
 
 pub(super) fn app_root() -> String {
@@ -34,10 +36,16 @@ impl Snapshot {
         let root = format!("{}/{host}", app_root());
         self.pending = Some(Box::pin(async move {
             async_fs::create_dir_all(root.as_bytes()).await?;
-            async_fs::write_file(format!("{root}/layout.svg").as_bytes(), svg.as_bytes()).await?;
-            async_fs::write_file(
+            // Checked publication retains any existing record's type/key and
+            // reports the durable commit before the snapshot is called saved.
+            async_fs::write_file_typed_checked(
+                format!("{root}/layout.svg").as_bytes(), svg.as_bytes(),
+                async_fs::ContentTypeId::UTF8_TEXT, false, None,
+            ).await?;
+            async_fs::write_file_typed_checked(
                 format!("{root}/storage.json").as_bytes(),
                 cookies.as_bytes(),
+                async_fs::ContentTypeId::UTF8_TEXT, false, None,
             )
             .await
         }));
@@ -137,6 +145,54 @@ mod tests {
         });
         snapshot.poll();
         assert!(snapshot.pending.is_none());
+    }
+
+    #[test]
+    fn repeated_snapshots_retain_record_identity_and_failed_commit_keeps_old_storage() {
+        use crate::fs_mock::Record;
+        const SVG: &[u8] = b"apps/hull/example.com/layout.svg";
+        const STORAGE: &[u8] = b"apps/hull/example.com/storage.json";
+        STATE.with(|state| {
+            let mut state = state.borrow_mut();
+            *state = Default::default();
+            state.ready = true;
+            state.records = vec![
+                Record { path: SVG.to_vec(), bytes: b"<svg>old</svg>".to_vec(),
+                    content_type: 1, key: b"svg-key".to_vec(), file_id: 41 },
+                Record { path: STORAGE.to_vec(), bytes: b"[[\"cookie:a\",\"old\"]]".to_vec(),
+                    content_type: 2, key: b"storage-key".to_vec(), file_id: 42 },
+            ];
+        });
+        let mut snapshot = Snapshot::default();
+        snapshot.prepare("https://example.com/a", "<svg>first</svg>".into(), "[]".into());
+        snapshot.poll();
+        assert!(snapshot.pending.is_none());
+        STATE.with(|state| {
+            let mut state = state.borrow_mut();
+            assert_eq!(state.records[0].bytes, b"<svg>first</svg>");
+            assert_eq!(state.records[0].content_type, 1);
+            assert_eq!(state.records[0].key, b"svg-key");
+            assert_eq!(state.records[0].file_id, 41);
+            assert_eq!(state.records[1].bytes, b"[]");
+            assert_eq!(state.records[1].key, b"storage-key");
+            assert_eq!(state.records[1].file_id, 42);
+            state.fail_path = Some(STORAGE.to_vec());
+        });
+        crate::logl::take_messages();
+        snapshot.prepare("https://example.com/b", "<svg>second</svg>".into(), "[1]".into());
+        snapshot.poll();
+        assert!(snapshot.pending.is_none());
+        STATE.with(|state| {
+            let state = state.borrow();
+            assert_eq!(state.records[0].bytes, b"<svg>second</svg>");
+            assert_eq!(state.records[1].bytes, b"[]");
+            assert_eq!(state.records[1].content_type, 2);
+            assert_eq!(state.records[1].key, b"storage-key");
+            assert_eq!(state.records[1].file_id, 42);
+        });
+        let messages = crate::logl::take_messages();
+        assert!(messages.iter().any(|message| message.contains("snapshot failed: -2")));
+        assert!(!messages.iter().any(|message| message.contains("snapshot saved")));
     }
 
     #[test]

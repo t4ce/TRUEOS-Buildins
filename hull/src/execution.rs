@@ -5,7 +5,13 @@
 pub use core::time::Duration;
 
 #[cfg(target_os = "trueos")]
-pub use trueos_runtime::{sync::Mutex, time::Instant};
+pub use trueos_runtime::time::Instant;
+#[cfg(target_os = "trueos")]
+#[allow(unused_imports)]
+pub use trueos_runtime::sync::Mutex;
 
 #[cfg(not(target_os = "trueos"))]
-pub use std::{sync::Mutex, time::Instant};
+pub use std::time::Instant;
+#[cfg(not(target_os = "trueos"))]
+#[allow(unused_imports)]
+pub use std::sync::Mutex;

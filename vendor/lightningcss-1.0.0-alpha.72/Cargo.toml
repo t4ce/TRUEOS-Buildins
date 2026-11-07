@@ -38,6 +38,7 @@ rustdoc-args = [
 ]
 
 [features]
+# Core/alloc CSS engine for TRUEOS. Keep hosted bundler/CLI/source-map defaults off.
 trueos-native = []
 browserslist = ["browserslist-rs"]
 bundler = [

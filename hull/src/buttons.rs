@@ -1,7 +1,9 @@
 //! Prepare window-local button outlines when page geometry changes.
+#[cfg(test)]
+use alloc::vec;
 #[cfg(target_os = "trueos")]
 use num_traits::Float;
-use alloc::{vec::Vec, vec};
+use alloc::{vec::Vec};
 use super::{layout::ButtonBox, viewport::Viewport};
 use trueos::ui4_winit::ButtonRegion;
 

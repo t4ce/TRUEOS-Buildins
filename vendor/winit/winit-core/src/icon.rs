@@ -1,4 +1,4 @@
-use alloc::{vec::Vec};
+use alloc::vec::Vec;
 use core::any::Any;
 use core::error::Error;
 use core::ops::Deref;

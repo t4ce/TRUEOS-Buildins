@@ -1,5 +1,7 @@
 //! Bounded favicon discovery. The image service remains the decoder and owner.
-use alloc::{string::{String, ToString}, vec::Vec, format, vec};
+#[cfg(test)]
+use alloc::format;
+use alloc::{string::{String, ToString}, vec::Vec, vec};
 use hashbrown::HashSet;
 
 use rp5::{Document, Namespace};

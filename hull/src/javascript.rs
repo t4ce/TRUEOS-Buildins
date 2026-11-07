@@ -2,7 +2,7 @@
 use alloc::{string::{String, ToString}, vec::Vec, boxed::Box, borrow::ToOwned, format};
 use alloc::{collections::VecDeque, rc::Rc, sync::Arc};
 use core::{cell::{Cell, RefCell}, sync::atomic::{AtomicBool, AtomicU64, Ordering}};
-use crate::platform::{Duration, Instant, Mutex};
+use crate::execution::{Duration, Instant, Mutex};
 
 use hull_quickjs::{ConsoleBatch, Engine};
 use serde_json::{Value, json};

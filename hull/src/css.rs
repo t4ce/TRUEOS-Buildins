@@ -1,5 +1,7 @@
 //! One-shot CSS parsing. HTML extraction stays in rp5; CSS syntax belongs to Lightning CSS.
-use alloc::{string::{String, ToString}, vec::Vec, borrow::ToOwned, format, vec};
+#[cfg(test)]
+use alloc::format;
+use alloc::{string::{String, ToString}, vec::Vec, borrow::ToOwned, vec};
 use hashbrown::{HashMap, HashSet};
 #[cfg(not(target_os = "trueos"))]
 use std::sync::{Arc, RwLock};
@@ -7,7 +9,7 @@ use std::sync::{Arc, RwLock};
 use alloc::rc::Rc;
 #[cfg(target_os = "trueos")]
 use core::cell::RefCell;
-use crate::platform::{Duration, Instant};
+use crate::execution::{Duration, Instant};
 
 use lightningcss::rules::CssRule;
 use lightningcss::stylesheet::{ParserOptions, StyleAttribute, StyleSheet};

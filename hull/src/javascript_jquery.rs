@@ -5,7 +5,7 @@ use super::{DomResult, Gateway, failure, input};
 use rjqry::{Dom, Error, JQuery, NodeKind};
 use serde_json::{Value, json};
 use hashbrown::{HashMap, HashSet};
-use crate::platform::{Duration, Instant};
+use crate::execution::{Duration, Instant};
 
 fn error(error: Error) -> (&'static str, String) {
     match error {

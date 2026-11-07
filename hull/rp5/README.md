@@ -3,7 +3,7 @@
 Native Rust translation of the parse5 parser vendored next door in `../p5`.
 Upstream revision: `103d9aa6b50a903ba23134124337b2201b3822c2` (parse5 8.0.1).
 
-The library takes decoded Unicode and builds a document or context-sensitive
+The library is `no_std` with `alloc`. It takes decoded Unicode and builds a document or context-sensitive
 fragment in a Rust arena. The arena preserves stable node identities during
 formatting repair and table foster parenting, stores template content in its
 own fragment, and avoids recursive node destruction. It has no runtime crate

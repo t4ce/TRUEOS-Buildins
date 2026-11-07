@@ -16,3 +16,5 @@ default = []
 raw = []
 # Compile the production native allocation boundary in host regression suites.
 native-allocator-test = []
+# Exercise the production engine-owned C string boundary in desktop fixtures.
+native-string-test = []

@@ -551,6 +551,8 @@ fn main() {
     let adapter = out.join("hull_quickjs_adapter.c");
     fs::write(&adapter, ADAPTER).expect("write QuickJS opaque adapter");
     let mut build = cc::Build::new();
+    let native_strings = env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("trueos")
+        || env::var_os("CARGO_FEATURE_NATIVE_STRING_TEST").is_some();
     build
         .include(&source)
         .file(&adapter)
@@ -587,6 +589,14 @@ fn main() {
             .define("free", Some("hull_quickjs_native_free"))
             .define("malloc_usable_size", Some("hull_quickjs_native_alloc_size"));
     }
+    if native_strings {
+        build.flag("-include").flag(manifest.join("native/strings.h").to_str().unwrap());
+        for name in ["memchr", "strchr", "strrchr", "strcmp"] {
+            // Do not let C loop/builtin optimization introduce hosted calls
+            // after the explicit engine references have been bound locally.
+            build.flag_if_supported(format!("-fno-builtin-{name}"));
+        }
+    }
     if env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("trueos") {
         let formatter = out.join("hull_quickjs_formatter.c");
         fs::write(&formatter, FORMATTER).expect("write private QuickJS formatter");
@@ -600,7 +610,20 @@ fn main() {
         build.flag_if_supported("-mno-red-zone");
     }
     build.compile("hull_quickjs");
+    if native_strings {
+        let mut strings = cc::Build::new();
+        strings.file(manifest.join("native/strings.c"))
+            .flag_if_supported("-ffreestanding")
+            .flag_if_supported("-fno-builtin")
+            .flag_if_supported("-fno-stack-protector");
+        if env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("trueos") {
+            strings.flag_if_supported("-mno-red-zone");
+        }
+        strings.compile("hull_quickjs_strings");
+    }
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=vendor/quickjs");
     println!("cargo:rerun-if-changed=vendor/stb");
+    println!("cargo:rerun-if-changed=native/strings.c");
+    println!("cargo:rerun-if-changed=native/strings.h");
 }

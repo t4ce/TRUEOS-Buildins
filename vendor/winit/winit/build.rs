@@ -6,6 +6,7 @@ use cfg_aliases::cfg_aliases;
 )]
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
+    println!("cargo:rustc-check-cfg=cfg(target_os, values(\"trueos\"))");
 
     cfg_aliases! {
         trueos_platform: { target_os = "trueos" },

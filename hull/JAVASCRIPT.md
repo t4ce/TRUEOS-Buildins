@@ -1,5 +1,10 @@
 # Hull JavaScript and native input
 
+The TRUEOS application and HTML parser use `core` and `alloc`. Its worker runs
+the native Tokio runtime; shared locks and monotonic deadlines use the native
+execution services. Desktop fixtures retain their host clock and locks. Browser
+script, DOM, navigation and resource policies share the same application code.
+
 Hull submits one actor through the existing `trueos::worker::spawn` native
 service lane. Its current-thread Tokio runtime, LocalSet, QuickJS realm and
 Rc-backed DOM are constructed and destroyed inside that lane. Owned commands,
@@ -13,6 +18,9 @@ workbench/experiments. Its optional `raw` feature also serves Codex Code Mode,
 which owns separate contexts, tool callbacks, cancellation and job pumping.
 Both hosts compile the same pinned sources and C ownership wrappers; Code Mode
 does not install Hull’s DOM or browser globals.
+QuickJS also owns the four byte/string search and comparison primitives used by
+its C engine. Native calls bind to these local algorithms; they use no kernel
+compatibility service. The remaining math/assertion helpers are freestanding.
 Its C sources and adapter use QuickJS's full-pointer value representation in
 both host tests and TRUEOS. The upstream 47-bit NaN box cannot retain TRUEOS's
 canonical high-half heap pointers; a native pointer round-trip regression checks

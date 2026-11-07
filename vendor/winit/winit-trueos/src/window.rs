@@ -1,4 +1,4 @@
-use alloc::{boxed::Box, vec::Vec, string::String};
+use alloc::{boxed::Box, string::String};
 use core::num::NonZeroU32;
 use alloc::collections::VecDeque;
 use core::sync::atomic::AtomicBool;

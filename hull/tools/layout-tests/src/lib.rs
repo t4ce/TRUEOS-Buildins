@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 extern crate alloc;
-#[path = "../../../src/platform.rs"]
-mod platform;
+#[path = "../../../src/execution.rs"]
+mod execution;
 extern crate self as trueos;
 pub mod logl {
     use std::cell::RefCell;
@@ -154,12 +154,13 @@ mod tests {
         ).unwrap();
         let later = render(&live.borrow());
         assert_eq!(later.text_runs[0].text, "later");
-        assert_eq!(later.text_runs[0].color, [255, 0, 0, 255]);
+        // Inline fields already committed by initialization remain latched.
+        assert_eq!(later.text_runs[0].color, [12, 34, 56, 255]);
         assert!(
             later
                 .background_quads
                 .iter()
-                .any(|quad| quad.color == [0, 255, 0, 255])
+                .any(|quad| quad.color == [78, 90, 123, 255])
         );
 
         let frozen_again = render(&frozen);
@@ -1448,6 +1449,13 @@ pub mod env {
 }
 pub mod fs_mock {
     use std::cell::RefCell;
+    pub struct Record {
+        pub path: Vec<u8>,
+        pub bytes: Vec<u8>,
+        pub content_type: u32,
+        pub key: Vec<u8>,
+        pub file_id: u64,
+    }
     #[derive(Default)]
     pub struct State {
         pub calls: usize,
@@ -1455,19 +1463,40 @@ pub mod fs_mock {
         pub ready: bool,
         pub fail: bool,
         pub writes: Vec<(Vec<u8>,Vec<u8>)>,
+        pub records: Vec<Record>,
+        pub fail_path: Option<Vec<u8>>,
     }
     thread_local! { pub static STATE: RefCell<State> = RefCell::new(State::default()); }
 }
 pub mod async_fs {
     use super::fs_mock::STATE;
     use std::task::Poll;
+    pub use infer::ContentTypeId;
     pub async fn create_dir_all(_: &[u8]) -> Result<(), i32> {
         operation().await
     }
-    pub async fn write_file(path: &[u8], bytes: &[u8]) -> Result<(), i32> {
+    pub async fn write_file_typed_checked(
+        path: &[u8], bytes: &[u8], content_type: ContentTypeId,
+        create_new: bool, expected_sha256: Option<[u8; 32]>,
+    ) -> Result<(), i32> {
+        assert_eq!(content_type, ContentTypeId::UTF8_TEXT);
+        assert!(!create_new);
+        assert!(expected_sha256.is_none());
         operation().await?;
-        STATE.with(|state| state.borrow_mut().writes.push((path.to_vec(),bytes.to_vec())));
-        Ok(())
+        STATE.with(|state| {
+            let mut state = state.borrow_mut();
+            if state.fail_path.as_deref() == Some(path) { return Err(-2); }
+            if let Some(record) = state.records.iter_mut().find(|record| record.path == path) {
+                record.bytes = bytes.to_vec();
+            } else {
+                let file_id = 100 + state.records.len() as u64;
+                state.records.push(super::fs_mock::Record { path: path.to_vec(),
+                    bytes: bytes.to_vec(), content_type: content_type.raw(),
+                    key: b"new-record-key".to_vec(), file_id });
+            }
+            state.writes.push((path.to_vec(),bytes.to_vec()));
+            Ok(())
+        })
     }
     async fn operation() -> Result<(), i32> {
         STATE.with(|state| state.borrow_mut().calls += 1);
@@ -1672,15 +1701,18 @@ mod image_layout_tests {
         );
         let mut scripts = scripts::Scripts::default();
         scripts.extract(&document, "https://example.com/");
-        assert_eq!(scripts.sources.len(), 2);
+        assert_eq!(scripts.sources.len(), 3);
         assert_eq!(
             scripts.sources[0].origin,
             "https://cdn.example/scripts/a.js"
         );
-        assert_eq!(scripts.sources[0].nodes.len(), 2);
+        assert_eq!(scripts.sources[0].nodes.len(), 1);
+        assert_eq!(scripts.sources[1].origin, scripts.sources[0].origin);
+        assert_ne!(scripts.sources[1].nodes, scripts.sources[0].nodes);
         assert!(scripts.sources[0].bytes.is_none());
+        assert!(scripts.sources[1].bytes.is_none());
         assert_eq!(
-            scripts.sources[1].bytes.as_deref(),
+            scripts.sources[2].bytes.as_deref(),
             Some(b"inline()".as_slice())
         );
     }

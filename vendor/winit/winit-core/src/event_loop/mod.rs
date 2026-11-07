@@ -1,4 +1,4 @@
-use alloc::{boxed::Box};
+use alloc::boxed::Box;
 pub mod never_return;
 pub mod pump_events;
 pub mod register;

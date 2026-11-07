@@ -20,7 +20,7 @@ use winit::keyboard::{Key, NamedKey};
 use winit::platform::trueos::{ActiveEventLoopExtTrueOS, WindowExtTrueOS};
 use winit::window::{Window, WindowAttributes, WindowId};
 
-mod platform;
+mod execution;
 mod actual_bg_quad;
 mod border_geometry;
 mod buttons;
@@ -656,7 +656,7 @@ impl ApplicationHandler for Hull {
         if !self.layout_attempted && self.document.is_some() && !self.css.is_pending() {
             self.layout_attempted = true;
             self.css.freeze();
-            let started = crate::platform::Instant::now();
+            let started = crate::execution::Instant::now();
             let result = layout::compute_for_render(
                 self.document.as_ref().unwrap(),
                 &self.css,

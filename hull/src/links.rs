@@ -1,5 +1,9 @@
 //! Document link actions: navigation opens a fresh Hull; download links are submitted to Trauma.
-use alloc::{string::String, vec::Vec, format, vec};
+#[cfg(target_os = "trueos")]
+use num_traits::Float;
+#[cfg(test)]
+use alloc::vec;
+use alloc::{string::String, vec::Vec, format};
 use super::{layout::LinkBox, shellio, viewport::Viewport};
 use rp5::Document;
 use hashbrown::HashMap;
