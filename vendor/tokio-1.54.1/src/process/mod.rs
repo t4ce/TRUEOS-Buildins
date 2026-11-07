@@ -228,7 +228,8 @@
 
 #[allow(unused_imports)]
 use crate::alloc_prelude::*;
-#[path = "unix/mod.rs"]
+#[cfg_attr(target_os = "trueos", path = "trueos.rs")]
+#[cfg_attr(not(target_os = "trueos"), path = "unix/mod.rs")]
 #[cfg(unix)]
 mod imp;
 
@@ -863,9 +864,14 @@ impl Command {
     /// running on the system).
     #[inline]
     pub fn spawn(&mut self) -> io::Result<Child> {
-        // On two lines to circumvent a mutable borrow check failure.
-        let child = self.std.spawn()?;
-        self.build_child(child)
+        #[cfg(target_os = "trueos")]
+        { return Err(imp::unsupported()); }
+        #[cfg(not(target_os = "trueos"))]
+        {
+            // On two lines to circumvent a mutable borrow check failure.
+            let child = self.std.spawn()?;
+            self.build_child(child)
+        }
     }
 
     /// Executes the command as a child process with a custom spawning function,

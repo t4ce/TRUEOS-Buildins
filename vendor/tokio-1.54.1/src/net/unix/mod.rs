@@ -26,6 +26,7 @@ pub(crate) use stream::UnixStream;
 mod ucred;
 pub use ucred::UCred;
 
+#[cfg_attr(target_os = "trueos", path = "trueos_pipe.rs")]
 pub mod pipe;
 
 /// A type representing user ID.
