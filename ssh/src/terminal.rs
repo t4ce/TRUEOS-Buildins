@@ -80,8 +80,8 @@ impl<C: Console> Terminal<C> {
         echo: bool,
         deadline: Option<Instant>,
     ) -> Result<Zeroizing<String>> {
-        self.write_all(prompt.as_bytes(), deadline).await?;
         let mut surface_generation = self.console.surface_generation();
+        self.write_all(prompt.as_bytes(), deadline).await?;
         let mut bytes = Zeroizing::new(Vec::new());
         let mut echoed = 0;
         let mut escape = 0;
