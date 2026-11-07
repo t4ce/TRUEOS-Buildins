@@ -95,7 +95,9 @@ fn main() {
     #[cfg(target_os = "trueos")]
     {
         stage_log("minishell-ended");
-        let _ = lease.release_to_shell();
+        // An explicit `tui` reentry issues a new lease epoch. Release the current
+        // epoch rather than the initial lease used for startup acknowledgement.
+        trueos::vshell::leave_terminal_handoff();
         let _ = trueos::vshell::shutdown_current_blueprint("ssh minishell exited");
     }
 }

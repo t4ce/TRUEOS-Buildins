@@ -196,16 +196,16 @@ async fn drive<W: Wire, S: Store, C: Console>(
                         }
                         CliEvent::KeyboardInteractive(event) => {
                             let info = event.info().map_err(engine)?;
+                            let mut context = String::new();
                             for label in [info.name, info.instruction] {
                                 let text = label.to_str().map_err(engine)?;
                                 if !text.is_empty() {
-                                    terminal
-                                        .write_all(
-                                            format!("{text}\r\n").as_bytes(),
-                                            prompt_deadline,
-                                        )
-                                        .await?
+                                    context.push_str(text);
+                                    context.push_str("\r\n");
                                 }
+                            }
+                            if info.prompts.is_empty() {
+                                terminal.write_all(context.as_bytes(), prompt_deadline).await?;
                             }
                             let mut answers = Vec::<Zeroizing<String>>::new();
                             answers
@@ -215,7 +215,7 @@ async fn drive<W: Wire, S: Store, C: Console>(
                                 answers.push(
                                     terminal
                                         .line(
-                                            prompt.prompt.to_str().map_err(engine)?,
+                                            &format!("{context}{}", prompt.prompt.to_str().map_err(engine)?),
                                             prompt.echo,
                                             prompt_deadline,
                                         )
@@ -510,10 +510,11 @@ async fn trust<S: Store, C: Console>(
         }
         KnownHostStatus::Unknown => {
             let fingerprint = key.fingerprint_sha256().map_err(engine)?;
-            terminal.write_all(format!("\r\nThe authenticity of host {} is unknown.\r\nFingerprint is {fingerprint}.\r\n",options.host_token).as_bytes(),deadline).await?;
-            if !options.accept_new
-                && !terminal
-                    .line("Trust this host key? [yes/no] ", true, deadline)
+            let context = format!("\r\nThe authenticity of host {} is unknown.\r\nFingerprint is {fingerprint}.\r\n", options.host_token);
+            if options.accept_new {
+                terminal.write_all(context.as_bytes(), deadline).await?;
+            } else if !terminal
+                    .line(&format!("{context}Trust this host key? [yes/no] "), true, deadline)
                     .await?
                     .eq_ignore_ascii_case("yes")
             {

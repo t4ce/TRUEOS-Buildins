@@ -12,6 +12,9 @@ pub trait Console {
     fn read(&mut self, out: &mut [u8]) -> usize;
     fn write(&mut self, bytes: &[u8]) -> usize;
     fn size(&self) -> (u32, u32);
+    fn surface_generation(&self) -> Option<u64> {
+        None
+    }
 }
 pub struct Terminal<C> {
     pub console: C,
@@ -78,13 +81,26 @@ impl<C: Console> Terminal<C> {
         deadline: Option<Instant>,
     ) -> Result<Zeroizing<String>> {
         self.write_all(prompt.as_bytes(), deadline).await?;
+        let mut surface_generation = self.console.surface_generation();
         let mut bytes = Zeroizing::new(Vec::new());
         let mut echoed = 0;
         let mut escape = 0;
         loop {
             check_deadline(deadline)?;
             let mut byte = [0];
-            if self.read(&mut byte)? == 0 {
+            let count = self.read(&mut byte)?;
+            let current = self.console.surface_generation();
+            if current.is_some() && current != surface_generation {
+                surface_generation = current;
+                self.write_all(b"\r\x1b[2K", deadline).await?;
+                self.write_all(prompt.as_bytes(), deadline).await?;
+                // Only the complete UTF8 prefix already shown to the user is
+                // presentation state. Password/KBI secret answers stay hidden.
+                if echo {
+                    self.write_all(&bytes[..echoed], deadline).await?;
+                }
+            }
+            if count == 0 {
                 tokio::time::sleep(POLL).await;
                 continue;
             }
@@ -183,9 +199,26 @@ impl PlatformConsole {
     }
 }
 impl Console for PlatformConsole {
+    fn surface_generation(&self) -> Option<u64> {
+        #[cfg(target_os = "trueos")]
+        {
+            trueos::vshell::terminal_surface_snapshot()
+                .ok()
+                .map(|surface| surface.generation)
+        }
+        #[cfg(not(target_os = "trueos"))]
+        {
+            None
+        }
+    }
     fn read(&mut self, out: &mut [u8]) -> usize {
         #[cfg(target_os = "trueos")]
         {
+            // Surface polling acknowledges an explicit Shell3 `tui` request.
+            // A merely parked terminal remains inactive and keeps its input.
+            if trueos::vshell::terminal_surface_snapshot().is_err() {
+                return 0;
+            }
             trueos::vshell::attached_read_available(out)
         }
         #[cfg(not(target_os = "trueos"))]
@@ -202,6 +235,11 @@ impl Console for PlatformConsole {
     fn write(&mut self, bytes: &[u8]) -> usize {
         #[cfg(target_os = "trueos")]
         {
+            // Reentry must also work while final remote output is retained and
+            // no input is being read. Zero preserves that output while parked.
+            if trueos::vshell::terminal_surface_snapshot().is_err() {
+                return 0;
+            }
             trueos::vshell::attached_write(bytes)
         }
         #[cfg(not(target_os = "trueos"))]
@@ -216,8 +254,8 @@ impl Console for PlatformConsole {
     fn size(&self) -> (u32, u32) {
         #[cfg(target_os = "trueos")]
         {
-            trueos::vshell::konsole_size()
-                .map(|s| (s.cols, s.rows))
+            trueos::vshell::terminal_surface_snapshot()
+                .map(|s| (s.columns, s.rows))
                 .unwrap_or((80, 24))
         }
         #[cfg(not(target_os = "trueos"))]
