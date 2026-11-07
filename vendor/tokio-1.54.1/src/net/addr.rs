@@ -182,8 +182,10 @@ cfg_net! {
             let s = self.to_owned();
 
             MaybeReady(sealed::State::Blocking(spawn_blocking(move || {
-                #[cfg(not(feature="native"))]
+                #[cfg(all(not(feature="native"),not(all(any(target_os = "trueos", target_os = "zkvm"), feature = "native-net"))))]
                 {std::net::ToSocketAddrs::to_socket_addrs(&s)}
+                #[cfg(all(not(feature="native"),all(any(target_os = "trueos", target_os = "zkvm"), feature = "native-net")))]
+                {trueos_runtime::net::resolve_socket_addr(&s).map(Vec::into_iter).map_err(native_dns_error)}
                 #[cfg(feature="native")]
                 {trueos_runtime::net::resolve_socket_addr(&s).map(Vec::into_iter)}
             })))
@@ -222,8 +224,10 @@ cfg_net! {
             let host = host.to_owned();
 
             MaybeReady(sealed::State::Blocking(spawn_blocking(move || {
-                #[cfg(not(feature="native"))]
+                #[cfg(all(not(feature="native"),not(all(any(target_os = "trueos", target_os = "zkvm"), feature = "native-net"))))]
                 {std::net::ToSocketAddrs::to_socket_addrs(&(&host[..],port))}
+                #[cfg(all(not(feature="native"),all(any(target_os = "trueos", target_os = "zkvm"), feature = "native-net")))]
+                {trueos_runtime::net::resolve_host(&host,port).map(Vec::into_iter).map_err(native_dns_error)}
                 #[cfg(feature="native")]
                 {trueos_runtime::net::resolve_host(&host,port).map(Vec::into_iter)}
             })))
@@ -338,4 +342,16 @@ pub(crate) mod sealed {
             }
         }
     }
+}
+
+#[cfg(all(not(feature="native"),all(any(target_os = "trueos", target_os = "zkvm"), feature = "native-net")))]
+fn native_dns_error(error: trueos_runtime::io::Error) -> crate::platform::io::Error {
+    use crate::platform::io::{Error, ErrorKind};
+    let kind = match error.kind() {
+        trueos_runtime::io::ErrorKind::InvalidInput => ErrorKind::InvalidInput,
+        trueos_runtime::io::ErrorKind::NotFound => ErrorKind::NotFound,
+        trueos_runtime::io::ErrorKind::TimedOut => ErrorKind::TimedOut,
+        _ => ErrorKind::Other,
+    };
+    Error::new(kind, error)
 }

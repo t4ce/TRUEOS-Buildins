@@ -191,7 +191,7 @@ feature! {
                         // https://github.com/tokio-rs/tokio/issues/5866
                         #[cfg(all(
                             // keep in sync with poll_write
-                            not(feature = "native"),
+                            not(any(feature = "native", all(any(target_os = "trueos", target_os = "zkvm"), feature = "native-net"))),
                             not(mio_unsupported_force_poll_poll),
                             any(
                                 // epoll
@@ -246,7 +246,7 @@ feature! {
                         // UNIX): https://github.com/tokio-rs/tokio/issues/5866
                         #[cfg(all(
                             // keep in sync with poll_read
-                            not(feature = "native"),
+                            not(any(feature = "native", all(any(target_os = "trueos", target_os = "zkvm"), feature = "native-net"))),
                             not(mio_unsupported_force_poll_poll),
                             any(
                                 // epoll

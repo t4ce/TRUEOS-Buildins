@@ -537,6 +537,7 @@ cfg_time! {
 }
 
 cfg_signal_internal_and_unix! {
+    #[cfg_attr(target_os = "trueos", path = "signal/trueos.rs")]
     pub(crate) mod signal;
 }
 

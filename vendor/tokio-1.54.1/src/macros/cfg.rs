@@ -401,6 +401,7 @@ macro_rules! cfg_process_driver {
         $(
             #[cfg(all(
                 unix,
+                not(target_os = "trueos"),
                 not(loom),
                 feature = "process",
                 not(target_os = "wasi"),
@@ -416,6 +417,7 @@ macro_rules! cfg_not_process_driver {
         $(
             #[cfg(not(all(
                 unix,
+                not(target_os = "trueos"),
                 not(loom),
                 feature = "process",
                 not(target_os = "wasi"),

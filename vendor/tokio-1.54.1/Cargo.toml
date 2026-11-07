@@ -71,6 +71,8 @@ default = ["std-compat"]
 std-compat = ["bytes?/std", "mio?/std-compat"]
 # Genuine native runtime: core + alloc and execution-aware TRUEOS primitives.
 native = ["dep:trueos-runtime", "dep:trueos-io", "dep:trueos-path", "dep:libm"]
+# Preserve std-facing APIs while using native socket IDs and DNS.
+native-net = ["std-compat", "mio?/native-net", "dep:trueos-runtime"]
 fs = []
 full = [
     "fs",

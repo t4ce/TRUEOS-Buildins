@@ -78,6 +78,7 @@ impl<T> OrphanQueueImpl<T> {
 
     /// Attempts to reap every process in the queue, ignoring any errors and
     /// enqueueing any orphans which have not yet exited.
+    #[cfg(not(target_os = "trueos"))]
     pub(crate) fn reap_orphans(&self, handle: &SignalHandle)
     where
         T: Wait,

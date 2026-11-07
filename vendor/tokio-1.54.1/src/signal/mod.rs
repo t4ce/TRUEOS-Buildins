@@ -52,9 +52,13 @@ mod ctrl_c;
 #[cfg(feature = "signal")]
 pub use ctrl_c::ctrl_c;
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "trueos")))]
 pub(crate) mod registry;
 
+#[cfg(not(target_os = "trueos"))]
+pub mod unix;
+#[cfg(target_os = "trueos")]
+#[path = "trueos.rs"]
 pub mod unix;
 
 mod reusable_box;

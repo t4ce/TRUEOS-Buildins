@@ -5,7 +5,7 @@ use crate::alloc_prelude::*;
 pub(crate) mod listener;
 
 cfg_not_wasip1! {
-    #[cfg_attr(feature="native",path="socket_native.rs")]
+    #[cfg_attr(any(feature="native", all(any(target_os = "trueos", target_os = "zkvm"), feature = "native-net")),path="socket_native.rs")]
     pub(crate) mod socket;
 }
 

@@ -115,8 +115,15 @@ def private_sysroot(output: Path, kernel: Path, rustc: Path, env: dict) -> Path:
     sync_reference = kernel / "tools/rust-std/trueos_futex.rs"
     tls_reference = kernel / "tools/rust-std/trueos_tls_key.rs"
     tls_guard_reference = kernel / "tools/rust-std/trueos_tls_guard.rs"
+    environment_backend = kernel / "tools/testpy/apply_trueos_rust_std_environment_backend.py"
+    filesystem_backend = kernel / "tools/testpy/apply_trueos_rust_std_fs_backend.py"
+    native_references = [kernel / "tools/rust-std" / name for name in (
+        "trueos_env.rs", "trueos_args.rs", "trueos_stdio.rs", "trueos_is_terminal.rs",
+        "trueos_paths.rs", "trueos_exit.rs", "trueos_fs.rs",
+    )]
     key = hashlib.sha256()
-    for path in (patch, backend, reference, sync_reference, tls_reference, tls_guard_reference):
+    for path in (patch, backend, reference, sync_reference, tls_reference, tls_guard_reference,
+                 environment_backend, filesystem_backend, *native_references):
         key.update(path.read_bytes())
     key.update(str(installed).encode())
     destination = output / "sysroots" / key.hexdigest()[:16]
@@ -141,6 +148,8 @@ def private_sysroot(output: Path, kernel: Path, rustc: Path, env: dict) -> Path:
         shutil.copytree(installed / "lib/rustlib/src/rust/library", sources / "library")
         apply_std_patch(sources / "library", patch)
         run([sys.executable, backend, sources])
+        run([sys.executable, environment_backend, sources])
+        run([sys.executable, filesystem_backend, sources])
         (stage / ".ready").write_text(COMMIT + "\n")
         if destination.exists():
             shutil.rmtree(destination)

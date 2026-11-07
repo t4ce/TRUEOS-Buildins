@@ -97,6 +97,7 @@ impl fmt::Debug for GlobalOrphanQueue {
 }
 
 impl GlobalOrphanQueue {
+    #[cfg(not(target_os = "trueos"))]
     pub(crate) fn reap_orphans(handle: &SignalHandle) {
         get_orphan_queue().reap_orphans(handle);
     }

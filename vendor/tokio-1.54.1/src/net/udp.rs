@@ -230,10 +230,19 @@ impl UdpSocket {
     #[track_caller]
     #[cfg(not(feature="native"))]
     pub fn from_std(socket: net::UdpSocket) -> io::Result<UdpSocket> {
+        #[cfg(all(any(target_os = "trueos", target_os = "zkvm"), feature = "native-net"))]
+        {
+            Err(io::Error::new(io::ErrorKind::Unsupported, "native socket IDs cannot transfer ownership to or from Unix descriptors"))
+        }
+        #[cfg(not(all(any(target_os = "trueos", target_os = "zkvm"), feature = "native-net")))]
+        {
+
         check_socket_for_blocking(&socket)?;
 
         let io = mio::net::UdpSocket::from_std(socket);
         UdpSocket::new(io)
+
+        }
     }
 
     /// Turns a [`tokio::net::UdpSocket`] into a [`std::net::UdpSocket`].
@@ -260,6 +269,13 @@ impl UdpSocket {
     /// [`set_nonblocking`]: fn@std::net::UdpSocket::set_nonblocking
     #[cfg(not(feature="native"))]
     pub fn into_std(self) -> io::Result<std::net::UdpSocket> {
+        #[cfg(all(any(target_os = "trueos", target_os = "zkvm"), feature = "native-net"))]
+        {
+            Err(io::Error::new(io::ErrorKind::Unsupported, "native socket IDs cannot transfer ownership to or from Unix descriptors"))
+        }
+        #[cfg(not(all(any(target_os = "trueos", target_os = "zkvm"), feature = "native-net")))]
+        {
+
         #[cfg(not(windows))]
         {
             use std::os::fd::{FromRawFd, IntoRawFd};
@@ -277,9 +293,11 @@ impl UdpSocket {
                 .map(|io| io.into_raw_socket())
                 .map(|raw_socket| unsafe { std::net::UdpSocket::from_raw_socket(raw_socket) })
         }
+
+        }
     }
 
-    #[cfg(not(feature="native"))]
+    #[cfg(not(any(feature="native", all(any(target_os = "trueos", target_os = "zkvm"), feature = "native-net"))))]
     fn as_socket(&self) -> socket2::SockRef<'_> {
         socket2::SockRef::from(self)
     }
@@ -1889,9 +1907,9 @@ impl UdpSocket {
 
     #[inline]
     fn peek_sender_inner(&self) -> io::Result<SocketAddr> {
-        #[cfg(feature="native")]
+        #[cfg(any(feature="native", all(any(target_os = "trueos", target_os = "zkvm"), feature = "native-net")))]
         {self.io.peek_from(&mut []).map(|(_,addr)|addr)}
-        #[cfg(not(feature="native"))]
+        #[cfg(not(any(feature="native", all(any(target_os = "trueos", target_os = "zkvm"), feature = "native-net"))))]
         {
         self.io.try_io(|| {
             self.as_socket()
@@ -2016,9 +2034,9 @@ impl UdpSocket {
         )))
     )]
     pub fn tclass_v6(&self) -> io::Result<u32> {
-        #[cfg(not(feature="native"))]
+        #[cfg(not(any(feature="native", all(any(target_os = "trueos", target_os = "zkvm"), feature = "native-net"))))]
         {self.as_socket().tclass_v6()}
-        #[cfg(feature="native")]
+        #[cfg(any(feature="native", all(any(target_os = "trueos", target_os = "zkvm"), feature = "native-net")))]
         {Err(io::Error::new(io::ErrorKind::Other,"native transport does not support this socket option"))}
     }
 
@@ -2057,9 +2075,9 @@ impl UdpSocket {
         )))
     )]
     pub fn set_tclass_v6(&self, tclass: u32) -> io::Result<()> {
-        #[cfg(not(feature="native"))]
+        #[cfg(not(any(feature="native", all(any(target_os = "trueos", target_os = "zkvm"), feature = "native-net"))))]
         {self.as_socket().set_tclass_v6(tclass)}
-        #[cfg(feature="native")]
+        #[cfg(any(feature="native", all(any(target_os = "trueos", target_os = "zkvm"), feature = "native-net")))]
         {Err(io::Error::new(io::ErrorKind::Other,"native transport does not support this socket option"))}
     }
 
@@ -2134,9 +2152,9 @@ impl UdpSocket {
         ))))
     )]
     pub fn tos_v4(&self) -> io::Result<u32> {
-        #[cfg(not(feature="native"))]
+        #[cfg(not(any(feature="native", all(any(target_os = "trueos", target_os = "zkvm"), feature = "native-net"))))]
         {self.as_socket().tos_v4()}
-        #[cfg(feature="native")]
+        #[cfg(any(feature="native", all(any(target_os = "trueos", target_os = "zkvm"), feature = "native-net")))]
         {Err(io::Error::new(io::ErrorKind::Other,"native transport does not support IPv4 TOS"))}
     }
 
@@ -2201,9 +2219,9 @@ impl UdpSocket {
         ))))
     )]
     pub fn set_tos_v4(&self, tos: u32) -> io::Result<()> {
-        #[cfg(not(feature="native"))]
+        #[cfg(not(any(feature="native", all(any(target_os = "trueos", target_os = "zkvm"), feature = "native-net"))))]
         {self.as_socket().set_tos_v4(tos)}
-        #[cfg(feature="native")]
+        #[cfg(any(feature="native", all(any(target_os = "trueos", target_os = "zkvm"), feature = "native-net")))]
         {Err(io::Error::new(io::ErrorKind::Other,"native transport does not support IPv4 TOS"))}
     }
 
@@ -2246,9 +2264,9 @@ impl UdpSocket {
         doc(cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux",)))
     )]
     pub fn device(&self) -> io::Result<Option<Vec<u8>>> {
-        #[cfg(not(feature="native"))]
+        #[cfg(not(any(feature="native", all(any(target_os = "trueos", target_os = "zkvm"), feature = "native-net"))))]
         {self.as_socket().device()}
-        #[cfg(feature="native")]
+        #[cfg(any(feature="native", all(any(target_os = "trueos", target_os = "zkvm"), feature = "native-net")))]
         {Err(io::Error::new(io::ErrorKind::Other,"native transport does not support this socket option"))}
     }
 
@@ -2265,9 +2283,9 @@ impl UdpSocket {
         doc(cfg(all(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))))
     )]
     pub fn bind_device(&self, interface: Option<&[u8]>) -> io::Result<()> {
-        #[cfg(not(feature="native"))]
+        #[cfg(not(any(feature="native", all(any(target_os = "trueos", target_os = "zkvm"), feature = "native-net"))))]
         {self.as_socket().bind_device(interface)}
-        #[cfg(feature="native")]
+        #[cfg(any(feature="native", all(any(target_os = "trueos", target_os = "zkvm"), feature = "native-net")))]
         {Err(io::Error::new(io::ErrorKind::Other,"native transport does not support this socket option"))}
     }
 
@@ -2353,7 +2371,7 @@ impl fmt::Debug for UdpSocket {
     }
 }
 
-#[cfg(all(not(feature="native"),not(windows)))]
+#[cfg(all(not(any(feature="native", all(any(target_os = "trueos", target_os = "zkvm"), feature = "native-net"))),not(windows)))]
 mod sys {
     use super::UdpSocket;
     use std::os::fd::{AsFd, AsRawFd, BorrowedFd, RawFd};
@@ -2382,7 +2400,7 @@ cfg_windows! {
     }
 
     impl AsSocket for UdpSocket {
-        #[cfg(not(feature="native"))]
+        #[cfg(not(any(feature="native", all(any(target_os = "trueos", target_os = "zkvm"), feature = "native-net"))))]
     fn as_socket(&self) -> BorrowedSocket<'_> {
             unsafe { BorrowedSocket::borrow_raw(self.as_raw_socket()) }
         }

@@ -230,11 +230,20 @@ impl TcpStream {
     #[track_caller]
     #[cfg(not(feature="native"))]
     pub fn from_std(stream: std::net::TcpStream) -> io::Result<TcpStream> {
+        #[cfg(all(any(target_os = "trueos", target_os = "zkvm"), feature = "native-net"))]
+        {
+            Err(io::Error::new(io::ErrorKind::Unsupported, "native socket IDs cannot transfer ownership to or from Unix descriptors"))
+        }
+        #[cfg(not(all(any(target_os = "trueos", target_os = "zkvm"), feature = "native-net")))]
+        {
+
         check_socket_for_blocking(&stream)?;
 
         let io = mio::net::TcpStream::from_std(stream);
         let io = PollEvented::new(io)?;
         Ok(TcpStream { io })
+
+        }
     }
 
     /// Turns a [`tokio::net::TcpStream`] into a [`std::net::TcpStream`].
@@ -277,6 +286,13 @@ impl TcpStream {
     /// [`set_nonblocking`]: fn@std::net::TcpStream::set_nonblocking
     #[cfg(not(feature="native"))]
     pub fn into_std(self) -> io::Result<std::net::TcpStream> {
+        #[cfg(all(any(target_os = "trueos", target_os = "zkvm"), feature = "native-net"))]
+        {
+            Err(io::Error::new(io::ErrorKind::Unsupported, "native socket IDs cannot transfer ownership to or from Unix descriptors"))
+        }
+        #[cfg(not(all(any(target_os = "trueos", target_os = "zkvm"), feature = "native-net")))]
+        {
+
         #[cfg(unix)]
         {
             use std::os::unix::io::{FromRawFd, IntoRawFd};
@@ -302,6 +318,8 @@ impl TcpStream {
                 .into_inner()
                 .map(|io| io.into_raw_fd())
                 .map(|raw_fd| unsafe { std::net::TcpStream::from_raw_fd(raw_fd) })
+        }
+
         }
     }
 
@@ -1234,9 +1252,9 @@ impl TcpStream {
         )))
     )]
     pub fn quickack(&self) -> io::Result<bool> {
-        #[cfg(not(feature="native"))]
+        #[cfg(not(any(feature="native", all(any(target_os = "trueos", target_os = "zkvm"), feature = "native-net"))))]
         {socket2::SockRef::from(self).tcp_quickack()}
-        #[cfg(feature="native")]
+        #[cfg(any(feature="native", all(any(target_os = "trueos", target_os = "zkvm"), feature = "native-net")))]
         {Err(io::Error::new(io::ErrorKind::Other,"native transport does not support TCP quickack"))}
     }
 
@@ -1277,9 +1295,9 @@ impl TcpStream {
         )))
     )]
     pub fn set_quickack(&self, quickack: bool) -> io::Result<()> {
-        #[cfg(not(feature="native"))]
+        #[cfg(not(any(feature="native", all(any(target_os = "trueos", target_os = "zkvm"), feature = "native-net"))))]
         {socket2::SockRef::from(self).set_tcp_quickack(quickack)}
-        #[cfg(feature="native")]
+        #[cfg(any(feature="native", all(any(target_os = "trueos", target_os = "zkvm"), feature = "native-net")))]
         {Err(io::Error::new(io::ErrorKind::Other,"native transport does not support TCP quickack"))}
     }
 
@@ -1305,9 +1323,9 @@ impl TcpStream {
         /// # }
         /// ```
         pub fn linger(&self) -> io::Result<Option<Duration>> {
-            #[cfg(not(feature="native"))]
+            #[cfg(not(any(feature="native", all(any(target_os = "trueos", target_os = "zkvm"), feature = "native-net"))))]
             {socket2::SockRef::from(self).linger()}
-            #[cfg(feature="native")]
+            #[cfg(any(feature="native", all(any(target_os = "trueos", target_os = "zkvm"), feature = "native-net")))]
             {Err(io::Error::new(io::ErrorKind::Other,"native transport does not support linger"))}
         }
 
@@ -1351,9 +1369,9 @@ impl TcpStream {
         #[deprecated = "`SO_LINGER` causes the socket to block the thread on drop"]
         #[allow(unused_variables)]
         pub fn set_linger(&self, dur: Option<Duration>) -> io::Result<()> {
-            #[cfg(not(feature="native"))]
+            #[cfg(not(any(feature="native", all(any(target_os = "trueos", target_os = "zkvm"), feature = "native-net"))))]
             {socket2::SockRef::from(self).set_linger(dur)}
-            #[cfg(feature="native")]
+            #[cfg(any(feature="native", all(any(target_os = "trueos", target_os = "zkvm"), feature = "native-net")))]
             {Err(io::Error::new(io::ErrorKind::Other,"native transport does not support linger"))}
         }
 
@@ -1387,9 +1405,9 @@ impl TcpStream {
         /// # }
         /// ```
         pub fn set_zero_linger(&self) -> io::Result<()> {
-            #[cfg(not(feature="native"))]
+            #[cfg(not(any(feature="native", all(any(target_os = "trueos", target_os = "zkvm"), feature = "native-net"))))]
             {socket2::SockRef::from(self).set_linger(Some(Duration::ZERO))}
-            #[cfg(feature="native")]
+            #[cfg(any(feature="native", all(any(target_os = "trueos", target_os = "zkvm"), feature = "native-net")))]
             {Err(io::Error::new(io::ErrorKind::Other,"native transport does not support linger"))}
         }
     }
@@ -1569,7 +1587,7 @@ impl AsRef<Self> for TcpStream {
     }
 }
 
-#[cfg(all(not(feature="native"),unix))]
+#[cfg(all(not(any(feature="native", all(any(target_os = "trueos", target_os = "zkvm"), feature = "native-net"))),unix))]
 mod sys {
     use super::TcpStream;
     use std::os::unix::prelude::*;
