@@ -4,18 +4,24 @@ version = "0.1.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 
+[workspace]
+
 [[bin]]
 name = "ssh"
 path = "src/main.rs"
 
 [dependencies]
-anyhow = "1.0"
-rand = "0.10"
-russh = { version = "=0.62.4", default-features = false, features = ["ring"] }
-tokio = { version = "=1.54.1", default-features = false, features = ["full"] }
+sunset = { path = "../../TRUEOS/vendor/sunset", default-features = false, features = ["alloc", "larger", "ecdsa-all", "key-import", "mlkem"] }
+tokio = { version = "=1.54.1", default-features = false, features = ["io-util", "net", "rt", "time", "macros"] }
+sha2 = { version = "=0.10.9", default-features = false }
+zeroize = { version = "1", default-features = false, features = ["alloc"] }
 
-[target.'cfg(any(target_os = "trueos", target_os = "zkvm"))'.dependencies]
-trueos = { path = "../../api" }
+[target.'cfg(target_os = "trueos")'.dependencies]
+trueos = { path = "../vendor/trueos", features = ["native-net"] }
+trueos-runtime = { path = "../../TRUEOS/crates/trueos-runtime" }
+
+[target.'cfg(not(target_os = "trueos"))'.dependencies]
+tokio = { version = "=1.54.1", default-features = false, features = ["io-std", "sync"] }
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("trueos", "zkvm"))'] }
