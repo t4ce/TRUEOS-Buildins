@@ -1,6 +1,6 @@
 # TRUEOS Share
 
-A standalone read/write WebDAV test Blueprint using `dav-server` 0.11.0 and
+A read/write WebDAV buildin using `dav-server` 0.11.0 and
 Hyper HTTP/1. It serves its own persistent `TRUEOS_APP_FS_ROOT` (normally
 `apps/share`) on TCP port **4918**. It does not require `websys` or the kernel's
 port-80 filesystem service.
@@ -10,14 +10,14 @@ client that can reach the port can read and modify the exported directory.
 
 ## Build for TRUEOS
 
-From the TRUEOS-Blueprints repository:
+From the TRUEOS repository, the normal native build includes Share:
 
 ```sh
-TRUEOS_BLUEPRINT_SKIP_APPS_PUBLISH=1 cargo bp share
+cargo rigreal --native-only
 ```
 
-This produces `dist/share.bp` without publishing or launching it. The app is
-registered as a built-in in `buildins.json`, with its sources in `apps/share`.
+The app is registered as a buildin in `buildins.json`, with its sources in
+the adjacent TRUEOS-Buildins repository's `share` directory.
 The default TRUEOS startup manifest launches it headlessly from the embedded
 AppDB on cold boot, without fetching it from the online app catalog.
 It uses the normal VMX Blueprint execution path, without a guest Linux system.
@@ -45,14 +45,16 @@ files from that HTTP URL.
 
 ## Local development and tests
 
-The host manifest builds the same sources against upstream desktop libraries;
-the parent workspace's modified Hyper/http-body-util currently only build on
-TRUEOS.
+The host manifest builds the same HTTP driver and desktop filesystem backend
+against upstream Tokio/Hyper and the vendored DAV protocol implementation.
+The native storage fixtures compile the actual native backend against a
+deterministic in-memory native service, including publication failures and races.
 
 ```sh
-cargo test --manifest-path apps/share/host/Cargo.toml
+cargo test --manifest-path share/host/Cargo.toml
+cargo test --manifest-path share/native-tests/Cargo.toml
 TRUEOS_SHARE_BIND=127.0.0.1:4918 cargo run \
-  --manifest-path apps/share/host/Cargo.toml -- /tmp/share-test
+  --manifest-path share/host/Cargo.toml -- /tmp/share-test
 ```
 
 `[ROOT]` selects a different serve directory. Without an argument the server uses
@@ -65,18 +67,28 @@ overrides the default `0.0.0.0:4918` listener.
 - LOCK/UNLOCK use real in-memory WebDAV locks, lost when the server restarts.
 - HTTP directory listings are enabled. Symlinks are hidden and rejected by the
   backend; the share root itself cannot be deleted or moved through WebDAV.
-- Successful PUT waits for file flush and storage synchronization.
-- Files are limited to **4 GiB** (4,294,967,296 bytes). TRUEOS's current Tokio
-  file bridge buffers whole files. Four HTTP connections can run at once.
-  The kernel must include the matching 4 GiB async-filesystem read/write caps;
-  earlier kernels restrict buffered writes to 16 MiB and reads to 1 GiB.
+- Native PUT stages the whole body without changing storage, validates its
+  length, and waits for explicit checked publication. Dropping a handle never
+  writes. Failed or interrupted bodies leave the previous record intact.
+- Replacing a native file retains its stored type, key and record identity.
+  New foreign uploads are BLOB records, regardless of filename or supplied MIME.
+  GET, HEAD and PROPFIND expose the stored MIME. COPY uses a coherent source
+  snapshot and its type; MOVE retains the original record's identity and key.
+- Conditional creates and partial/append updates are checked again at commit.
+  An intervening change fails the conditional write instead of publishing a
+  stale buffer. Ordinary full PUT retains last-writer behavior.
+- Files are limited to **4 GiB** (4,294,967,296 bytes). The native backend buffers
+  whole files and uses fallible growth; four HTTP connections can run at once.
+  The kernel must include the matching async-filesystem read/write caps.
 - Native metadata currently exposes size and type, without timestamps or ETags.
-- TRUEOSFS moves inherit its copy/delete rename behavior. Atomic replacement,
-  crash-safe saves and concurrent editing have not been established on hardware.
-  Interrupted uploads may leave partial files; this version does not stage PUT
-  into an atomic temporary-file replacement.
+- MKCOL reserves only the requested absent directory under an existing parent.
+  File and empty-directory deletion check kind and emptiness under the native
+  namespace lease. COPY and MOVE refuse a raced destination. DAV overwrite
+  handling may delete a destination before COPY/MOVE; those complete operations
+  do not promise transactional replacement.
 
-The automated host tests cover file operations, range downloads, overwrite,
-storage visibility before PUT returns, locks, path confinement, size limits and
-the actual HTTP socket driver. Building the Blueprint establishes target
-compatibility; runtime behavior still needs a test on TRUEOS hardware.
+Host tests cover file operations, ranges, overwrite, locks, confinement, size
+limits and the HTTP socket driver. Native fixtures cover coherent reads, typed
+replacement, commit failure and retry, cancellation, conditional races, COPY/MOVE
+identity and malformed upload bodies. Native target and hardware verification
+are recorded separately by the TRUEOS build audit.

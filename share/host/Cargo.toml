@@ -32,3 +32,13 @@ tempfile = "3"
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("trueos", "zkvm"))'] }
+
+[patch.crates-io]
+dav-server = { path = "../../vendor/dav-server-0.11.0" }
+headers = { path = "../../vendor/headers-0.4.2" }
+headers-core = { path = "../../vendor/headers-core-0.3.0" }
+xml-rs = { path = "../../vendor/xml-rs-1.0.0" }
+xml = { path = "../../vendor/xml-1.4.0" }
+xmltree = { path = "../../vendor/xmltree-0.12.0" }
+htmlescape = { path = "../../vendor/htmlescape-0.3.1" }
+mime = { path = "../../vendor/mime-0.3.18" }

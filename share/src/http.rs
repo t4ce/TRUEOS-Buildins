@@ -1,8 +1,11 @@
 //! Direct HTTP/1 driver, matching the working TRUEOS websys socket path.
+use alloc::sync::Arc;
+use core::pin::Pin;
+use core::task::{Context, Poll};
+#[cfg(not(target_os = "trueos"))]
 use std::io;
-use std::pin::Pin;
-use std::sync::Arc;
-use std::task::{Context, Poll};
+#[cfg(target_os = "trueos")]
+use trueos_runtime::io;
 
 use dav_server::DavHandler;
 use hyper::service::service_fn;
@@ -18,20 +21,25 @@ pub async fn serve(listener: TcpListener, handler: DavHandler) -> io::Result<()>
             .clone()
             .acquire_owned()
             .await
-            .map_err(io::Error::other)?;
+            .map_err(|_| io::Error::new(io::ErrorKind::Other, "connection limiter closed"))?;
         let (stream, peer) = listener.accept().await?;
         let handler = handler.clone();
         tokio::spawn(async move {
             let _slot = slot;
             let service = service_fn(move |request| {
                 let handler = handler.clone();
-                async move { Ok::<_, std::convert::Infallible>(handler.handle(request).await) }
+                async move { Ok::<_, core::convert::Infallible>(handler.handle(request).await) }
             });
             if let Err(error) = hyper::server::conn::http1::Builder::new()
                 .serve_connection(HyperIo(stream), service)
                 .await
             {
+                #[cfg(not(target_os = "trueos"))]
                 eprintln!("share: HTTP connection from {peer} failed: {error:?}");
+                #[cfg(target_os = "trueos")]
+                trueos::vsys::log_errorf(format_args!(
+                    "share: HTTP connection from {peer} failed: {error:?}\n"
+                ));
             }
         });
     }

@@ -3,20 +3,37 @@ name = "share"
 version = "0.1.0"
 edition = "2024"
 
-[dependencies]
-bytes = "1"
-dav-server = { version = "=0.11.0", default-features = false }
-futures-util = { version = "0.3", default-features = false, features = ["alloc"] }
-hyper = { version = "=1.10.0", default-features = false, features = ["std-compat", "server", "http1"] }
-tokio = { version = "=1.54.1", default-features = false, features = ["fs", "io-util", "macros", "net", "rt", "sync"] }
+[workspace]
 
-[target.'cfg(any(target_os = "trueos", target_os = "zkvm"))'.dependencies]
-httpdate = { version = "=1.0.3", features = ["std-system-time"] }
-trueos = { path = "../../api", features = ["tokio-net-probe"] }
+[dependencies]
+bytes = { version = "1", default-features = false }
+dav-server = { version = "=0.11.0", default-features = false, features = ["trueos-native"] }
+futures-util = { version = "0.3", default-features = false, features = ["alloc"] }
+hyper = { version = "=1.10.0", default-features = false, features = ["server", "http1"] }
+tokio = { version = "=1.54.1", default-features = false, features = ["io-util", "net", "rt", "sync"] }
+
+[target.'cfg(target_os = "trueos")'.dependencies]
+trueos = { path = "../vendor/trueos", features = ["native-net"] }
+trueos-runtime = { path = "../../TRUEOS/crates/trueos-runtime" }
+trueos-path = { path = "../../TRUEOS/crates/trueos-path" }
+sha2 = { version = "=0.10.9", default-features = false }
+
+[target.'cfg(not(target_os = "trueos"))'.dependencies]
+tokio = { version = "=1.54.1", default-features = false, features = ["fs", "macros"] }
 
 [dev-dependencies]
 http-body-util = "0.1"
 tempfile = "3"
+
+[patch.crates-io]
+dav-server = { path = "../vendor/dav-server-0.11.0" }
+headers = { path = "../vendor/headers-0.4.2" }
+headers-core = { path = "../vendor/headers-core-0.3.0" }
+xml-rs = { path = "../vendor/xml-rs-1.0.0" }
+xml = { path = "../vendor/xml-1.4.0" }
+xmltree = { path = "../vendor/xmltree-0.12.0" }
+htmlescape = { path = "../vendor/htmlescape-0.3.1" }
+mime = { path = "../vendor/mime-0.3.18" }
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("trueos", "zkvm"))'] }

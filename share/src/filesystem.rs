@@ -1,5 +1,4 @@
-//! A small Tokio backend, without LocalFs's Unix-specific desktop dependencies.
-//! TRUEOS routes these standard file operations through its Blueprint ABI.
+//! Desktop development backend. TRUEOS uses native_filesystem.rs instead.
 use std::io::{self, SeekFrom};
 use std::path::{Component, Path, PathBuf};
 use std::time::SystemTime;
@@ -14,13 +13,9 @@ use futures_util::stream;
 use tokio::fs;
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 
-#[cfg(any(target_os = "trueos", target_os = "zkvm"))]
-type Metadata = fs::Metadata;
-#[cfg(not(any(target_os = "trueos", target_os = "zkvm")))]
 type Metadata = std::fs::Metadata;
 
-// The current TRUEOS Tokio file bridge retains whole files in memory. This
-// per-file limit is 4 GiB; HTTP reads/writes themselves use chunks.
+// Keep the desktop test server's size policy aligned with the native backend.
 pub const MAX_FILE_BYTES: u64 = 4 * 1024 * 1024 * 1024;
 
 fn error(error: io::Error) -> FsError {
@@ -222,15 +217,8 @@ impl DavMetaData for ShareMetadata {
     fn is_dir(&self) -> bool {
         self.0.is_dir()
     }
-    #[cfg(not(any(target_os = "trueos", target_os = "zkvm")))]
     fn modified(&self) -> FsResult<SystemTime> {
         self.0.modified().map_err(error)
-    }
-    // Native Tokio metadata currently contains type and size, no timestamps.
-    // Omit timestamp/ETag properties rather than inventing stable identities.
-    #[cfg(any(target_os = "trueos", target_os = "zkvm"))]
-    fn modified(&self) -> FsResult<SystemTime> {
-        Err(FsError::NotImplemented)
     }
 }
 
@@ -316,7 +304,7 @@ impl DavFile for ShareFile {
         Box::pin(async move {
             self.file.flush().await.map_err(error)?;
             if self.writable {
-                // sync_all commits the TRUEOS Tokio bridge's buffered file.
+                // Acknowledge a hosted PUT only after storage synchronization.
                 self.file.sync_all().await.map_err(error)?;
             }
             Ok(())

@@ -227,6 +227,45 @@ async fn root_and_file_size_limits() {
     );
 }
 
+#[tokio::test]
+async fn populated_root_is_protected_before_recursive_delete_or_overwrite() {
+    let directory = TempDir::new().unwrap();
+    std::fs::create_dir(directory.path().join("nested")).unwrap();
+    std::fs::write(directory.path().join("source.txt"), b"source").unwrap();
+    std::fs::write(directory.path().join("victim.txt"), b"victim").unwrap();
+    std::fs::write(directory.path().join("nested/child.txt"), b"child").unwrap();
+    let handler = share::handler(directory.path()).await.unwrap();
+    for (method, source, destination) in [
+        ("DELETE", "/", None),
+        ("MOVE", "/", Some("/victim.txt")),
+        ("COPY", "/source.txt", Some("/")),
+        ("MOVE", "/source.txt", Some("/")),
+    ] {
+        let headers = destination
+            .map(|path| vec![("Destination", path)])
+            .unwrap_or_default();
+        let response = request(&handler, method, source, &headers, "").await;
+        let status = response.status();
+        body(response).await;
+        assert_eq!(
+            status,
+            StatusCode::FORBIDDEN,
+            "{method} {source} => {destination:?}"
+        );
+        for (name, expected) in [
+            ("source.txt", b"source".as_slice()),
+            ("victim.txt", b"victim"),
+            ("nested/child.txt", b"child"),
+        ] {
+            assert_eq!(
+                std::fs::read(directory.path().join(name)).unwrap(),
+                expected
+            );
+        }
+        assert_eq!(std::fs::read_dir(directory.path()).unwrap().count(), 3);
+    }
+}
+
 #[cfg(unix)]
 #[tokio::test]
 async fn symlinks_cannot_expose_or_modify_other_directories() {
