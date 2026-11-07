@@ -71,7 +71,7 @@ class BuildInputs(unittest.TestCase):
 
     def test_only_audited_core_alloc_apps_select_the_native_target(self):
         names = json.loads((build.ROOT / "buildins.json").read_text())["buildins"]
-        admitted = {"apps", "backup", "commander", "edit", "hull", "img", "os", "paper", "share", "termdir"}
+        admitted = {"apps", "backup", "commander", "edit", "hull", "img", "os", "paper", "share", "termdir", "trauma"}
         self.assertEqual(set(build.NATIVE_CORE_ALLOC_BUILTINS), admitted)
         for name in names:
             needs_std = build.settings(name)[2]
@@ -101,8 +101,9 @@ class BuildInputs(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             staged = Path(directory) / "sources/trauma/Cargo.toml"
             doc = tomllib.loads(build.staged_manifest(staged, manifest).decode())
-            for group in (doc["dependencies"], doc["dev-dependencies"],
-                          doc["target"]['cfg(any(target_os = "trueos", target_os = "zkvm"))']["dependencies"]):
+            groups = [doc["dependencies"], doc["dev-dependencies"]]
+            groups.extend(target.get("dependencies", {}) for target in doc["target"].values())
+            for group in groups:
                 for name, spec in group.items():
                     if isinstance(spec, dict) and "path" in spec:
                         self.assertTrue(Path(spec["path"]).is_absolute(), name)

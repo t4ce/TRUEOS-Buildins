@@ -40,7 +40,7 @@ PACKAGE_REVISION = 3
 # These apps have an audited core/alloc target dependency closure. Keep this
 # admission explicit: an entry's no_std attribute alone cannot establish that
 # its dependencies avoid std or support a target without Unix platform cfgs.
-NATIVE_CORE_ALLOC_BUILTINS = frozenset({"apps", "backup", "commander", "edit", "hull", "img", "os", "paper", "share", "termdir"})
+NATIVE_CORE_ALLOC_BUILTINS = frozenset({"apps", "backup", "commander", "edit", "hull", "img", "os", "paper", "share", "termdir", "trauma"})
 
 
 def run(args, **kwargs):

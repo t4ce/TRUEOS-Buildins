@@ -115,7 +115,8 @@ mod executor {
         let text = core::str::from_utf8(url).map_err(|_| "job URL is not UTF-8".to_string())?;
         let hint =
             core::str::from_utf8(hint).map_err(|_| "filename hint is not UTF-8".to_string())?;
-        let mut url = reqwest::Url::parse(text).map_err(|_| "invalid download URL".to_string())?;
+        let mut url =
+            crate::transport::Url::parse(text).map_err(|_| "invalid download URL".to_string())?;
         if !matches!(url.scheme(), "http" | "https") || url.host_str().is_none() {
             return Err("worker only accepts HTTP(S) URLs".to_string());
         }
@@ -141,7 +142,7 @@ mod executor {
         })
     }
 
-    fn safe_name(hint: &str, url: &reqwest::Url) -> String {
+    fn safe_name(hint: &str, url: &crate::transport::Url) -> String {
         // Treat either platform's separators as untrusted input. The restricted
         // ASCII alphabet excludes drive prefixes, control characters and devices.
         let basename = hint.rsplit(['/', '\\']).next().unwrap_or("");

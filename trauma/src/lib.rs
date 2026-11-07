@@ -1,14 +1,20 @@
 //! Trauma is crate aiming at providing a simple way to download files
 //! asynchronously via HTTP(S).
 
+#![cfg_attr(target_os = "trueos", no_std)]
+
 extern crate alloc;
+
+#[macro_use]
+mod output;
 
 #[cfg(any(target_os = "trueos", target_os = "zkvm", test))]
 mod association;
 mod body;
 mod checkpoint;
-mod checkpoint_rename;
+mod storage;
 mod transfer;
+mod transport;
 
 pub mod download;
 pub mod downloader;
@@ -21,8 +27,9 @@ mod test_support;
 
 use alloc::string::String;
 use core::fmt;
-use reqwest::header::{ACCEPT_RANGES, CONTENT_LENGTH};
+#[cfg(not(target_os = "trueos"))]
 use std::io;
+use transport::header::{ACCEPT_RANGES, CONTENT_LENGTH};
 
 /// Errors that can happen when using Trauma.
 #[derive(Debug)]
@@ -32,8 +39,10 @@ pub enum Error {
     /// Error from the underlying URL parser or the expected URL format.
     InvalidUrl(String),
     /// I/O Error.
+    #[cfg(not(target_os = "trueos"))]
     IOError { source: io::Error },
     /// Error from the Reqwest library.
+    #[cfg(not(target_os = "trueos"))]
     Reqwest { source: reqwest::Error },
 }
 
@@ -42,7 +51,9 @@ impl fmt::Display for Error {
         match self {
             Self::Internal(message) => write!(f, "Internal error: {message}"),
             Self::InvalidUrl(message) => write!(f, "Invalid URL: {message}"),
+            #[cfg(not(target_os = "trueos"))]
             Self::IOError { .. } => f.write_str("I/O error"),
+            #[cfg(not(target_os = "trueos"))]
             Self::Reqwest { .. } => f.write_str("Reqwest Error"),
         }
     }
@@ -51,19 +62,23 @@ impl fmt::Display for Error {
 impl core::error::Error for Error {
     fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
         match self {
+            #[cfg(not(target_os = "trueos"))]
             Self::IOError { source } => Some(source),
+            #[cfg(not(target_os = "trueos"))]
             Self::Reqwest { source } => Some(source),
             _ => None,
         }
     }
 }
 
+#[cfg(not(target_os = "trueos"))]
 impl From<io::Error> for Error {
     fn from(source: io::Error) -> Self {
         Self::IOError { source }
     }
 }
 
+#[cfg(not(target_os = "trueos"))]
 impl From<reqwest::Error> for Error {
     fn from(source: reqwest::Error) -> Self {
         Self::Reqwest { source }
@@ -92,7 +107,7 @@ pub(crate) trait ResponseExt {
     fn content_disposition(&self) -> Option<String>;
 }
 
-impl ResponseExt for reqwest::Response {
+impl ResponseExt for transport::Response {
     fn content_length_header(&self) -> Option<u64> {
         self.headers()
             .get(CONTENT_LENGTH)
@@ -111,7 +126,7 @@ impl ResponseExt for reqwest::Response {
 
     fn content_disposition(&self) -> Option<String> {
         self.headers()
-            .get(reqwest::header::CONTENT_DISPOSITION)
+            .get(transport::header::CONTENT_DISPOSITION)
             .and_then(|v| v.to_str().ok())
             .map(String::from)
     }

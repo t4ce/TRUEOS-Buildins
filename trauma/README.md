@@ -18,8 +18,8 @@ logic without terminal progress rendering or HTTP telemetry.
 ### Features
 
 - Library and TRUEOS terminal application
-- HTTP(S) downloads with [rustls]
-- Support download via proxies
+- Native HTTP(S) downloads through the kernel transport; host TLS with [rustls]
+- Host downloads via proxies
 - Download files via providing a list of URLs
   - Automatically use the remote file names
   - Ability to rename downloaded files
@@ -51,8 +51,10 @@ trauma = "3"
 
 ### Features
 
-By default, `trauma` enables [rustls] for TLS support. Streaming and HTTP/2
-remain enabled. Optional capabilities are explicit:
+Host builds enable [rustls] by default and retain streaming, HTTP/2, proxies,
+and the optional presentation features below. TRUEOS uses its native HTTP/1.1
+transport and TLS implementation; host TLS, proxy, middleware, and progress-bar
+features are excluded from the native dependency closure. Optional host capabilities are explicit:
 
 | Feature | Capability |
 | --- | --- |
@@ -149,18 +151,39 @@ Last-Modified validators and multipart byte ranges are not supported.
 `Summary::size()` reports the resulting on-disk length when it can be
 established, including skipped files and saved prefixes after failure. A
 successful transfer flushes writes and verifies every known full length before
-marking its checkpoint complete. Checkpoints are published by atomic rename;
-this is not an fsync-based power-loss durability guarantee or content checksum.
-Request retry middleware retains its bounded policy. Body-stream failures are
+marking its checkpoint complete. Host checkpoints are published by atomic rename; TRUEOS checkpoints use checked
+native record publication. Neither the v1 checkpoint nor the saved length is a
+prefix content checksum. Native publication checks the coherent opening
+snapshot, so concurrent changes after that snapshot reject the commit; a same-length
+foreign prefix changed before opening is not detected by the v1 checkpoint.
+Request retries retain their bounded policy. Body-stream failures are
 returned to the caller rather than retried automatically within the same call.
 
 ### Platform types and verification
 
-Portable traits use `core`; owned strings, collections, and shared pointers use
-`alloc`. `trauma::path::{Path, PathBuf}` selects TRUEOS's
-`trueos::platform::path` facade on TRUEOS and a host fallback elsewhere. The
-current platform facade reexports std-compatible types; this is not a full
-`no_std` port. OS I/O and current-directory access still use `std`.
+TRUEOS builds use `#![no_std]`, `core`, and `alloc`, with UTF-8 native paths,
+a current-thread native runtime, and typed native filesystem/network APIs.
+Reqwest, hosted Tokio filesystem/network support, C allocation, and Unix APIs
+are outside that target closure. Host builds retain their normal Rust APIs.
+
+Native HTTP requests follow at most ten redirects in the app, including
+HTTP/HTTPS transitions. Credentials and sensitive headers are stripped when
+the origin changes. Raw response fields retain duplicates for strict resume
+validation. Connect, TLS, and read-idle timeouts default to disabled, as before;
+there is no Appstore download-size or total-time limit. Only known transient
+pre-head transport failures and transient HTTP statuses spend the retry budget;
+protocol, TLS verification, and redirect-policy errors fail directly. A body
+failure commits the accepted prefix and returns without replaying the request.
+Dropping an unfinished exchange cancels its native transport.
+
+Native downloads retain the inherited whole-file buffering and 4GiB filesystem
+limit. Growth is fallible. Explicit checked commits alone advance the reported
+saved length; dropping a buffer never writes it. A validated restart commits an
+empty Blob before storing the new partial checkpoint. Existing typed outputs
+can reset only under the current FFA key with a matching content digest; record
+identity and key remain intact. A protected record rejects without data mutation.
+The content-based check cannot distinguish a replacement having identical bytes
+and a different FFA identity.
 
 The normal kernel commands prepare this builtin automatically: `cargo rig`
 uses the development profile; `cargo rigreal` uses release. Release packaging
@@ -181,8 +204,8 @@ From this checkout, run the supplemental host checks:
 python3 tools/check_host.py
 ```
 
-The script checks the real library, examples, and loopback tests using vendored
-Tokio/Mio and an upstream Reqwest HTTP backend without TLS. It tests both lean
+The script checks the real library, examples, and loopback tests using upstream host
+Tokio and Reqwest without TLS. It tests both lean
 and optional terminal/proxy feature combinations, plus documentation examples.
 It does not execute the TRUEOS runtime or validate platform TLS. The actual
 TRUEOS all-features compile check and pack results are recorded in
@@ -246,7 +269,7 @@ can be associated without downloading it again; already typed files need only
 the metadata check. This uses
 local bytes, never another HTTP fetch. The existing snapshot/rewrite API is
 bounded to 16 MiB here; larger files remain Blob. A fresh validated representation
-replaces an earlier typed output with a new Blob before writing, then gets its own
+atomically resets an earlier FFA typed output to Blob before writing, then gets its own
 completion-time association attempt.
 
 If Hull already received an executable/archive body, it submits those bytes as a

@@ -1,21 +1,24 @@
 //! Represents a file to be downloaded.
 
+use crate::transport::{self, Client, Response, SendError, StatusCode, Url};
 use crate::{Error, ResponseExt};
 use alloc::{
     format,
     string::{String, ToString},
 };
 use bon::Builder;
-use reqwest::{IntoUrl, StatusCode, Url};
-use reqwest_middleware::ClientWithMiddleware;
 
 /// Represents a file to be downloaded.
 #[derive(Debug, Clone, Builder)]
 #[builder(on(String, into))]
 pub struct Download {
     /// URL of the file to download.
-    #[builder(with = |value: impl IntoUrl| -> Result<_, Error> {
-        value.into_url().map_err(|e| Error::InvalidUrl(format!("the url cannot be parsed: {e}")))
+    #[builder(with = |value: impl AsRef<str>| -> Result<_, Error> {
+        let url = Url::parse(value.as_ref()).map_err(|_| Error::InvalidUrl("the URL cannot be parsed".into()))?;
+        if !matches!(url.scheme(), "http" | "https") || url.host_str().is_none() {
+            return Err(Error::InvalidUrl("only HTTP(S) URLs are supported".into()));
+        }
+        Ok(url)
     })]
     url: Url,
     /// File name used to save the file on disk. Overrides the file name
@@ -24,22 +27,28 @@ pub struct Download {
 }
 
 impl Download {
-    pub async fn head(
-        &self,
-        client: &ClientWithMiddleware,
-    ) -> Result<reqwest::Response, reqwest_middleware::Error> {
-        client.head(self.url.clone()).send().await
+    pub async fn head(&self, client: &Client) -> Result<Response, SendError> {
+        transport::send(
+            client,
+            transport::Method::HEAD,
+            self.url.clone(),
+            transport::HeaderMap::new(),
+        )
+        .await
     }
 
-    pub async fn get(
-        &self,
-        client: &ClientWithMiddleware,
-    ) -> Result<reqwest::Response, reqwest_middleware::Error> {
-        client.get(self.url.clone()).send().await
+    pub async fn get(&self, client: &Client) -> Result<Response, SendError> {
+        transport::send(
+            client,
+            transport::Method::GET,
+            self.url.clone(),
+            transport::HeaderMap::new(),
+        )
+        .await
     }
 
     /// Check whether the download is resumable.
-    pub fn is_resumable(response: &reqwest::Response) -> bool {
+    pub fn is_resumable(response: &Response) -> bool {
         let accept_ranges = response.accept_ranges();
 
         // If the server doesn't support range requests, we consider the
@@ -57,7 +66,7 @@ impl Download {
     /// Get the filename from the `Content-Disposition` header.
     ///
     /// Returns `None` if the header is not set or if its value cannot be parsed.
-    pub fn filename_from_content_disposition(response: &reqwest::Response) -> Option<String> {
+    pub fn filename_from_content_disposition(response: &Response) -> Option<String> {
         if let Some(value) = response.content_disposition() {
             return Download::parse_content_disposition(&value);
         }
@@ -96,19 +105,16 @@ impl Download {
 
         // Check for root path early.
         if path == "/" || path.is_empty() {
-            return Err(Error::InvalidUrl(format!(
-                "the URL \"{}\" has no filename",
-                self.url
-            )));
+            return Err(Error::InvalidUrl(format!("the URL has no filename")));
         }
 
         // Get the last segment item.
         self.url
             .path_segments()
-            .ok_or_else(|| Error::InvalidUrl(format!("not an absolute URL: {}", self.url)))?
+            .ok_or_else(|| Error::InvalidUrl("not an absolute HTTP(S) URL".into()))?
             .next_back()
             .map(String::from)
-            .ok_or_else(|| Error::InvalidUrl(format!("the URL \"{}\" has no filename", self.url)))
+            .ok_or_else(|| Error::InvalidUrl("the URL has no filename".into()))
     }
 
     /// Get the filename from multiple sources.
@@ -119,7 +125,7 @@ impl Download {
     ///   - filename from URL
     ///
     /// Returns `None` if the name cannot be determined.
-    pub fn infer_filename(&self, response: &reqwest::Response) -> Option<String> {
+    pub fn infer_filename(&self, response: &Response) -> Option<String> {
         if self.filename_override.is_some() {
             return self.filename_override.clone();
         }

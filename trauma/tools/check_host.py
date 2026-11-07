@@ -3,7 +3,7 @@
 
 The TRUEOS Reqwest/Hyper forks have platform-only dependencies and incomplete
 host branches. This temporary harness uses upstream Reqwest of the same version
-without TLS. It retains vendored Tokio/Mio and compiles the real Trauma sources,
+without TLS. It uses upstream host Tokio and compiles the real Trauma sources,
 examples, and tests. Use the shared buildins driver separately for platform validation.
 """
 import json
@@ -35,12 +35,19 @@ def host_manifest():
     ]
     for section in ["dependencies", "dev-dependencies"]:
         lines.append(f"[{section}]")
-        for name, spec in source.get(section, {}).items():
+        specs = dict(source.get(section, {}))
+        if section == "dependencies":
+            for name, spec in source["target"]['cfg(not(target_os = "trueos"))']["dependencies"].items():
+                if name == "tokio":
+                    spec = dict(spec)
+                    spec["features"] = sorted(set(spec["features"] + specs[name]["features"]))
+                specs[name] = spec
+        for name, spec in specs.items():
             if isinstance(spec, str):
                 lines.append(f"{name} = {json.dumps(spec)}")
                 continue
             spec = dict(spec)
-            if name == "reqwest":
+            if name in {"reqwest", "tokio", "tracing"}:
                 spec.pop("path", None)
             if "path" in spec:
                 spec["path"] = str((ROOT / spec["path"]).resolve())
@@ -48,11 +55,6 @@ def host_manifest():
     lines.append("[features]")
     for name, features in source["features"].items():
         lines.append(f"{name} = {json.dumps(features)}")
-    lines += [
-        "[patch.crates-io]",
-        "tokio = " + inline_table({"path": str(ROOT.parent / "vendor/tokio-1.54.1")}),
-        "mio = " + inline_table({"path": str(ROOT.parent.parent / "TRUEOS/vendor/mio-1.2.0")}),
-    ]
     for path in sorted((ROOT / "examples").glob("*.rs")):
         lines += ["[[example]]", f"name = {json.dumps(path.stem)}", f"path = {json.dumps(str(path))}"]
         if path.stem == "with-style":
@@ -65,12 +67,12 @@ def host_manifest():
 def main():
     toolchain = tomllib.loads((ROOT.parent / "rust-toolchain.toml").read_text())["toolchain"]["channel"]
     env = dict(os.environ)
-    env["CARGO_TARGET_DIR"] = str(ROOT / "target/host-smoke")
+    env["CARGO_TARGET_DIR"] = str(ROOT.parent.parent / "TRUEOS/tgt/trauma-host")
     env["RUSTFLAGS"] = env.get("RUSTFLAGS", "") + ' --check-cfg=cfg(target_os,values("trueos","zkvm"))'
     with tempfile.TemporaryDirectory(prefix="trauma-host-") as scratch:
         manifest = Path(scratch) / "Cargo.toml"
         manifest.write_text(host_manifest())
-        base = ["cargo", f"+{toolchain}", "test", "--manifest-path", str(manifest), "--no-default-features"]
+        base = ["cargo", f"+{toolchain}", "test", "--manifest-path", str(manifest), "--target", "x86_64-unknown-linux-gnu", "--no-default-features"]
         for flags in [
             ["--all-targets"],
             ["--all-targets", "--features", "terminal-progress,retry-tracing,socks,system-proxy"],
@@ -78,7 +80,7 @@ def main():
         ]:
             subprocess.run(base + flags, cwd=ROOT, env=env, check=True)
         subprocess.run(["cargo", f"+{toolchain}", "run", "--manifest-path", str(manifest),
-                        "--no-default-features", "--example", "with-resume"],
+                        "--target", "x86_64-unknown-linux-gnu", "--no-default-features", "--example", "with-resume"],
                        cwd=ROOT, env=env, check=True)
     print("Host checks passed; TRUEOS runtime and TLS behavior require separate validation.")
 

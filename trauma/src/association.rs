@@ -65,9 +65,7 @@ pub(crate) async fn completed(path: &crate::path::Path) {
             async_fs::infer_blob_checked(path.as_bytes(), bytes, kind, digest).await
         }
     }
-    let Some(path) = path.to_str() else {
-        return;
-    };
+    let path = path.as_str();
     match attempt(&mut Native, path).await {
         Ok(Some(kind)) => println!("Trauma: associated {path} as content type {}", kind.raw()),
         Ok(None) => {}
@@ -75,34 +73,6 @@ pub(crate) async fn completed(path: &crate::path::Path) {
             eprintln!("Trauma: type association unavailable ({code}); saved bytes retained: {path}")
         }
     }
-}
-
-// A fresh representation starts as Blob again. This is only called after GET
-// validation, at the same point where the ordinary writer would truncate it.
-#[cfg(any(target_os = "trueos", target_os = "zkvm"))]
-pub(crate) async fn prepare_restart(path: &crate::path::Path) -> Result<(), alloc::string::String> {
-    use alloc::{format, string::ToString};
-    use trueos::async_fs;
-    let Some(text) = path.to_str() else {
-        return Ok(());
-    };
-    match async_fs::typed_metadata(text.as_bytes()).await {
-        Ok(info) if info.content_type != async_fs::ContentTypeId::BLOB => {
-            // Recreating an ordinary download must not discard a user-assigned key.
-            let key = async_fs::record_key(text.as_bytes())
-                .await
-                .map_err(|code| format!("restart download key: {code}"))?;
-            if !matches!(key, async_fs::RecordKey::Ffa) {
-                return Err("cannot restart a protected typed download in place".into());
-            }
-            async_fs::remove(text.as_bytes())
-                .await
-                .map_err(|code| format!("restart typed download: {code}"))?;
-        }
-        Ok(_) | Err(async_fs::ERR_NOT_FOUND) => {}
-        Err(code) => return Err(code.to_string()),
-    }
-    Ok(())
 }
 
 #[cfg(test)]

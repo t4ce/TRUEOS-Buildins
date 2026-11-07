@@ -11,16 +11,21 @@ categories = ["concurrency"]
 keywords = ["http", "download", "async", "tokio"]
 
 [dependencies]
-futures-util = { version = "=0.3.32", default-features = false, features = ["std"] }
+futures-util = { version = "=0.3.32", default-features = false, features = ["alloc", "async-await"] }
+sha2 = { version = "=0.10.9", default-features = false }
+tokio = { path = "../vendor/tokio-1.54.1", version = "=1.54.1", default-features = false, features = ["rt", "time"] }
+bon = { version = "=3.9.3", default-features = false, features = ["alloc"] }
+http = { version = "=1.4.0", default-features = false }
+url = { version = "=2.5.8", default-features = false }
+
+[target.'cfg(not(target_os = "trueos"))'.dependencies]
 indicatif = { version = "=0.18.0", optional = true }
 reqwest-middleware = "=0.5.2"
 reqwest-retry = { version = "=0.9.1", default-features = false }
-sha2 = { version = "=0.10.9", default-features = false }
-tokio = { path = "../vendor/tokio-1.54.1", version = "=1.54.1", default-features = false, features = ["rt", "fs", "io-util", "net", "time"] }
 tracing = { path = "../vendor/tracing-0.1.44", version = "=0.1.44", default-features = false, features = ["std"] }
-bon = { version = "=3.9.3", default-features = false, features = ["alloc"] }
+tokio = { path = "../vendor/tokio-1.54.1", version = "=1.54.1", default-features = false, features = ["fs", "io-util", "net"] }
 
-[dependencies.reqwest]
+[target.'cfg(not(target_os = "trueos"))'.dependencies.reqwest]
 path = "../vendor/reqwest-0.13.3"
 version = "=0.13.3"
 default-features = false
@@ -50,8 +55,14 @@ path = "src/main.rs"
 test = false
 bench = false
 
-[target.'cfg(any(target_os = "trueos", target_os = "zkvm"))'.dependencies]
-trueos = { path = "../vendor/trueos", features = ["tokio-runtime"] }
+[target.'cfg(target_os = "trueos")'.dependencies]
+trueos = { path = "../vendor/trueos", features = ["native-runtime"] }
+trueos-path = { path = "../../TRUEOS/crates/trueos-path" }
+trueos-runtime = { path = "../../TRUEOS/crates/trueos-runtime" }
+base64 = { version = "0.22", default-features = false, features = ["alloc"] }
+percent-encoding = { version = "2.3", default-features = false, features = ["alloc"] }
+
+[workspace]
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("trueos", "zkvm"))'] }

@@ -1,6 +1,11 @@
 //! Represents the download controller.
 
 use crate::path::PathBuf;
+use crate::transport::{self, Client as ClientWithMiddleware};
+use crate::transport::{
+    header::{HeaderMap, ACCEPT_ENCODING, IF_RANGE, RANGE},
+    StatusCode,
+};
 use crate::{
     body::save_body,
     checkpoint::{self, strong_etag, Checkpoint},
@@ -8,7 +13,8 @@ use crate::{
     transfer::{self, TransferPlan},
     ResponseExt,
 };
-#[cfg(feature = "terminal-progress")]
+use crate::{body::Sink, storage};
+#[cfg(all(feature = "terminal-progress", not(target_os = "trueos")))]
 use alloc::sync::Arc;
 use alloc::{
     format,
@@ -17,15 +23,13 @@ use alloc::{
 };
 use bon::Builder;
 use futures_util::stream::{self, StreamExt};
-#[cfg(feature = "terminal-progress")]
+#[cfg(all(feature = "terminal-progress", not(target_os = "trueos")))]
 use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle};
-use reqwest::{
-    header::{HeaderMap, ACCEPT_ENCODING, IF_RANGE, RANGE},
-    StatusCode,
-};
-use reqwest_middleware::{ClientBuilder, ClientWithMiddleware};
+#[cfg(not(target_os = "trueos"))]
+use reqwest_middleware::ClientBuilder;
+#[cfg(not(target_os = "trueos"))]
 use reqwest_retry::{policies::ExponentialBackoff, RetryTransientMiddleware};
-use tokio::fs::OpenOptions;
+#[cfg(not(target_os = "trueos"))]
 use tracing::debug;
 
 const DEFAULT_RETRIES: u32 = 3;
@@ -45,7 +49,7 @@ const DEFAULT_CONCURRENT_DOWNLOADS: usize = 32;
 #[derive(Debug, Clone, Builder)]
 pub struct Downloader {
     /// Directory where to store the downloaded files.
-    #[builder(default = std::env::current_dir().unwrap_or_default(), into )]
+    #[builder(default = crate::path::default_directory(), into)]
     directory: PathBuf,
     /// Request-level retry budget (body-stream failures are returned to the caller).
     #[builder(default = DEFAULT_RETRIES)]
@@ -54,7 +58,7 @@ pub struct Downloader {
     #[builder(default = DEFAULT_CONCURRENT_DOWNLOADS)]
     concurrent_downloads: usize,
     /// Downloader style options (requires `terminal-progress`).
-    #[cfg(feature = "terminal-progress")]
+    #[cfg(all(feature = "terminal-progress", not(target_os = "trueos")))]
     #[builder(default)]
     style_options: StyleOptions,
     /// Resume the download if necessary and possible.
@@ -76,7 +80,10 @@ impl Downloader {
     /// Starts the downloads. Interrupted bodies leave a checkpointed prefix when
     /// a strong ETag is available; the next call can validate and resume it.
     pub async fn download(&self, downloads: &[Download]) -> Vec<Summary> {
-        self.download_inner(downloads, None).await
+        let prepared = self
+            .prepare()
+            .expect("the download transport to initialize");
+        self.download_inner(downloads, &prepared.client).await
     }
 
     #[cfg(any(target_os = "trueos", target_os = "zkvm", test))]
@@ -86,17 +93,15 @@ impl Downloader {
         };
         let output = self.directory.join(name);
         let result = async {
-            tokio::fs::create_dir_all(output.parent().unwrap_or(&output))
+            storage::create_dir_all(output.parent().unwrap_or(&output))
                 .await
                 .map_err(|e| e.to_string())?;
             checkpoint::invalidate(&output)
                 .await
                 .map_err(|e| e.to_string())?;
-            #[cfg(any(target_os = "trueos", target_os = "zkvm"))]
-            crate::association::prepare_restart(&output).await?;
-            tokio::fs::write(&output, bytes)
-                .await
-                .map_err(|e| e.to_string())?;
+            let mut file = storage::open(&output, 0).await?;
+            file.write_all(bytes).await?;
+            file.flush().await?;
             #[cfg(any(target_os = "trueos", target_os = "zkvm"))]
             crate::association::completed(&output).await;
             Ok::<(), String>(())
@@ -109,21 +114,39 @@ impl Downloader {
     }
 
     /// Starts the downloads with proxy.
+    #[cfg(not(target_os = "trueos"))]
     pub async fn download_with_proxy(
         &self,
         downloads: &[Download],
         proxy: reqwest::Proxy,
     ) -> Vec<Summary> {
-        self.download_inner(downloads, Some(proxy)).await
+        let prepared = self
+            .prepare_with_proxy(Some(proxy))
+            .expect("the HTTP client to initialize");
+        self.download_inner(downloads, &prepared.client).await
     }
 
     /// Prepare one shared connection pool and retry middleware for incremental
     /// single downloads. Each call to `download_one` is headless; callers must
     /// bound concurrency and ensure one writer per destination.
-    pub fn prepare(&self) -> Result<PreparedDownloader, reqwest::Error> {
-        self.prepare_with_proxy(None)
+    pub fn prepare(&self) -> Result<PreparedDownloader, transport::InitError> {
+        #[cfg(not(target_os = "trueos"))]
+        {
+            self.prepare_with_proxy(None)
+        }
+        #[cfg(target_os = "trueos")]
+        {
+            Ok(PreparedDownloader {
+                downloader: self.clone(),
+                client: ClientWithMiddleware::new(
+                    self.headers.clone().unwrap_or_default(),
+                    self.retries,
+                ),
+            })
+        }
     }
 
+    #[cfg(not(target_os = "trueos"))]
     fn prepare_with_proxy(
         &self,
         proxy: Option<reqwest::Proxy>,
@@ -157,20 +180,15 @@ impl Downloader {
     async fn download_inner(
         &self,
         downloads: &[Download],
-        proxy: Option<reqwest::Proxy>,
+        client: &ClientWithMiddleware,
     ) -> Vec<Summary> {
-        let prepared = self
-            .prepare_with_proxy(proxy)
-            .expect("the inner client to build");
-        let client = &prepared.client;
-
-        #[cfg(feature = "terminal-progress")]
+        #[cfg(all(feature = "terminal-progress", not(target_os = "trueos")))]
         let multi = Arc::new(if self.style_options.is_hidden() {
             MultiProgress::with_draw_target(ProgressDrawTarget::hidden())
         } else {
             MultiProgress::new()
         });
-        #[cfg(feature = "terminal-progress")]
+        #[cfg(all(feature = "terminal-progress", not(target_os = "trueos")))]
         let main = Arc::new(
             multi.add(
                 self.style_options
@@ -179,23 +197,23 @@ impl Downloader {
                     .to_progress_bar(downloads.len() as u64),
             ),
         );
-        #[cfg(feature = "terminal-progress")]
+        #[cfg(all(feature = "terminal-progress", not(target_os = "trueos")))]
         main.tick();
         let summaries = stream::iter(downloads)
             .map(|download| {
                 self.fetch(
                     client,
                     download,
-                    #[cfg(feature = "terminal-progress")]
+                    #[cfg(all(feature = "terminal-progress", not(target_os = "trueos")))]
                     multi.clone(),
-                    #[cfg(feature = "terminal-progress")]
+                    #[cfg(all(feature = "terminal-progress", not(target_os = "trueos")))]
                     main.clone(),
                 )
             })
             .buffer_unordered(self.concurrent_downloads.max(1))
             .collect::<Vec<_>>()
             .await;
-        #[cfg(feature = "terminal-progress")]
+        #[cfg(all(feature = "terminal-progress", not(target_os = "trueos")))]
         if self.style_options.main.clear {
             main.finish_and_clear();
         } else {
@@ -208,8 +226,12 @@ impl Downloader {
         &self,
         client: &ClientWithMiddleware,
         download: &Download,
-        #[cfg(feature = "terminal-progress")] multi: Arc<MultiProgress>,
-        #[cfg(feature = "terminal-progress")] main: Arc<ProgressBar>,
+        #[cfg(all(feature = "terminal-progress", not(target_os = "trueos")))] multi: Arc<
+            MultiProgress,
+        >,
+        #[cfg(all(feature = "terminal-progress", not(target_os = "trueos")))] main: Arc<
+            ProgressBar,
+        >,
     ) -> Summary {
         let filename = download
             .filename_override()
@@ -221,12 +243,16 @@ impl Downloader {
             size: 0,
             resumable: false,
         };
+        #[cfg(target_os = "trueos")]
+        if let Some(output) = &state.output {
+            state.size = storage::file_len(output).await.ok().flatten().unwrap_or(0);
+        }
         let status = match self
             .transfer(
                 client,
                 download,
                 &mut state,
-                #[cfg(feature = "terminal-progress")]
+                #[cfg(all(feature = "terminal-progress", not(target_os = "trueos")))]
                 multi,
             )
             .await
@@ -241,12 +267,13 @@ impl Downloader {
             }
         }
         // One terminal point reconciles summary lengths for every early return.
+        #[cfg(not(target_os = "trueos"))]
         if let Some(output) = &state.output {
             if let Ok(metadata) = tokio::fs::metadata(output).await {
                 state.size = metadata.len();
             }
         }
-        #[cfg(feature = "terminal-progress")]
+        #[cfg(all(feature = "terminal-progress", not(target_os = "trueos")))]
         main.inc(1);
         Summary::builder()
             .download(download.clone())
@@ -262,7 +289,9 @@ impl Downloader {
         client: &ClientWithMiddleware,
         download: &Download,
         state: &mut FetchState,
-        #[cfg(feature = "terminal-progress")] multi: Arc<MultiProgress>,
+        #[cfg(all(feature = "terminal-progress", not(target_os = "trueos")))] multi: Arc<
+            MultiProgress,
+        >,
     ) -> Result<Status, String> {
         if let Some(headers) = &self.headers {
             if headers.contains_key(RANGE) || headers.contains_key(IF_RANGE) {
@@ -298,10 +327,14 @@ impl Downloader {
                 if let Some(checkpoint) = &saved {
                     if checkpoint.complete
                         && checkpoint.total == Some(size)
-                        && tokio::fs::metadata(output).await.is_ok_and(|m| m.is_file())
+                        && storage::file_len(output)
+                            .await
+                            .is_ok_and(|length| length.is_some())
                         && head.content_length_header() == Some(size)
                         && transfer::identity_encoding(head.headers()).is_ok()
-                        && !head.headers().contains_key(reqwest::header::CONTENT_RANGE)
+                        && !head
+                            .headers()
+                            .contains_key(transport::header::CONTENT_RANGE)
                         && checkpoint.matches(
                             &download.url(),
                             head.url(),
@@ -318,13 +351,22 @@ impl Downloader {
             head.as_ref()
                 .is_some_and(|head| transfer::can_resume(head, checkpoint, size, &download.url()))
         });
-        let mut request = client.get(download.url());
+        let mut headers = HeaderMap::new();
         if let Some(checkpoint) = resume {
-            request = request
-                .header(RANGE, format!("bytes={size}-"))
-                .header(IF_RANGE, &checkpoint.etag);
+            headers.insert(
+                RANGE,
+                transport::header::HeaderValue::from_str(&format!("bytes={size}-"))
+                    .map_err(|_| "invalid resume range")?,
+            );
+            headers.insert(
+                IF_RANGE,
+                transport::header::HeaderValue::from_str(&checkpoint.etag)
+                    .map_err(|_| "invalid resume validator")?,
+            );
         }
-        let response = request.send().await.map_err(|e| e.to_string())?;
+        let response = transport::send(client, transport::Method::GET, download.url(), headers)
+            .await
+            .map_err(|e| e.to_string())?;
         state.statuscode = response.status();
         let plan = TransferPlan::validate(&response, resume.map(|checkpoint| (checkpoint, size)))?;
         if plan.offset > 0
@@ -353,20 +395,20 @@ impl Downloader {
                 || response.accept_ranges()
                 || head.as_ref().is_some_and(ResponseExt::accept_ranges));
         let mut progress = TransferProgress::new(
-            #[cfg(feature = "terminal-progress")]
+            #[cfg(all(feature = "terminal-progress", not(target_os = "trueos")))]
             &multi,
-            #[cfg(feature = "terminal-progress")]
+            #[cfg(all(feature = "terminal-progress", not(target_os = "trueos")))]
             &self.style_options.child,
             plan.total,
             plan.offset,
-            #[cfg(feature = "terminal-progress")]
+            #[cfg(all(feature = "terminal-progress", not(target_os = "trueos")))]
             output
                 .file_name()
                 .unwrap_or_default()
                 .to_string_lossy()
                 .into_owned(),
         );
-        tokio::fs::create_dir_all(output.parent().unwrap_or(output))
+        storage::create_dir_all(output.parent().unwrap_or(output))
             .await
             .map_err(|e| e.to_string())?;
         // Never leave an old representation checkpoint attached to a truncated file.
@@ -374,18 +416,11 @@ impl Downloader {
             checkpoint::invalidate(output)
                 .await
                 .map_err(|e| e.to_string())?;
-            #[cfg(any(target_os = "trueos", target_os = "zkvm"))]
-            crate::association::prepare_restart(output).await?;
         }
+        #[cfg(not(target_os = "trueos"))]
         debug!("Opening destination {:?} at offset {}", output, plan.offset);
-        let mut file = OpenOptions::new()
-            .write(true)
-            .create(true)
-            .append(plan.offset > 0)
-            .truncate(plan.offset == 0)
-            .open(output)
-            .await
-            .map_err(|e| e.to_string())?;
+        let mut file = storage::open(output, plan.offset).await?;
+        state.size = file.committed_len().await?;
         if let Some(checkpoint) = &checkpoint {
             checkpoint.save(output).await.map_err(|e| e.to_string())?;
         }
@@ -417,17 +452,17 @@ impl PreparedDownloader {
     /// Download one item without terminal output. This preserves checkpoint,
     /// retry and summary behavior of `Downloader::download`.
     pub async fn download_one(&self, download: &Download) -> Summary {
-        #[cfg(feature = "terminal-progress")]
+        #[cfg(all(feature = "terminal-progress", not(target_os = "trueos")))]
         let multi = Arc::new(MultiProgress::with_draw_target(ProgressDrawTarget::hidden()));
-        #[cfg(feature = "terminal-progress")]
+        #[cfg(all(feature = "terminal-progress", not(target_os = "trueos")))]
         let main = Arc::new(multi.add(ProgressBar::hidden()));
         self.downloader
             .fetch(
                 &self.client,
                 download,
-                #[cfg(feature = "terminal-progress")]
+                #[cfg(all(feature = "terminal-progress", not(target_os = "trueos")))]
                 multi,
-                #[cfg(feature = "terminal-progress")]
+                #[cfg(all(feature = "terminal-progress", not(target_os = "trueos")))]
                 main,
             )
             .await
@@ -445,12 +480,8 @@ fn filename_error() -> String {
     "Cannot extract the filename. Verify the URL and/or provide an override.".to_string()
 }
 
-async fn disk_len(path: &crate::path::Path) -> std::io::Result<u64> {
-    match tokio::fs::metadata(path).await {
-        Ok(metadata) => Ok(metadata.len()),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(0),
-        Err(e) => Err(e),
-    }
+async fn disk_len(path: &crate::path::Path) -> Result<u64, String> {
+    Ok(storage::file_len(path).await?.unwrap_or(0))
 }
 
 #[cfg(all(test, feature = "terminal-progress"))]
@@ -461,25 +492,26 @@ std::thread_local! {
 // A child is finalized even when opening, streaming, flushing or checkpoint
 // publication returns early. The lean build carries no renderer or shared bars.
 struct TransferProgress {
-    #[cfg(feature = "terminal-progress")]
+    #[cfg(all(feature = "terminal-progress", not(target_os = "trueos")))]
     bar: ProgressBar,
-    #[cfg(feature = "terminal-progress")]
+    #[cfg(all(feature = "terminal-progress", not(target_os = "trueos")))]
     clear: bool,
-    #[cfg(feature = "terminal-progress")]
+    #[cfg(all(feature = "terminal-progress", not(target_os = "trueos")))]
     multi: MultiProgress,
 }
 impl TransferProgress {
     fn new(
-        #[cfg(feature = "terminal-progress")] multi: &MultiProgress,
-        #[cfg(feature = "terminal-progress")] options: &ProgressBarOpts,
+        #[cfg(all(feature = "terminal-progress", not(target_os = "trueos")))] multi: &MultiProgress,
+        #[cfg(all(feature = "terminal-progress", not(target_os = "trueos")))]
+        options: &ProgressBarOpts,
         total: Option<u64>,
         offset: u64,
-        #[cfg(feature = "terminal-progress")] filename: String,
+        #[cfg(all(feature = "terminal-progress", not(target_os = "trueos")))] filename: String,
     ) -> Self {
         #[cfg(not(feature = "terminal-progress"))]
         let _ = (total, offset);
         Self {
-            #[cfg(feature = "terminal-progress")]
+            #[cfg(all(feature = "terminal-progress", not(target_os = "trueos")))]
             bar: {
                 let bar = options.clone().to_progress_bar(total.unwrap_or(0));
                 if total.is_none() {
@@ -490,20 +522,20 @@ impl TransferProgress {
                 TEST_CHILDREN.with(|children| children.borrow_mut().push(bar.clone()));
                 bar
             },
-            #[cfg(feature = "terminal-progress")]
+            #[cfg(all(feature = "terminal-progress", not(target_os = "trueos")))]
             clear: options.clear,
-            #[cfg(feature = "terminal-progress")]
+            #[cfg(all(feature = "terminal-progress", not(target_os = "trueos")))]
             multi: multi.clone(),
         }
     }
     fn set_position(&self, position: u64) {
-        #[cfg(feature = "terminal-progress")]
+        #[cfg(all(feature = "terminal-progress", not(target_os = "trueos")))]
         self.bar.set_position(position);
         #[cfg(not(feature = "terminal-progress"))]
         let _ = position;
     }
     fn finish(&mut self) {
-        #[cfg(feature = "terminal-progress")]
+        #[cfg(all(feature = "terminal-progress", not(target_os = "trueos")))]
         if self.clear {
             self.bar.finish_and_clear();
         } else {
@@ -513,7 +545,7 @@ impl TransferProgress {
 }
 impl Drop for TransferProgress {
     fn drop(&mut self) {
-        #[cfg(feature = "terminal-progress")]
+        #[cfg(all(feature = "terminal-progress", not(target_os = "trueos")))]
         if !self.bar.is_finished() {
             // Abandon preserves the committed position; finish_and_clear would
             // first advance it to the expected total, even on a failed transfer.
@@ -529,7 +561,7 @@ impl Drop for TransferProgress {
 ///
 /// By default, the main progress bar will stay on the screen upon completion,
 /// but the child ones will be cleared once complete.
-#[cfg(feature = "terminal-progress")]
+#[cfg(all(feature = "terminal-progress", not(target_os = "trueos")))]
 #[derive(Debug, Clone, Builder)]
 pub struct StyleOptions {
     /// Style options for the main progress bar.
@@ -538,7 +570,7 @@ pub struct StyleOptions {
     child: ProgressBarOpts,
 }
 
-#[cfg(feature = "terminal-progress")]
+#[cfg(all(feature = "terminal-progress", not(target_os = "trueos")))]
 impl Default for StyleOptions {
     fn default() -> Self {
         Self::builder()
@@ -553,7 +585,7 @@ impl Default for StyleOptions {
     }
 }
 
-#[cfg(feature = "terminal-progress")]
+#[cfg(all(feature = "terminal-progress", not(target_os = "trueos")))]
 impl StyleOptions {
     /// Convenience function to create a style hidding the progress bars.
     pub fn hidden() -> Self {
@@ -580,7 +612,7 @@ impl StyleOptions {
 }
 
 /// Define the options for a progress bar.
-#[cfg(feature = "terminal-progress")]
+#[cfg(all(feature = "terminal-progress", not(target_os = "trueos")))]
 #[derive(Debug, Clone, Builder)]
 #[builder(on(String, into))]
 pub struct ProgressBarOpts {
@@ -599,14 +631,14 @@ pub struct ProgressBarOpts {
     clear: bool,
 }
 
-#[cfg(feature = "terminal-progress")]
+#[cfg(all(feature = "terminal-progress", not(target_os = "trueos")))]
 impl Default for ProgressBarOpts {
     fn default() -> Self {
         Self::builder().build()
     }
 }
 
-#[cfg(feature = "terminal-progress")]
+#[cfg(all(feature = "terminal-progress", not(target_os = "trueos")))]
 impl ProgressBarOpts {
     /// Template representing the bar and its position.
     ///

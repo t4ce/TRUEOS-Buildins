@@ -1,21 +1,22 @@
 //! Private, versioned representation checkpoints. One writer per destination.
-use crate::{
-    checkpoint_rename,
-    path::{Path, PathBuf},
+use crate::path::{Path, PathBuf};
+use crate::transport::{
+    header::{HeaderMap, ETAG},
+    Url,
 };
 use alloc::{
     format,
     string::{String, ToString},
 };
+#[cfg(not(target_os = "trueos"))]
 use core::sync::atomic::{AtomicU64, Ordering};
-use reqwest::{
-    header::{HeaderMap, ETAG},
-    Url,
-};
 use sha2::{Digest, Sha256};
+#[cfg(not(target_os = "trueos"))]
 use std::io;
+#[cfg(not(target_os = "trueos"))]
 use tokio::io::AsyncWriteExt;
 
+#[cfg(not(target_os = "trueos"))]
 static NEXT_TEMP: AtomicU64 = AtomicU64::new(0);
 const MAX_CHECKPOINT: u64 = 16 * 1024;
 
@@ -57,9 +58,16 @@ fn valid_etag(value: &str) -> bool {
 }
 
 pub(crate) fn path(output: &Path) -> PathBuf {
-    let mut name = output.as_os_str().to_os_string();
-    name.push(".trauma-resume");
-    PathBuf::from(name)
+    #[cfg(target_os = "trueos")]
+    {
+        PathBuf::from(format!("{}.trauma-resume", output.as_str()))
+    }
+    #[cfg(not(target_os = "trueos"))]
+    {
+        let mut name = output.as_os_str().to_os_string();
+        name.push(".trauma-resume");
+        PathBuf::from(name)
+    }
 }
 
 impl Checkpoint {
@@ -128,21 +136,27 @@ impl Checkpoint {
             complete,
         })
     }
-    pub async fn load(output: &Path) -> io::Result<Option<Self>> {
-        let path = path(output);
-        let metadata = match tokio::fs::metadata(&path).await {
-            Ok(m) => m,
-            Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(None),
-            Err(e) => return Err(e),
-        };
-        if metadata.len() > MAX_CHECKPOINT {
+    pub async fn load(output: &Path) -> Result<Option<Self>, String> {
+        let Some(data) = crate::storage::read_limited(&path(output), MAX_CHECKPOINT).await? else {
             return Ok(None);
-        }
-        let data = tokio::fs::read(path).await?;
+        };
         Ok(core::str::from_utf8(&data).ok().and_then(Self::parse))
     }
-    pub async fn save(&self, output: &Path) -> io::Result<()> {
+    pub async fn save(&self, output: &Path) -> Result<(), String> {
         let destination = path(output);
+        #[cfg(target_os = "trueos")]
+        {
+            crate::storage::save_checkpoint(&destination, self.encode().as_bytes()).await
+        }
+        #[cfg(not(target_os = "trueos"))]
+        {
+            self.save_host(destination)
+                .await
+                .map_err(|error| error.to_string())
+        }
+    }
+    #[cfg(not(target_os = "trueos"))]
+    async fn save_host(&self, destination: PathBuf) -> io::Result<()> {
         // create_new avoids trampling another file, even after a process crash.
         let (temporary, mut file) = loop {
             let mut name = destination.as_os_str().to_os_string();
@@ -167,7 +181,7 @@ impl Checkpoint {
             file.write_all(self.encode().as_bytes()).await?;
             file.flush().await?;
             drop(file);
-            checkpoint_rename::replace(&temporary, &destination).await
+            tokio::fs::rename(&temporary, &destination).await
         }
         .await;
         if result.is_err() {
@@ -177,10 +191,6 @@ impl Checkpoint {
     }
 }
 
-pub(crate) async fn invalidate(output: &Path) -> io::Result<()> {
-    match tokio::fs::remove_file(path(output)).await {
-        Ok(()) => Ok(()),
-        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
-        Err(e) => Err(e),
-    }
+pub(crate) async fn invalidate(output: &Path) -> Result<(), String> {
+    crate::storage::remove_file_if_exists(&path(output)).await
 }

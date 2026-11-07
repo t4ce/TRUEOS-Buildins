@@ -5,15 +5,32 @@ use alloc::{
 };
 use core::fmt::Display;
 use futures_util::{Stream, StreamExt};
+#[cfg(test)]
 use std::io;
-use tokio::io::{AsyncWrite, AsyncWriteExt};
 
-pub(crate) trait Sink: AsyncWrite + Unpin {
-    async fn committed_len(&mut self) -> io::Result<u64>;
+pub(crate) trait Sink {
+    async fn write_all(&mut self, bytes: &[u8]) -> Result<(), String>;
+    async fn flush(&mut self) -> Result<(), String>;
+    async fn committed_len(&mut self) -> Result<u64, String>;
 }
+#[cfg(not(target_os = "trueos"))]
 impl Sink for tokio::fs::File {
-    async fn committed_len(&mut self) -> io::Result<u64> {
-        Ok(self.metadata().await?.len())
+    async fn write_all(&mut self, bytes: &[u8]) -> Result<(), String> {
+        tokio::io::AsyncWriteExt::write_all(self, bytes)
+            .await
+            .map_err(|error| error.to_string())
+    }
+    async fn flush(&mut self) -> Result<(), String> {
+        tokio::io::AsyncWriteExt::flush(self)
+            .await
+            .map_err(|error| error.to_string())
+    }
+    async fn committed_len(&mut self) -> Result<u64, String> {
+        Ok(self
+            .metadata()
+            .await
+            .map_err(|error| error.to_string())?
+            .len())
     }
 }
 
@@ -158,8 +175,23 @@ mod tests {
         }
     }
     impl Sink for FaultSink {
-        async fn committed_len(&mut self) -> io::Result<u64> {
-            Ok(self.file.metadata().await?.len())
+        async fn write_all(&mut self, bytes: &[u8]) -> Result<(), String> {
+            tokio::io::AsyncWriteExt::write_all(self, bytes)
+                .await
+                .map_err(|error| error.to_string())
+        }
+        async fn flush(&mut self) -> Result<(), String> {
+            tokio::io::AsyncWriteExt::flush(self)
+                .await
+                .map_err(|error| error.to_string())
+        }
+        async fn committed_len(&mut self) -> Result<u64, String> {
+            Ok(self
+                .file
+                .metadata()
+                .await
+                .map_err(|error| error.to_string())?
+                .len())
         }
     }
     fn runtime() -> tokio::runtime::Runtime {

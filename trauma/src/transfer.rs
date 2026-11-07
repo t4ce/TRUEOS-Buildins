@@ -1,4 +1,8 @@
 //! Validate the wire response before choosing any destructive filesystem operation.
+use crate::transport::{
+    header::{HeaderMap, CONTENT_ENCODING, CONTENT_LENGTH, CONTENT_RANGE, CONTENT_TYPE},
+    Response, StatusCode,
+};
 use crate::{
     checkpoint::{fingerprint, strong_etag, Checkpoint},
     ResponseExt,
@@ -6,10 +10,6 @@ use crate::{
 use alloc::{
     format,
     string::{String, ToString},
-};
-use reqwest::{
-    header::{HeaderMap, CONTENT_ENCODING, CONTENT_LENGTH, CONTENT_RANGE, CONTENT_TYPE},
-    Response, StatusCode,
 };
 
 #[derive(Debug)]
@@ -141,7 +141,7 @@ pub(crate) fn can_resume(
     head: &Response,
     checkpoint: &Checkpoint,
     size: u64,
-    requested: &reqwest::Url,
+    requested: &crate::transport::Url,
 ) -> bool {
     !checkpoint.complete
         && size > 0
