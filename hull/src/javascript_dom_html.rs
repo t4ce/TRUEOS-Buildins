@@ -1,4 +1,5 @@
 //! Fragment parsing and serialization use the same rp5 arena as ordinary nodes.
+use alloc::{string::String, vec::Vec, vec};
 use super::{DomResult, Gateway, MAX_STRING_BYTES, failure};
 use rp5::{Document, Namespace, NodeKind};
 
@@ -29,8 +30,8 @@ pub(super) fn set(gateway: &mut Gateway, id: usize, text: &str) -> DomResult<()>
         doc.nodes[offset + index].parent = node.parent.map(|p| p + offset);
         doc.nodes[offset + index].children = node.children.iter().map(|c| c + offset).collect();
     }
-    for child in std::mem::take(&mut doc.nodes[target].children) { doc.nodes[child].parent = None; }
-    let children = std::mem::take(&mut doc.nodes[offset + fragment.root].children);
+    for child in core::mem::take(&mut doc.nodes[target].children) { doc.nodes[child].parent = None; }
+    let children = core::mem::take(&mut doc.nodes[offset + fragment.root].children);
     for child in children { doc.nodes[child].parent = Some(target); doc.nodes[target].children.push(child); }
     Ok(())
 }
@@ -77,7 +78,8 @@ pub(super) fn get(doc: &Document, id: usize) -> DomResult<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{cell::{Cell,RefCell},rc::Rc};
+    use core::cell::{Cell,RefCell};
+    use alloc::rc::Rc;
     #[test]
     fn over_node_budget_fragment_leaves_existing_tree_untouched() {
         let doc=rp5::parse("<body>keep</body>");

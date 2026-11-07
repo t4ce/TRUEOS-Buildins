@@ -15,7 +15,7 @@ use crate::values::url::Url;
 #[cfg(feature = "visitor")]
 use crate::visitor::Visit;
 use cssparser::*;
-use std::fmt::Write;
+use core::fmt::Write;
 
 /// A [@font-face](https://drafts.csswg.org/css-fonts/#font-face-rule) rule.
 #[derive(Debug, PartialEq, Clone)]
@@ -103,7 +103,7 @@ impl<'i> Parse<'i> for Source<'i> {
 impl<'i> ToCss for Source<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     match self {
       Source::Url(url) => url.to_css(dest),
@@ -156,7 +156,7 @@ impl<'i> Parse<'i> for UrlSource<'i> {
 impl<'i> ToCss for UrlSource<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     self.url.to_css(dest)?;
     if let Some(format) = &self.format {
@@ -229,7 +229,7 @@ impl<'i> Parse<'i> for FontFormat<'i> {
 impl<'i> ToCss for FontFormat<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     use FontFormat::*;
     let s = match self {
@@ -321,7 +321,7 @@ impl<'i> Parse<'i> for UnicodeRange {
 impl ToCss for UnicodeRange {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     // Attempt to optimize the range to use question mark syntax.
     if self.start != self.end {
@@ -422,7 +422,7 @@ impl<'i> Parse<'i> for FontStyle {
 impl ToCss for FontStyle {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     match self {
       FontStyle::Normal => dest.write_str("normal"),
@@ -512,7 +512,7 @@ impl<'i> RuleBodyItemParser<'i, FontFaceProperty<'i>, ParserError<'i>> for FontF
 impl<'i> ToCss for FontFaceRule<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     #[cfg(feature = "sourcemap")]
     dest.add_mapping(self.loc);
@@ -537,7 +537,7 @@ impl<'i> ToCss for FontFaceRule<'i> {
 impl<'i> ToCss for FontFaceProperty<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     use FontFaceProperty::*;
     macro_rules! property {
@@ -575,3 +575,8 @@ impl<'i> ToCss for FontFaceProperty<'i> {
     }
   }
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

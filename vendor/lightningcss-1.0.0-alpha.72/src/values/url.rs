@@ -41,7 +41,7 @@ impl<'i> Parse<'i> for Url<'i> {
 impl<'i> ToCss for Url<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     let dep = if dest.dependencies.is_some() {
       Some(UrlDependency::new(self, dest.filename()))
@@ -132,3 +132,8 @@ impl<'i> Url<'i> {
     false
   }
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

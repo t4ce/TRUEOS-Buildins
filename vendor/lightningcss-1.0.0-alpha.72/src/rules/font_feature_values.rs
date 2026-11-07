@@ -11,9 +11,9 @@ use crate::values::number::CSSInteger;
 #[cfg(feature = "visitor")]
 use crate::visitor::Visit;
 use cssparser::*;
-use indexmap::IndexMap;
+use crate::collections::IndexMap;
 use smallvec::SmallVec;
-use std::fmt::Write;
+use core::fmt::Write;
 
 /// A [@font-feature-values](https://drafts.csswg.org/css-fonts/#font-feature-values) rule.
 #[derive(Debug, PartialEq, Clone)]
@@ -39,7 +39,7 @@ impl<'i> FontFeatureValuesRule<'i> {
     loc: Location,
     options: &ParserOptions<'i>,
   ) -> Result<Self, ParseError<'i, ParserError<'i>>> {
-    let mut rules = IndexMap::new();
+    let mut rules = IndexMap::default();
     let mut rule_parser = FontFeatureValuesRuleParser {
       rules: &mut rules,
       options,
@@ -96,7 +96,7 @@ impl<'a, 'i> cssparser::AtRuleParser<'i> for FontFeatureValuesRuleParser<'a, 'i>
     input: &mut Parser<'i, 't>,
   ) -> Result<Self::AtRule, ParseError<'i, Self::Error>> {
     let loc = start.source_location();
-    let mut decls = IndexMap::new();
+    let mut decls = IndexMap::default();
     let mut has_existing = false;
     let declarations = if let Some(rule) = self.rules.get_mut(&prelude) {
       has_existing = true;
@@ -154,7 +154,7 @@ impl<'a, 'i> RuleBodyItemParser<'i, (), ParserError<'i>> for FontFeatureValuesRu
 impl<'i> ToCss for FontFeatureValuesRule<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     #[cfg(feature = "sourcemap")]
     dest.add_mapping(self.loc);
@@ -330,3 +330,8 @@ impl<'a, 'i> RuleBodyItemParser<'i, (), ParserError<'i>> for FontFeatureDeclarat
     true
   }
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

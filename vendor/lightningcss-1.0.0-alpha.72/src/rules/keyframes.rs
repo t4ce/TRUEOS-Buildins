@@ -91,7 +91,7 @@ impl<'i> Parse<'i> for KeyframesName<'i> {
 impl<'i> ToCss for KeyframesName<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     let css_module_animation_enabled =
       dest.css_module.as_ref().map_or(false, |css_module| css_module.config.animation);
@@ -217,7 +217,7 @@ impl<'i> KeyframesRule<'i> {
 impl<'i> ToCss for KeyframesRule<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     #[cfg(feature = "sourcemap")]
     dest.add_mapping(self.loc);
@@ -316,7 +316,7 @@ pub enum KeyframeSelector {
 impl ToCss for KeyframeSelector {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     match self {
       KeyframeSelector::Percentage(p) => {
@@ -365,7 +365,7 @@ pub struct Keyframe<'i> {
 impl<'i> ToCss for Keyframe<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     let mut first = true;
     for selector in &self.selectors {
@@ -429,3 +429,8 @@ impl<'i> RuleBodyItemParser<'i, Keyframe<'i>, ParserError<'i>> for KeyframeListP
     false
   }
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

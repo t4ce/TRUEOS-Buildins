@@ -97,8 +97,8 @@ use position_try::PositionTryRule;
 use scope::ScopeRule;
 use smallvec::{smallvec, SmallVec};
 use starting_style::StartingStyleRule;
-use std::collections::{HashMap, HashSet};
-use std::hash::{BuildHasherDefault, Hasher};
+use crate::collections::{HashMap, HashSet};
+use core::hash::{BuildHasherDefault, Hasher};
 use style::StyleRule;
 use supports::SupportsRule;
 use unknown::UnknownAtRule;
@@ -221,7 +221,7 @@ impl<'i, 'de: 'i, R: serde::Deserialize<'de>> serde::Deserialize<'de> for CssRul
     impl<'de> serde::de::Visitor<'de> for CssRuleVisitor {
       type Value = PartialRule<'de>;
 
-      fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+      fn expecting(&self, formatter: &mut core::fmt::Formatter) -> core::fmt::Result {
         formatter.write_str("a CssRule")
       }
 
@@ -380,7 +380,7 @@ impl<'i, 'de: 'i, R: serde::Deserialize<'de>> serde::Deserialize<'de> for CssRul
 impl<'a, 'i, T: ToCss> ToCss for CssRule<'i, T> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     match self {
       CssRule::Media(media) => media.to_css(dest),
@@ -774,7 +774,7 @@ impl<'i, T: Clone> CssRuleList<'i, T> {
             && (!logical.is_empty() || !supports.is_empty() || !incompatible_rules.is_empty())
           {
             let mut rules = CssRuleList(vec![]);
-            std::mem::swap(&mut style.rules, &mut rules);
+            core::mem::swap(&mut style.rules, &mut rules);
             Some(StyleRule {
               selectors: style.selectors.clone(),
               declarations: DeclarationBlock::default(),
@@ -1035,7 +1035,7 @@ fn merge_style_rules<'i, T>(
 impl<'a, 'i, T: ToCss> ToCss for CssRuleList<'i, T> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     let mut first = true;
     let mut last_without_block = false;
@@ -1096,7 +1096,7 @@ impl<'a, 'i, T: ToCss> ToCss for CssRuleList<'i, T> {
   }
 }
 
-impl<'i, T> std::ops::Index<usize> for CssRuleList<'i, T> {
+impl<'i, T> core::ops::Index<usize> for CssRuleList<'i, T> {
   type Output = CssRule<'i, T>;
 
   fn index(&self, index: usize) -> &Self::Output {
@@ -1104,7 +1104,7 @@ impl<'i, T> std::ops::Index<usize> for CssRuleList<'i, T> {
   }
 }
 
-impl<'i, T> std::ops::IndexMut<usize> for CssRuleList<'i, T> {
+impl<'i, T> core::ops::IndexMut<usize> for CssRuleList<'i, T> {
   fn index_mut(&mut self, index: usize) -> &mut Self::Output {
     &mut self.0[index]
   }
@@ -1177,8 +1177,13 @@ impl<'a, 'i, R> PartialEq for StyleRuleKey<'a, 'i, R> {
 
 impl<'a, 'i, R> Eq for StyleRuleKey<'a, 'i, R> {}
 
-impl<'a, 'i, R> std::hash::Hash for StyleRuleKey<'a, 'i, R> {
-  fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+impl<'a, 'i, R> core::hash::Hash for StyleRuleKey<'a, 'i, R> {
+  fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
     state.write_u64(self.hash);
   }
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

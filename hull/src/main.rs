@@ -1,7 +1,14 @@
+#![cfg_attr(target_os = "trueos", no_std)]
+#[cfg(target_os = "trueos")]
+use num_traits::Float;
+
+extern crate alloc;
+
+use alloc::{string::{String, ToString}, vec::Vec, boxed::Box, borrow::ToOwned, format};
 use core::future::Future;
 use core::pin::Pin;
 use core::task::{Context, Poll, Waker};
-use std::collections::VecDeque;
+use alloc::collections::VecDeque;
 use trueos::ui4_scene::output_dimensions;
 use trueos::ui4_winit::{Damage, Error, HullTextRun, SceneTarget};
 use trueos::{logl, netfs, vshell};
@@ -13,6 +20,7 @@ use winit::keyboard::{Key, NamedKey};
 use winit::platform::trueos::{ActiveEventLoopExtTrueOS, WindowExtTrueOS};
 use winit::window::{Window, WindowAttributes, WindowId};
 
+mod platform;
 mod actual_bg_quad;
 mod border_geometry;
 mod buttons;
@@ -189,7 +197,7 @@ impl Hull {
     fn create_window(
         &mut self,
         event_loop: &dyn ActiveEventLoop,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<(), Box<dyn core::error::Error>> {
         let (width, height) = output_dimensions().map_err(|error| format!("{error:?}"))?;
         let (content_width, content_height) = chrome::INITIAL_CONTENT;
         let frame_height = content_height + chrome::HEIGHT;
@@ -648,7 +656,7 @@ impl ApplicationHandler for Hull {
         if !self.layout_attempted && self.document.is_some() && !self.css.is_pending() {
             self.layout_attempted = true;
             self.css.freeze();
-            let started = std::time::Instant::now();
+            let started = crate::platform::Instant::now();
             let result = layout::compute_for_render(
                 self.document.as_ref().unwrap(),
                 &self.css,
@@ -1154,7 +1162,7 @@ fn main() {
     let mut app = Hull::default();
     app.javascript = Some(javascript);
     if let Ok(bytes) = trueos::async_fs::block_on(trueos::async_fs::read_file(b"vFile:launch")) {
-        let startup = std::str::from_utf8(&bytes)
+        let startup = core::str::from_utf8(&bytes)
             .map_err(|_| "startup script must be UTF-8")
             .and_then(links::startup_url);
         match startup {

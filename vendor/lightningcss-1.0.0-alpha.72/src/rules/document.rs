@@ -36,7 +36,7 @@ impl<'i, T: Clone> MozDocumentRule<'i, T> {
 impl<'i, T: ToCss> ToCss for MozDocumentRule<'i, T> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     #[cfg(feature = "sourcemap")]
     dest.add_mapping(self.loc);
@@ -51,3 +51,8 @@ impl<'i, T: ToCss> ToCss for MozDocumentRule<'i, T> {
     dest.write_char('}')
   }
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

@@ -1,4 +1,5 @@
 //! Bounded media-only subdocument inspection. No browsing contexts or rendering.
+use alloc::{string::{String, ToString}, borrow::ToOwned, format, vec};
 use super::{
     LocalPage,
     module_loader::{Loader, Prepared},
@@ -6,12 +7,10 @@ use super::{
 use crate::javascript_dom;
 use hull_quickjs::Engine;
 use rp5::{Document, Namespace};
-use std::{
-    cell::{Cell, RefCell},
-    collections::{HashSet, VecDeque},
-    rc::Rc,
-    time::{Duration, Instant},
-};
+use alloc::{collections::VecDeque, rc::Rc};
+use core::cell::{Cell, RefCell};
+use hashbrown::HashSet;
+use crate::platform::{Duration, Instant};
 #[derive(Default)]
 pub(super) struct Resolver {
     initialized: bool,
@@ -260,7 +259,7 @@ impl Resolver {
             let _ = engine.eval(click.as_bytes(), "hull:media-play-control", false);
         }
         let base = url::Url::parse(url).map_err(|e| e.to_string())?;
-        let navigations = std::mem::take(&mut page.media.borrow_mut().inspection_navigation);
+        let navigations = core::mem::take(&mut page.media.borrow_mut().inspection_navigation);
         for target in navigations {
             if let Some(target) = address(url, &target)
                 .filter(|s| url::Url::parse(s).is_ok_and(|u| u.origin() == base.origin()))

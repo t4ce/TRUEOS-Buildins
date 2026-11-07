@@ -1,12 +1,10 @@
 //! Host-owned, bounded source preparation. No network runs in QuickJS callbacks.
+use alloc::{string::{String, ToString}, vec::Vec, borrow::ToOwned, format, vec};
 use hull_quickjs::{Engine, ImportRequest};
-use std::{
-    cell::RefCell,
-    collections::{HashMap, HashSet, VecDeque},
-    rc::Rc,
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use alloc::{collections::VecDeque, rc::Rc, sync::Arc};
+use core::cell::RefCell;
+use hashbrown::{HashMap, HashSet};
+use crate::platform::{Duration, Instant};
 use trueos::netfs;
 use url::Url;
 
@@ -442,7 +440,7 @@ impl Loader {
             }
         }
         self.imports.extend(engine.take_import_requests());
-        let pending = std::mem::take(&mut self.imports);
+        let pending = core::mem::take(&mut self.imports);
         for request in pending {
             let root = self
                 .policy

@@ -1,10 +1,11 @@
 //! Native rjqry collection algorithms over the existing bounded DOM gateway.
 //! No second tree or guest I/O capability is introduced.
+use alloc::{string::{String, ToString}, vec::Vec, borrow::ToOwned, format, vec};
 use super::{DomResult, Gateway, failure, input};
 use rjqry::{Dom, Error, JQuery, NodeKind};
 use serde_json::{Value, json};
-use std::collections::{HashMap, HashSet};
-use std::time::{Duration, Instant};
+use hashbrown::{HashMap, HashSet};
+use crate::platform::{Duration, Instant};
 
 fn error(error: Error) -> (&'static str, String) {
     match error {

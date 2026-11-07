@@ -13,6 +13,7 @@ rust-version.workspace = true
 version.workspace = true
 
 [features]
+trueos-native = ["dep:trueos-runtime", "dep:trueos-io", "dep:trueos-path", "dep:num-traits"]
 serde = [
     "dep:serde",
     "bitflags/serde",
@@ -31,6 +32,20 @@ rwh_06.workspace = true
 serde = { workspace = true, optional = true }
 smol_str.workspace = true
 url.workspace = true
+
+[target.'cfg(target_os = "trueos")'.dependencies]
+trueos-runtime = { workspace = true, optional = true }
+trueos-io = { workspace = true, optional = true }
+trueos-path = { workspace = true, optional = true }
+num-traits = { workspace = true, optional = true }
+
+[target.'cfg(not(target_os = "trueos"))'.dependencies]
+cursor-icon = { workspace = true, features = ["std"] }
+dpi = { workspace = true, features = ["std"] }
+keyboard-types = { workspace = true, features = ["std"] }
+rwh_06 = { workspace = true, features = ["std"] }
+smol_str = { workspace = true, features = ["std"] }
+url = { workspace = true, features = ["std"] }
 
 [dev-dependencies]
 winit.workspace = true

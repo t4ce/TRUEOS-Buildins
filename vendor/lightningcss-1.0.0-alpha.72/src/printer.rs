@@ -56,7 +56,7 @@ pub struct PseudoClasses<'a> {
 
 /// A `Printer` represents a destination to output serialized CSS, as used in
 /// the [ToCss](super::traits::ToCss) trait. It can wrap any destination that
-/// implements [std::fmt::Write](std::fmt::Write), such as a [String](String).
+/// implements [core::fmt::Write](core::fmt::Write), such as a [String](String).
 ///
 /// A `Printer` keeps track of the current line and column position, and uses
 /// this to generate a source map if provided in the options.
@@ -89,7 +89,7 @@ pub struct Printer<'a, 'c, W> {
   context: Option<&'a StyleContext<'a, 'c>>,
 }
 
-impl<'a, 'c, W: std::fmt::Write + Sized> Printer<'a, 'c, W> {
+impl<'a, 'c, W: core::fmt::Write + Sized> Printer<'a, 'c, W> {
   /// Create a new Printer wrapping the given destination.
   pub fn new(dest: &'a mut W, options: PrinterOptions<'a>) -> Self {
     Printer {
@@ -371,15 +371,15 @@ impl<'a, 'c, W: std::fmt::Write + Sized> Printer<'a, 'c, W> {
     selectors: &SelectorList,
     f: F,
   ) -> Result<T, U> {
-    let parent = std::mem::take(&mut self.context);
+    let parent = core::mem::take(&mut self.context);
     let ctx = StyleContext {
-      selectors: unsafe { std::mem::transmute(selectors) },
+      selectors: unsafe { core::mem::transmute(selectors) },
       parent,
     };
 
     // I can't figure out what lifetime to use here to convince the compiler that
     // the reference doesn't live beyond the function call.
-    self.context = Some(unsafe { std::mem::transmute(&ctx) });
+    self.context = Some(unsafe { core::mem::transmute(&ctx) });
     let res = f(self);
     self.context = parent;
     res
@@ -389,7 +389,7 @@ impl<'a, 'c, W: std::fmt::Write + Sized> Printer<'a, 'c, W> {
     &mut self,
     f: F,
   ) -> Result<T, U> {
-    let parent = std::mem::take(&mut self.context);
+    let parent = core::mem::take(&mut self.context);
     let res = f(self);
     self.context = parent;
     res
@@ -399,7 +399,7 @@ impl<'a, 'c, W: std::fmt::Write + Sized> Printer<'a, 'c, W> {
     &mut self,
     f: F,
   ) -> Result<T, U> {
-    let parent = std::mem::take(&mut self.context);
+    let parent = core::mem::take(&mut self.context);
     if let Some(parent) = parent {
       self.context = parent.parent;
     }
@@ -413,9 +413,14 @@ impl<'a, 'c, W: std::fmt::Write + Sized> Printer<'a, 'c, W> {
   }
 }
 
-impl<'a, 'b, 'c, W: std::fmt::Write + Sized> std::fmt::Write for Printer<'a, 'c, W> {
-  fn write_str(&mut self, s: &str) -> std::fmt::Result {
+impl<'a, 'b, 'c, W: core::fmt::Write + Sized> core::fmt::Write for Printer<'a, 'c, W> {
+  fn write_str(&mut self, s: &str) -> core::fmt::Result {
     self.col += s.len() as u32;
     self.dest.write_str(s)
   }
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

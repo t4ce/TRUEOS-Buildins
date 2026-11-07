@@ -50,7 +50,7 @@ impl<'i> Parse<'i> for Overflow {
 impl ToCss for Overflow {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     self.x.to_css(dest)?;
     if self.y != self.x {
@@ -113,8 +113,8 @@ impl<'i> PropertyHandler<'i> for OverflowHandler {
       return;
     }
 
-    let x = std::mem::take(&mut self.x);
-    let y = std::mem::take(&mut self.y);
+    let x = core::mem::take(&mut self.x);
+    let y = core::mem::take(&mut self.y);
 
     match (x, y) {
       // Only use shorthand syntax if the x and y values are the
@@ -134,3 +134,8 @@ impl<'i> PropertyHandler<'i> for OverflowHandler {
     }
   }
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

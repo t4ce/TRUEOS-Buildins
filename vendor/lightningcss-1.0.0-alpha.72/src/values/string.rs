@@ -8,16 +8,16 @@ use cssparser::{serialize_string, CowRcStr};
 use serde::{Deserialize, Deserializer};
 #[cfg(any(feature = "serde", feature = "nodejs"))]
 use serde::{Serialize, Serializer};
-use std::borrow::{Borrow, Cow};
-use std::cmp;
-use std::fmt;
-use std::hash;
-use std::marker::PhantomData;
-use std::ops::Deref;
-use std::rc::Rc;
-use std::slice;
-use std::str;
-use std::sync::Arc;
+use alloc::borrow::{Borrow, Cow};
+use core::cmp;
+use core::fmt;
+use core::hash;
+use core::marker::PhantomData;
+use core::ops::Deref;
+use alloc::rc::Rc;
+use core::slice;
+use core::str;
+use alloc::sync::Arc;
 
 // We cannot store CowRcStr from cssparser directly because it is not threadsafe (due to Rc).
 // CowArcStr is exactly the same, but uses Arc instead of Rc. We could use Cow<str> instead,
@@ -51,10 +51,10 @@ impl<'a> From<CowRcStr<'a>> for CowArcStr<'a> {
 impl<'a> From<&CowRcStr<'a>> for CowArcStr<'a> {
   #[inline]
   fn from(s: &CowRcStr<'a>) -> Self {
-    let local = unsafe { std::mem::transmute::<&CowRcStr<'a>, &LocalCowRcStr<'a>>(&s) };
+    let local = unsafe { core::mem::transmute::<&CowRcStr<'a>, &LocalCowRcStr<'a>>(&s) };
     if local.borrowed_len_or_max == usize::MAX {
       // If the string is owned and not borrowed, we do need to clone.
-      // We could possibly use std::mem::take here, but that would mutate the
+      // We could possibly use core::mem::take here, but that would mutate the
       // original CowRcStr which we borrowed, so might be unexpected. Owned
       // CowRcStr are very rare in practice though, since most strings are
       // borrowed directly from the input.
@@ -140,7 +140,7 @@ impl<'any> static_self::IntoOwned<'any> for CowArcStr<'_> {
     if self.borrowed_len_or_max != usize::MAX {
       CowArcStr::from(self.as_ref().to_owned())
     } else {
-      unsafe { std::mem::transmute(self) }
+      unsafe { core::mem::transmute(self) }
     }
   }
 }
@@ -152,7 +152,7 @@ impl<'a> Clone for CowArcStr<'a> {
       Err(ptr) => {
         let rc = unsafe { Arc::from_raw(ptr) };
         let new_rc = rc.clone();
-        std::mem::forget(rc); // Don’t actually take ownership of this strong reference
+        core::mem::forget(rc); // Don’t actually take ownership of this strong reference
         CowArcStr::from_arc(new_rc)
       }
       Ok(_) => CowArcStr { ..*self },
@@ -164,7 +164,7 @@ impl<'a> Drop for CowArcStr<'a> {
   #[inline]
   fn drop(&mut self) {
     if let Err(ptr) = self.unpack() {
-      std::mem::drop(unsafe { Arc::from_raw(ptr) })
+      core::mem::drop(unsafe { Arc::from_raw(ptr) })
     }
   }
 }
@@ -340,7 +340,7 @@ impl<'i> Parse<'i> for CSSString<'i> {
 impl<'i> ToCss for CSSString<'i> {
   fn to_css<W>(&self, dest: &mut crate::printer::Printer<W>) -> Result<(), crate::error::PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     serialize_string(&self.0, dest)?;
     Ok(())
@@ -382,12 +382,12 @@ macro_rules! impl_string_type {
       }
     }
 
-    impl<'a> From<std::borrow::Cow<'a, str>> for $t<'a> {
+    impl<'a> From<alloc::borrow::Cow<'a, str>> for $t<'a> {
       #[inline]
-      fn from(s: std::borrow::Cow<'a, str>) -> Self {
+      fn from(s: alloc::borrow::Cow<'a, str>) -> Self {
         match s {
-          std::borrow::Cow::Borrowed(s) => s.into(),
-          std::borrow::Cow::Owned(s) => s.into(),
+          alloc::borrow::Cow::Borrowed(s) => s.into(),
+          alloc::borrow::Cow::Owned(s) => s.into(),
         }
       }
     }
@@ -415,9 +415,9 @@ macro_rules! impl_string_type {
       }
     }
 
-    impl<'a> std::fmt::Display for $t<'a> {
+    impl<'a> core::fmt::Display for $t<'a> {
       #[inline]
-      fn fmt(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+      fn fmt(&self, formatter: &mut core::fmt::Formatter) -> core::fmt::Result {
         str::fmt(self, formatter)
       }
     }
@@ -431,7 +431,7 @@ macro_rules! impl_string_type {
 
     impl<'a, T: AsRef<str>> PartialOrd<T> for $t<'a> {
       #[inline]
-      fn partial_cmp(&self, other: &T) -> Option<std::cmp::Ordering> {
+      fn partial_cmp(&self, other: &T) -> Option<core::cmp::Ordering> {
         str::partial_cmp(self, other.as_ref())
       }
     }
@@ -441,3 +441,8 @@ macro_rules! impl_string_type {
 impl_string_type!(CSSString);
 
 pub(crate) use impl_string_type;
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

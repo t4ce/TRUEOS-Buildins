@@ -39,7 +39,7 @@ impl<'i> Parse<'i> for Percentage {
 impl ToCss for Percentage {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     use cssparser::ToCss;
     let v = self.0 * 100.0;
@@ -65,13 +65,13 @@ impl ToCss for Percentage {
   }
 }
 
-impl std::convert::Into<Calc<Percentage>> for Percentage {
+impl core::convert::Into<Calc<Percentage>> for Percentage {
   fn into(self) -> Calc<Percentage> {
     Calc::Value(Box::new(self))
   }
 }
 
-impl std::convert::TryFrom<Calc<Percentage>> for Percentage {
+impl core::convert::TryFrom<Calc<Percentage>> for Percentage {
   type Error = ();
 
   fn try_from(calc: Calc<Percentage>) -> Result<Percentage, Self::Error> {
@@ -82,7 +82,7 @@ impl std::convert::TryFrom<Calc<Percentage>> for Percentage {
   }
 }
 
-impl std::ops::Mul<CSSNumber> for Percentage {
+impl core::ops::Mul<CSSNumber> for Percentage {
   type Output = Self;
 
   fn mul(self, other: CSSNumber) -> Percentage {
@@ -96,8 +96,8 @@ impl AddInternal for Percentage {
   }
 }
 
-impl std::cmp::PartialOrd<Percentage> for Percentage {
-  fn partial_cmp(&self, other: &Percentage) -> Option<std::cmp::Ordering> {
+impl core::cmp::PartialOrd<Percentage> for Percentage {
+  fn partial_cmp(&self, other: &Percentage) -> Option<core::cmp::Ordering> {
     self.0.partial_cmp(&other.0)
   }
 }
@@ -137,8 +137,8 @@ impl Sign for Percentage {
   }
 }
 
-impl_op!(Percentage, std::ops::Rem, rem);
-impl_op!(Percentage, std::ops::Add, add);
+impl_op!(Percentage, core::ops::Rem, rem);
+impl_op!(Percentage, core::ops::Add, add);
 
 impl_try_from_angle!(Percentage);
 
@@ -159,7 +159,7 @@ pub enum NumberOrPercentage {
   Percentage(Percentage),
 }
 
-impl std::convert::Into<CSSNumber> for &NumberOrPercentage {
+impl core::convert::Into<CSSNumber> for &NumberOrPercentage {
   fn into(self) -> CSSNumber {
     match self {
       NumberOrPercentage::Number(a) => *a,
@@ -194,7 +194,7 @@ pub enum DimensionPercentage<D> {
 impl<
     'i,
     D: Parse<'i>
-      + std::ops::Mul<CSSNumber, Output = D>
+      + core::ops::Mul<CSSNumber, Output = D>
       + TryAdd<D>
       + Clone
       + TryOp
@@ -204,7 +204,7 @@ impl<
       + TryFrom<Angle>
       + TryInto<Angle>
       + PartialOrd<D>
-      + std::fmt::Debug,
+      + core::fmt::Debug,
   > Parse<'i> for DimensionPercentage<D>
 {
   fn parse<'t>(input: &mut Parser<'i, 't>) -> Result<Self, ParseError<'i, ParserError<'i>>> {
@@ -226,7 +226,7 @@ impl<
   }
 }
 
-impl<D: std::ops::Mul<CSSNumber, Output = D>> std::ops::Mul<CSSNumber> for DimensionPercentage<D> {
+impl<D: core::ops::Mul<CSSNumber, Output = D>> core::ops::Mul<CSSNumber> for DimensionPercentage<D> {
   type Output = Self;
 
   fn mul(self, other: CSSNumber) -> DimensionPercentage<D> {
@@ -238,7 +238,7 @@ impl<D: std::ops::Mul<CSSNumber, Output = D>> std::ops::Mul<CSSNumber> for Dimen
   }
 }
 
-impl<D: TryAdd<D> + Clone + Zero + TrySign + std::fmt::Debug> std::ops::Add<DimensionPercentage<D>>
+impl<D: TryAdd<D> + Clone + Zero + TrySign + core::fmt::Debug> core::ops::Add<DimensionPercentage<D>>
   for DimensionPercentage<D>
 {
   type Output = DimensionPercentage<D>;
@@ -275,7 +275,7 @@ fn unwrap_calc<D>(v: DimensionPercentage<D>) -> DimensionPercentage<D> {
   }
 }
 
-impl<D: TryAdd<D> + Clone + Zero + TrySign + std::fmt::Debug> AddInternal for DimensionPercentage<D> {
+impl<D: TryAdd<D> + Clone + Zero + TrySign + core::fmt::Debug> AddInternal for DimensionPercentage<D> {
   fn add(self, other: Self) -> Self {
     match self.add_recursive(&other) {
       Some(r) => r,
@@ -284,7 +284,7 @@ impl<D: TryAdd<D> + Clone + Zero + TrySign + std::fmt::Debug> AddInternal for Di
   }
 }
 
-impl<D: TryAdd<D> + Clone + Zero + TrySign + std::fmt::Debug> DimensionPercentage<D> {
+impl<D: TryAdd<D> + Clone + Zero + TrySign + core::fmt::Debug> DimensionPercentage<D> {
   fn add_recursive(&self, other: &DimensionPercentage<D>) -> Option<DimensionPercentage<D>> {
     match (self, other) {
       (DimensionPercentage::Dimension(a), DimensionPercentage::Dimension(b)) => {
@@ -344,7 +344,7 @@ impl<D: TryAdd<D> + Clone + Zero + TrySign + std::fmt::Debug> DimensionPercentag
     }
 
     if a.is_sign_negative() && b.is_sign_positive() {
-      std::mem::swap(&mut a, &mut b);
+      core::mem::swap(&mut a, &mut b);
     }
 
     match (a, b) {
@@ -370,7 +370,7 @@ impl<D: TryAdd<D> + Clone + Zero + TrySign + std::fmt::Debug> DimensionPercentag
   }
 }
 
-impl<D> std::convert::Into<Calc<DimensionPercentage<D>>> for DimensionPercentage<D> {
+impl<D> core::convert::Into<Calc<DimensionPercentage<D>>> for DimensionPercentage<D> {
   fn into(self) -> Calc<DimensionPercentage<D>> {
     match self {
       DimensionPercentage::Calc(c) => *c,
@@ -379,14 +379,14 @@ impl<D> std::convert::Into<Calc<DimensionPercentage<D>>> for DimensionPercentage
   }
 }
 
-impl<D> std::convert::From<Calc<DimensionPercentage<D>>> for DimensionPercentage<D> {
+impl<D> core::convert::From<Calc<DimensionPercentage<D>>> for DimensionPercentage<D> {
   fn from(calc: Calc<DimensionPercentage<D>>) -> DimensionPercentage<D> {
     DimensionPercentage::Calc(Box::new(calc))
   }
 }
 
-impl<D: std::cmp::PartialOrd<D>> std::cmp::PartialOrd<DimensionPercentage<D>> for DimensionPercentage<D> {
-  fn partial_cmp(&self, other: &DimensionPercentage<D>) -> Option<std::cmp::Ordering> {
+impl<D: core::cmp::PartialOrd<D>> core::cmp::PartialOrd<DimensionPercentage<D>> for DimensionPercentage<D> {
+  fn partial_cmp(&self, other: &DimensionPercentage<D>) -> Option<core::cmp::Ordering> {
     match (self, other) {
       (DimensionPercentage::Dimension(a), DimensionPercentage::Dimension(b)) => a.partial_cmp(b),
       (DimensionPercentage::Percentage(a), DimensionPercentage::Percentage(b)) => a.partial_cmp(b),
@@ -469,12 +469,12 @@ impl<D: TrySign> TrySign for DimensionPercentage<D> {
   }
 }
 
-impl<D: ToCss + std::ops::Mul<CSSNumber, Output = D> + TrySign + Clone + std::fmt::Debug> ToCss
+impl<D: ToCss + core::ops::Mul<CSSNumber, Output = D> + TrySign + Clone + core::fmt::Debug> ToCss
   for DimensionPercentage<D>
 {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     match self {
       DimensionPercentage::Dimension(length) => length.to_css(dest),
@@ -483,3 +483,8 @@ impl<D: ToCss + std::ops::Mul<CSSNumber, Output = D> + TrySign + Clone + std::fm
     }
   }
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

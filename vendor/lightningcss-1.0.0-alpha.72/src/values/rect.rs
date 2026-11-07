@@ -97,7 +97,7 @@ where
 {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     self.0.to_css(dest)?;
     let same_vertical = self.0 == self.2;
@@ -128,3 +128,8 @@ impl<T: IsCompatible> IsCompatible for Rect<T> {
       && self.3.is_compatible(browsers)
   }
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

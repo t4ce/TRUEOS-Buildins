@@ -1,4 +1,5 @@
 //! WHATWG character references used by the translated tokenizer.
+use alloc::{string::{String, ToString}};
 use crate::entities_data::NAMED;
 
 /// Input begins immediately after `&`; the returned length excludes `&`.

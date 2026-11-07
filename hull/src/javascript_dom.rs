@@ -1,9 +1,8 @@
 //! A synchronous, bounded gateway to rp5. JavaScript owns lazy node wrappers;
 //! the document arena stays in Rust and preserves handles after detachment.
-use std::{
-    cell::{Cell, RefCell},
-    rc::Rc,
-};
+use alloc::{string::{String, ToString}, vec::Vec, borrow::ToOwned, format, vec};
+use alloc::rc::Rc;
+use core::cell::{Cell, RefCell};
 
 use hull_quickjs::Engine;
 use rp5::{Attribute, Document, Namespace, NodeKind};
@@ -36,7 +35,7 @@ pub(super) type SharedDocument = Rc<RefCell<Document>>;
 pub(super) struct ScriptState {
     pub dirty: bool,
     pub media_navigation: bool,
-    pub started: std::collections::HashSet<usize>,
+    pub started: hashbrown::HashSet<usize>,
 }
 pub(super) type SharedScriptState = Rc<RefCell<ScriptState>>;
 
@@ -547,7 +546,7 @@ impl Gateway {
                 self.charge(value.len(), replaces_children && !value.is_empty())?;
                 let mut doc = self.document.borrow_mut();
                 if replaces_children {
-                    for child in std::mem::take(&mut doc.nodes[id].children) {
+                    for child in core::mem::take(&mut doc.nodes[id].children) {
                         doc.nodes[child].parent = None;
                     }
                     if !value.is_empty() {
@@ -720,11 +719,11 @@ impl Gateway {
                     .copied()
                     .collect::<Vec<_>>();
                 let mut ids = Vec::new();
-                let until = std::time::Instant::now() + std::time::Duration::from_millis(20);
+                let until = crate::platform::Instant::now() + crate::platform::Duration::from_millis(20);
                 let mut visited = 0usize;
                 while let Some(candidate) = pending.pop() {
                     visited += 1;
-                    if visited % 256 == 0 && std::time::Instant::now() >= until {
+                    if visited % 256 == 0 && crate::platform::Instant::now() >= until {
                         return Err(failure(
                             "QuotaExceededError",
                             "Tag collection traversal budget exhausted",
@@ -749,7 +748,7 @@ impl Gateway {
                     }
                     pending.extend(document.nodes[candidate].children.iter().rev().copied());
                 }
-                if std::time::Instant::now() >= until {
+                if crate::platform::Instant::now() >= until {
                     return Err(failure(
                         "QuotaExceededError",
                         "Tag collection traversal budget exhausted",

@@ -296,10 +296,10 @@ macro_rules! side_handler {
 
         self.has_any = false;
 
-        let top = std::mem::take(&mut self.top);
-        let bottom = std::mem::take(&mut self.bottom);
-        let left = std::mem::take(&mut self.left);
-        let right = std::mem::take(&mut self.right);
+        let top = core::mem::take(&mut self.top);
+        let bottom = core::mem::take(&mut self.bottom);
+        let left = core::mem::take(&mut self.left);
+        let right = core::mem::take(&mut self.right);
         let logical_supported = true $(&& !context.should_compile_logical(Feature::$feature))?;
 
         if (PropertyCategory::$shorthand_category != PropertyCategory::Logical || logical_supported) && top.is_some() && bottom.is_some() && left.is_some() && right.is_some() {
@@ -327,10 +327,10 @@ macro_rules! side_handler {
           }
         }
 
-        let block_start = std::mem::take(&mut self.block_start);
-        let block_end = std::mem::take(&mut self.block_end);
-        let inline_start = std::mem::take(&mut self.inline_start);
-        let inline_end = std::mem::take(&mut self.inline_end);
+        let block_start = core::mem::take(&mut self.block_start);
+        let block_end = core::mem::take(&mut self.block_end);
+        let inline_start = core::mem::take(&mut self.inline_start);
+        let inline_end = core::mem::take(&mut self.inline_end);
 
         macro_rules! logical_side {
           ($start: ident, $end: ident, $shorthand_prop: ident, $start_prop: ident, $end_prop: ident) => {
@@ -494,3 +494,8 @@ side_handler!(
   LogicalInset,
   LogicalInset
 );
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

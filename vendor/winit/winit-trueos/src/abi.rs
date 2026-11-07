@@ -159,13 +159,13 @@ pub(crate) unsafe fn trueos_cabi_ui4_display_validate_window_v1(_: u64, _: u32) 
 }
 #[cfg(all(test, not(target_os = "trueos")))]
 std::thread_local! {
-    pub(crate) static TEST_FRAME_OPEN: std::cell::RefCell<Option<(i32, i32, u32, u32, u32)>> =
-        const { std::cell::RefCell::new(None) };
+    pub(crate) static TEST_FRAME_OPEN: core::cell::RefCell<Option<(i32, i32, u32, u32, u32)>> =
+        const { core::cell::RefCell::new(None) };
 }
 #[cfg(all(test, not(target_os = "trueos")))]
 std::thread_local! {
-    pub(crate) static TEST_STREAMING_FRAME_OPEN: std::cell::RefCell<Option<(i32, i32, u32, u32)>> =
-        const { std::cell::RefCell::new(None) };
+    pub(crate) static TEST_STREAMING_FRAME_OPEN: core::cell::RefCell<Option<(i32, i32, u32, u32)>> =
+        const { core::cell::RefCell::new(None) };
 }
 #[cfg(not(target_os = "trueos"))]
 pub(crate) unsafe fn trueos_cabi_ui4_scene_frame_open_streaming(
@@ -211,8 +211,8 @@ pub(crate) unsafe fn trueos_cabi_ui4_scene_frame_get_position(_: u32, _: *mut i3
 }
 #[cfg(all(test, not(target_os = "trueos")))]
 std::thread_local! {
-    pub(crate) static TEST_RESIZE: std::cell::RefCell<(Option<ResizeEvent>, i32)> =
-        const { std::cell::RefCell::new((None, -5)) };
+    pub(crate) static TEST_RESIZE: core::cell::RefCell<(Option<ResizeEvent>, i32)> =
+        const { core::cell::RefCell::new((None, -5)) };
 }
 #[cfg(not(target_os = "trueos"))]
 pub(crate) unsafe fn trueos_cabi_ui4_scene_frame_resize(_: u32, _: u32, _: u32) -> i32 {

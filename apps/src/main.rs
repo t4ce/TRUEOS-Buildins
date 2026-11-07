@@ -3,8 +3,11 @@ extern crate alloc;
 use alloc::{format, string::{String, ToString}, vec::Vec};
 mod catalog;
 mod pullbot;
+mod script;
 mod mouse;
 mod fetch;
+mod download;
+use download::download;
 use crossterm::io::{self, Write};
 use core::time::Duration;
 use crossterm::{execute, queue, cursor::{MoveTo, Hide, Show}, style::{Color, SetForegroundColor, SetBackgroundColor, ResetColor, Print}, terminal::{self, Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen, DisableLineWrap, EnableLineWrap}, event::{self, Event, KeyCode, KeyEventKind, KeyModifiers, EnableMouseCapture, DisableMouseCapture, MouseButton, MouseEventKind}};
@@ -154,19 +157,6 @@ async fn run() -> Result<Option<String>, String> {
         }
         trueos::time::sleep(Duration::from_millis(25)).await;
     }
-}
-async fn download(app: &catalog::OnlineApp) -> Result<String, String> {
-    let bytes = fetch::bytes(catalog::url(app), fetch::ARCHIVE_LIMIT).await?;
-    let verify_started = trueos::time::Instant::now();
-    if !catalog::verify(app, &bytes) { return Err("Blueprint SHA-256 mismatch".into()); }
-    pullbot::report(&format!("download phase=verify elapsed_ms={} bytes={}", verify_started.elapsed().as_millis(), bytes.len()));
-    let save_started = trueos::time::Instant::now();
-    let dir = "common/dl/apps";
-    trueos::async_fs::create_dir_all(dir.as_bytes()).await.map_err(|e|format!("Create download directory: {e}"))?;
-    let path = format!("{dir}/{}", app.archive_name);
-    trueos::async_fs::write_file_typed_checked(path.as_bytes(), &bytes, trueos::content_identity::ContentTypeId::TRUEOS_BLUEPRINT, false, None).await.map_err(|e|format!("Save download: {e}"))?;
-    pullbot::report(&format!("download phase=save elapsed_ms={} bytes={}", save_started.elapsed().as_millis(), bytes.len()));
-    Ok(path)
 }
 fn main() {
     // Consume the one-shot launch stream before any terminal/UI initialization.

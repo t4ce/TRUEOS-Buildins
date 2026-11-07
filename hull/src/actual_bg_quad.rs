@@ -1,4 +1,5 @@
 //! Solid CSS backgrounds, independent of the diagnostic pink layout pass.
+use alloc::{vec};
 use super::{layout::BackgroundQuad, viewport::Viewport};
 use trueos::ui4_winit::{Error, SceneTarget, SpriteCorner, SpriteQuad};
 

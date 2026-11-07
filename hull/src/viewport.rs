@@ -1,6 +1,9 @@
 //! A viewport over document pixels. Window resizing changes the visible region;
 //! it never scales the document's rectangles, baselines, or font sizes. A frame
 //! origin reserves window chrome without changing stored document coordinates.
+#[cfg(target_os = "trueos")]
+use num_traits::Float;
+use alloc::{vec::Vec};
 
 #[derive(Default, Debug)]
 pub(super) struct Viewport {

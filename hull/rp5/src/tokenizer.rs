@@ -1,6 +1,9 @@
 //! Direct one-shot translation of parse5's tokenizer states and input preprocessing.
 //! See `../../p5/src/tokenizer/` for the upstream state machine and MIT license.
-use std::collections::VecDeque;
+use alloc::{string::String, vec::Vec};
+#[cfg(test)]
+use alloc::{borrow::ToOwned, vec};
+use alloc::collections::VecDeque;
 
 use crate::ParseError;
 use crate::token::{Attribute, DoctypeToken, TagToken, Token};
@@ -237,7 +240,7 @@ impl Tokenizer {
         if self.pending_chars.is_empty() {
             return;
         }
-        let chars = std::mem::take(&mut self.pending_chars);
+        let chars = core::mem::take(&mut self.pending_chars);
         self.queue.push_back(match self.pending_kind {
             1 => Token::Whitespace(chars),
             2 => Token::NullCharacter(chars),
@@ -306,7 +309,7 @@ impl Tokenizer {
     }
     fn emit_tag(&mut self) {
         self.finish_attr();
-        let tag = std::mem::take(&mut self.tag);
+        let tag = core::mem::take(&mut self.tag);
         if self.end_tag {
             if !tag.attrs.is_empty() {
                 self.err("end-tag-with-attributes");
@@ -321,11 +324,11 @@ impl Tokenizer {
         }
     }
     fn emit_comment(&mut self) {
-        let data = std::mem::take(&mut self.comment);
+        let data = core::mem::take(&mut self.comment);
         self.emit(Token::Comment(data));
     }
     fn emit_doctype(&mut self) {
-        let token = std::mem::take(&mut self.doctype);
+        let token = core::mem::take(&mut self.doctype);
         self.emit(Token::Doctype(token));
     }
     fn doctype_eof(&mut self) {
@@ -1485,7 +1488,7 @@ mod tests {
                     _ => (),
                 }
                 if !chars.is_empty() {
-                    result.push(json!(["Character", std::mem::take(&mut chars)]));
+                    result.push(json!(["Character", core::mem::take(&mut chars)]));
                 }
                 match token {
                     Token::StartTag(tag) => {
@@ -1596,7 +1599,7 @@ mod tests {
                 }
             }
         }
-        println!(
+        std::println!(
             "html5lib tokenizer: {total} cases, {} mismatches, {skipped_surrogates} isolated-surrogate inputs skipped",
             failures.len()
         );

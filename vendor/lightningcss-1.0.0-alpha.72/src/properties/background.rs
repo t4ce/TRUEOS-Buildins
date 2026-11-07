@@ -75,7 +75,7 @@ impl<'i> Parse<'i> for BackgroundSize {
 impl ToCss for BackgroundSize {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     use BackgroundSize::*;
 
@@ -168,7 +168,7 @@ impl<'i> Parse<'i> for BackgroundRepeat {
 impl ToCss for BackgroundRepeat {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     use BackgroundRepeatKeyword::*;
     match (&self.x, &self.y) {
@@ -315,7 +315,7 @@ impl<'i> Parse<'i> for BackgroundPosition {
 impl ToCss for BackgroundPosition {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     let pos: Position = self.into();
     pos.to_css(dest)
@@ -443,7 +443,7 @@ impl<'i> Parse<'i> for Background<'i> {
 impl<'i> ToCss for Background<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     let mut has_output = false;
 
@@ -939,15 +939,15 @@ impl<'i> BackgroundHandler<'i> {
       };
     }
 
-    let color = std::mem::take(&mut self.color);
-    let mut images = std::mem::take(&mut self.images);
-    let mut x_positions = std::mem::take(&mut self.x_positions);
-    let mut y_positions = std::mem::take(&mut self.y_positions);
-    let mut repeats = std::mem::take(&mut self.repeats);
-    let mut sizes = std::mem::take(&mut self.sizes);
-    let mut attachments = std::mem::take(&mut self.attachments);
-    let mut origins = std::mem::take(&mut self.origins);
-    let mut clips = std::mem::take(&mut self.clips);
+    let color = core::mem::take(&mut self.color);
+    let mut images = core::mem::take(&mut self.images);
+    let mut x_positions = core::mem::take(&mut self.x_positions);
+    let mut y_positions = core::mem::take(&mut self.y_positions);
+    let mut repeats = core::mem::take(&mut self.repeats);
+    let mut sizes = core::mem::take(&mut self.sizes);
+    let mut attachments = core::mem::take(&mut self.attachments);
+    let mut origins = core::mem::take(&mut self.origins);
+    let mut clips = core::mem::take(&mut self.clips);
 
     if let (
       Some(color),
@@ -1143,3 +1143,8 @@ fn is_background_property(property_id: &PropertyId) -> bool {
     _ => false,
   }
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

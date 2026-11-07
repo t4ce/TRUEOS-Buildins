@@ -83,7 +83,7 @@ macro_rules! enum_property {
     }
 
     impl ToCss for $name {
-      fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError> where W: std::fmt::Write {
+      fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError> where W: core::fmt::Write {
         dest.write_str(self.as_str())
       }
     }
@@ -152,7 +152,7 @@ macro_rules! shorthand_property {
     }
 
     impl$(<$l>)? ToCss for $name$(<$l>)? {
-      fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError> where W: std::fmt::Write {
+      fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError> where W: core::fmt::Write {
         let mut needs_space = false;
         macro_rules! print_one {
           ($k: ident, $t: ty) => {
@@ -277,7 +277,7 @@ macro_rules! shorthand_handler {
         self.has_any = false;
 
         $(
-          let $key = std::mem::take(&mut self.$key);
+          let $key = core::mem::take(&mut self.$key);
         )+
 
         if $( $key.is_some() && )* true {
@@ -757,7 +757,7 @@ macro_rules! rect_shorthand {
     impl ToCss for $name {
       fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
       where
-        W: std::fmt::Write,
+        W: core::fmt::Write,
       {
         Rect::new(&self.top, &self.right, &self.bottom, &self.left).to_css(dest)
       }
@@ -800,7 +800,7 @@ macro_rules! size_shorthand {
     impl ToCss for $name {
       fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
       where
-        W: std::fmt::Write,
+        W: core::fmt::Write,
       {
         Size2D(&self.$a_key, &self.$b_key).to_css(dest)
       }
@@ -846,3 +846,8 @@ macro_rules! property_bitflags {
 }
 
 pub(crate) use property_bitflags;
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

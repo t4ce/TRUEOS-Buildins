@@ -1,8 +1,9 @@
 //! Best-effort SVG persistence, polled cooperatively after the live frame exists.
-use std::future::Future;
-use std::pin::Pin;
-use std::task::{Context, Poll, Waker};
-use std::time::{Duration, Instant};
+use alloc::{string::String, boxed::Box, format, vec};
+use core::future::Future;
+use core::pin::Pin;
+use core::task::{Context, Poll, Waker};
+use crate::platform::{Duration, Instant};
 use trueos::{async_fs, env, logl};
 
 pub(super) fn app_root() -> String {

@@ -1,5 +1,6 @@
 //! Refresh only pages marked by IDEdit's local development Blueprint.
-use std::time::{Duration, Instant};
+use alloc::{string::String, format};
+use crate::platform::{Duration, Instant};
 use trueos::netfs;
 use trueos_ide::html_preview::{REVISION_MARKER, REVISION_PATH};
 
@@ -24,7 +25,7 @@ impl Watch {
         if first_line.len() > 100 {
             return None;
         }
-        let marker = std::str::from_utf8(first_line).ok()?;
+        let marker = core::str::from_utf8(first_line).ok()?;
         let revision = marker
             .strip_prefix(REVISION_MARKER)?
             .strip_suffix(" -->")?
@@ -50,7 +51,7 @@ impl Watch {
             self.pending = None;
             self.next = now + Duration::from_millis(750);
             if let Some(revision) =
-                bytes.and_then(|b| std::str::from_utf8(&b).ok()?.parse::<u64>().ok())
+                bytes.and_then(|b| core::str::from_utf8(&b).ok()?.parse::<u64>().ok())
             {
                 return revision != self.revision;
             }

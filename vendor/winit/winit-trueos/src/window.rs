@@ -1,7 +1,9 @@
+use alloc::{boxed::Box, vec::Vec, string::String};
 use core::num::NonZeroU32;
-use std::collections::VecDeque;
-use std::sync::atomic::AtomicBool;
-use std::sync::{Arc, Mutex};
+use alloc::collections::VecDeque;
+use core::sync::atomic::AtomicBool;
+use alloc::sync::Arc;
+use crate::platform::Mutex;
 
 use dpi::{PhysicalInsets, PhysicalPosition, PhysicalSize, Position, Size};
 use winit_core::cursor::Cursor;
@@ -189,7 +191,7 @@ impl CoreWindow for Window {
         1.
     }
     fn request_redraw(&self) {
-        if self.inner.closed.load(std::sync::atomic::Ordering::Acquire) {
+        if self.inner.closed.load(core::sync::atomic::Ordering::Acquire) {
             return;
         }
         let id = self.id();
@@ -357,7 +359,7 @@ impl CoreWindow for Window {
         None
     }
     fn available_monitors(&self) -> Box<dyn Iterator<Item = MonitorHandle>> {
-        Box::new(std::iter::empty())
+        Box::new(core::iter::empty())
     }
     fn primary_monitor(&self) -> Option<MonitorHandle> {
         None
@@ -386,7 +388,7 @@ impl rwh_06::HasDisplayHandle for Window {
 }
 impl Drop for Window {
     fn drop(&mut self) {
-        self.inner.closed.store(true, std::sync::atomic::Ordering::Release);
+        self.inner.closed.store(true, core::sync::atomic::Ordering::Release);
         unsafe {
             abi::trueos_cabi_ui4_solara_frame_close(self.inner.id);
         }

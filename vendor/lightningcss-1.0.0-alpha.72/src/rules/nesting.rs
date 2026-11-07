@@ -43,7 +43,7 @@ impl<'i, T: Clone> NestingRule<'i, T> {
 impl<'a, 'i, T: ToCss> ToCss for NestingRule<'i, T> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     #[cfg(feature = "sourcemap")]
     dest.add_mapping(self.loc);
@@ -87,7 +87,7 @@ impl<'i> NestedDeclarationsRule<'i> {
 impl<'i> ToCss for NestedDeclarationsRule<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     #[cfg(feature = "sourcemap")]
     dest.add_mapping(self.loc);
@@ -121,3 +121,8 @@ impl<'i> ToCss for NestedDeclarationsRule<'i> {
       .to_css_declarations(dest, false, &parcel_selectors::SelectorList(SmallVec::new()), 0)
   }
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

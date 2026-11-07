@@ -4,6 +4,7 @@
 //! Standard Winit input translations are deliberately not forwarded a second
 //! time. Coordinates retain their native meaning; this adapter does not infer
 //! physical monitor distances or connect JavaScript to layout or painting.
+use alloc::{string::ToString, vec::Vec, borrow::ToOwned};
 use serde_json::{Value, json};
 use winit::event::{Ime, WindowEvent};
 use winit::platform::trueos::{InputBatch, InputEvent, WindowExtTrueOS};
@@ -108,7 +109,7 @@ pub(super) fn from_batch(window_id: u32, batch: InputBatch) -> Vec<Value> {
                     .get(..usize::from(raw.utf8_len))
                     .ok_or_else(|| "utf8_len exceeds native ABI buffer".to_owned())
                     .and_then(|bytes| {
-                        std::str::from_utf8(bytes)
+                        core::str::from_utf8(bytes)
                             .map(str::to_owned)
                             .map_err(|error| error.to_string())
                     });

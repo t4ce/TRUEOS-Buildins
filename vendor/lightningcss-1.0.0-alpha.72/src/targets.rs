@@ -2,7 +2,7 @@
 
 #![allow(missing_docs)]
 
-use std::borrow::Borrow;
+use alloc::borrow::Borrow;
 
 use crate::vendor_prefix::VendorPrefix;
 use bitflags::bitflags;
@@ -324,3 +324,8 @@ macro_rules! should_compile {
 }
 
 pub(crate) use should_compile;
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

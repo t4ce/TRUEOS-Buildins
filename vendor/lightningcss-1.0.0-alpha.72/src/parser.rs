@@ -43,7 +43,19 @@ use crate::visitor::{Visit, VisitTypes, Visitor};
 use bitflags::bitflags;
 use cssparser::*;
 use parcel_selectors::parser::{NestingRequirement, ParseErrorRecovery};
+#[cfg(not(all(feature = "trueos-native", target_os = "trueos")))]
 use std::sync::{Arc, RwLock};
+#[cfg(all(feature = "trueos-native", target_os = "trueos"))]
+use alloc::rc::Rc;
+#[cfg(all(feature = "trueos-native", target_os = "trueos"))]
+use core::cell::RefCell;
+
+/// Shared collector for recoverable CSS parse diagnostics.
+#[cfg(not(all(feature = "trueos-native", target_os = "trueos")))]
+pub type ParserWarnings<'i> = Arc<RwLock<Vec<Error<ParserError<'i>>>>>;
+/// Synchronous shared collector; native CSS parsing needs no OS locks.
+#[cfg(all(feature = "trueos-native", target_os = "trueos"))]
+pub type ParserWarnings<'i> = Rc<RefCell<Vec<Error<ParserError<'i>>>>>;
 
 bitflags! {
   /// Parser feature flags to enable.
@@ -74,7 +86,7 @@ pub struct ParserOptions<'i> {
   /// Whether to ignore invalid rules and declarations rather than erroring.
   pub error_recovery: bool,
   /// A list that will be appended to when a warning occurs.
-  pub warnings: Option<Arc<RwLock<Vec<Error<ParserError<'i>>>>>>,
+  pub warnings: Option<ParserWarnings<'i>>,
   /// Feature flags to enable.
   pub flags: ParserFlags,
 }
@@ -86,6 +98,12 @@ impl<'i, 'any> static_self::IntoOwned<'any> for ParserOptions<'i> {
   fn into_owned(self) -> Self::Owned {
     ParserOptions {
       warnings: self.warnings.and_then(|warnings| {
+        #[cfg(all(feature = "trueos-native", target_os = "trueos"))]
+        {
+          let errors = warnings.borrow();
+          return Some(Rc::new(RefCell::new(errors.iter().map(|e| e.clone().into_owned()).collect())));
+        }
+        #[cfg(not(all(feature = "trueos-native", target_os = "trueos")))]
         if let Ok(errors) = warnings.read() {
           Some(Arc::new(RwLock::new(
             errors.iter().map(|e| e.clone().into_owned()).collect(),
@@ -103,6 +121,9 @@ impl<'i> ParserOptions<'i> {
   #[inline]
   pub(crate) fn warn(&self, warning: ParseError<'i, ParserError<'i>>) {
     if let Some(warnings) = &self.warnings {
+      #[cfg(all(feature = "trueos-native", target_os = "trueos"))]
+      warnings.borrow_mut().push(Error::from(warning, self.filename.clone()));
+      #[cfg(not(all(feature = "trueos-native", target_os = "trueos")))]
       if let Ok(mut warnings) = warnings.write() {
         warnings.push(Error::from(warning, self.filename.clone()));
       }
@@ -124,7 +145,7 @@ impl<'i> crate::traits::AtRuleParser<'i> for DefaultAtRuleParser {
 #[cfg_attr(feature = "jsonschema", derive(schemars::JsonSchema))]
 pub struct DefaultAtRule;
 impl crate::traits::ToCss for DefaultAtRule {
-  fn to_css<W: std::fmt::Write>(&self, _: &mut Printer<W>) -> Result<(), PrinterError> {
+  fn to_css<W: core::fmt::Write>(&self, _: &mut Printer<W>) -> Result<(), PrinterError> {
     Err(PrinterError {
       kind: crate::error::PrinterErrorKind::FmtError,
       loc: None,
@@ -1196,3 +1217,8 @@ pub fn parse_style_block<'a, 'i, 't, T: crate::traits::AtRuleParser<'i>>(
 pub fn starts_with_ignore_ascii_case(string: &str, prefix: &str) -> bool {
   string.len() >= prefix.len() && string.as_bytes()[0..prefix.len()].eq_ignore_ascii_case(prefix.as_bytes())
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

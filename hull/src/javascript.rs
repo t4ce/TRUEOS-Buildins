@@ -1,19 +1,12 @@
 //! Page JavaScript owned and serialized by one native service lane.
-use std::{
-    cell::{Cell, RefCell},
-    collections::VecDeque,
-    rc::Rc,
-    sync::{
-        Arc, Mutex,
-        atomic::{AtomicBool, AtomicU64, Ordering},
-    },
-    time::{Duration, Instant},
-};
+use alloc::{string::{String, ToString}, vec::Vec, boxed::Box, borrow::ToOwned, format};
+use alloc::{collections::VecDeque, rc::Rc, sync::Arc};
+use core::{cell::{Cell, RefCell}, sync::atomic::{AtomicBool, AtomicU64, Ordering}};
+use crate::platform::{Duration, Instant, Mutex};
 
 use hull_quickjs::{ConsoleBatch, Engine};
 use serde_json::{Value, json};
 use trueos::tokio::{
-    runtime,
     sync::{Notify, mpsc, watch},
     task::{self, LocalSet},
 };
@@ -206,8 +199,7 @@ impl Runtime {
             let published = published.clone();
             let window = window.clone();
             trueos::worker::spawn(move || {
-                let runtime = runtime::Builder::new_current_thread()
-                    .enable_time()
+                let runtime = trueos::runtime::current_thread()
                     .build()
                     .expect("JavaScript lane runtime");
                 let local = LocalSet::new();
@@ -579,10 +571,10 @@ async fn worker(
                 let sleep = trueos::tokio::time::sleep(delay);
                 trueos::tokio::pin!(sleep);
                 trueos::tokio::pin!(notified);
-                std::future::poll_fn(|cx| {
-                    use std::future::Future;
+                core::future::poll_fn(|cx| {
+                    use core::future::Future;
                     if notified.as_mut().poll(cx).is_ready() {
-                        return std::task::Poll::Ready(());
+                        return core::task::Poll::Ready(());
                     }
                     sleep.as_mut().poll(cx)
                 })

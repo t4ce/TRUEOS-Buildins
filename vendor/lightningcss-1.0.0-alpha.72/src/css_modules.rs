@@ -12,17 +12,42 @@ use crate::error::PrinterErrorKind;
 use crate::properties::css_modules::{Composes, Specifier};
 use crate::selector::SelectorList;
 use data_encoding::{Encoding, Specification};
+#[cfg(not(all(feature = "trueos-native", target_os = "trueos")))]
 use lazy_static::lazy_static;
+#[cfg(not(all(feature = "trueos-native", target_os = "trueos")))]
 use pathdiff::diff_paths;
 #[cfg(any(feature = "serde", feature = "nodejs"))]
 use serde::Serialize;
 use smallvec::{smallvec, SmallVec};
-use std::borrow::Cow;
+use alloc::borrow::Cow;
+#[cfg(not(all(feature = "trueos-native", target_os = "trueos")))]
 use std::collections::hash_map::DefaultHasher;
-use std::collections::HashMap;
-use std::fmt::Write;
-use std::hash::{Hash, Hasher};
+#[cfg(all(feature = "trueos-native", target_os = "trueos"))]
+use rustc_hash::FxHasher as DefaultHasher;
+use crate::collections::HashMap;
+#[cfg(not(all(feature = "trueos-native", target_os = "trueos")))]
+use std::collections::hash_map as hash_map_entry;
+#[cfg(all(feature = "trueos-native", target_os = "trueos"))]
+use hashbrown::hash_map as hash_map_entry;
+use core::fmt::Write;
+use core::hash::{Hash, Hasher};
+#[cfg(not(all(feature = "trueos-native", target_os = "trueos")))]
 use std::path::Path;
+#[cfg(all(feature = "trueos-native", target_os = "trueos"))]
+type Path = str;
+
+#[cfg(not(all(feature = "trueos-native", target_os = "trueos")))]
+fn source_path(value: &str) -> &Path { Path::new(value) }
+#[cfg(all(feature = "trueos-native", target_os = "trueos"))]
+fn source_path(value: &str) -> &Path { value }
+
+#[cfg(not(all(feature = "trueos-native", target_os = "trueos")))]
+fn file_stem(path: &Path) -> &str { path.file_stem().unwrap().to_str().unwrap() }
+#[cfg(all(feature = "trueos-native", target_os = "trueos"))]
+fn file_stem(path: &Path) -> &str {
+  let name = path.rsplit(['/', '\\']).next().unwrap_or(path);
+  match name.rsplit_once('.') { Some((stem, _)) if !stem.is_empty() => stem, _ => name }
+}
 
 /// Configuration for CSS modules.
 #[derive(Clone, Debug, PartialEq)]
@@ -87,8 +112,8 @@ pub enum PatternParseError {
   UnclosedBrackets(usize),
 }
 
-impl std::fmt::Display for PatternParseError {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for PatternParseError {
+  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
     use PatternParseError::*;
     match self {
       UnknownPlaceholder(p, i) => write!(
@@ -101,7 +126,7 @@ impl std::fmt::Display for PatternParseError {
   }
 }
 
-impl std::error::Error for PatternParseError {}
+impl core::error::Error for PatternParseError {}
 
 impl Pattern {
   /// Parse a pattern from a string.
@@ -158,7 +183,7 @@ impl Pattern {
           write(s)?;
         }
         Segment::Name => {
-          let stem = path.file_stem().unwrap().to_str().unwrap();
+          let stem = file_stem(path);
           if stem.contains('.') {
             write(&stem.replace('.', "-"))?;
           } else {
@@ -187,7 +212,7 @@ impl Pattern {
     path: &Path,
     local: &str,
     content_hash: &str,
-  ) -> Result<String, std::fmt::Error> {
+  ) -> Result<String, core::fmt::Error> {
     self.write(hash, path, local, content_hash, |s| res.write_str(s))?;
     Ok(res)
   }
@@ -258,6 +283,7 @@ pub type CssModuleExports = HashMap<String, CssModuleExport>;
 /// A map of placeholders to references.
 pub type CssModuleReferences = HashMap<String, CssModuleReference>;
 
+#[cfg(not(all(feature = "trueos-native", target_os = "trueos")))]
 lazy_static! {
   static ref ENCODER: Encoding = {
     let mut spec = Specification::new();
@@ -285,22 +311,27 @@ impl<'a, 'c> CssModule<'a, 'c> {
     references: &'a mut HashMap<String, CssModuleReference>,
     content_hashes: &'a Option<Vec<String>>,
   ) -> Self {
-    let project_root = project_root.map(|p| Path::new(p));
-    let sources: Vec<&Path> = sources.iter().map(|filename| Path::new(filename)).collect();
+    #[cfg(not(all(feature = "trueos-native", target_os = "trueos")))]
+    let project_root = project_root.map(source_path);
+    #[cfg(all(feature = "trueos-native", target_os = "trueos"))]
+    let _ = project_root;
+    let sources: Vec<&Path> = sources.iter().map(|filename| source_path(filename)).collect();
     let hashes = sources
       .iter()
       .map(|path| {
         // Make paths relative to project root so hashes are stable.
+        #[cfg(not(all(feature = "trueos-native", target_os = "trueos")))]
         let source = match project_root {
           Some(project_root) if path.is_absolute() => {
             diff_paths(path, project_root).map_or(Cow::Borrowed(*path), Cow::Owned)
           }
           _ => Cow::Borrowed(*path),
         };
-        hash(
-          &source.to_string_lossy(),
-          matches!(config.pattern.segments[0], Segment::Hash),
-        )
+        #[cfg(not(all(feature = "trueos-native", target_os = "trueos")))]
+        let source = source.to_string_lossy();
+        #[cfg(all(feature = "trueos-native", target_os = "trueos"))]
+        let source = *path;
+        hash(&source, matches!(config.pattern.segments[0], Segment::Hash))
       })
       .collect();
     Self {
@@ -363,10 +394,10 @@ impl<'a, 'c> CssModule<'a, 'c> {
 
   pub fn reference(&mut self, name: &str, source_index: u32) {
     match self.exports_by_source_index[source_index as usize].entry(name.into()) {
-      std::collections::hash_map::Entry::Occupied(mut entry) => {
+      hash_map_entry::Entry::Occupied(mut entry) => {
         entry.get_mut().is_referenced = true;
       }
-      std::collections::hash_map::Entry::Vacant(entry) => {
+      hash_map_entry::Entry::Vacant(entry) => {
         entry.insert(CssModuleExport {
           name: self
             .config
@@ -422,10 +453,10 @@ impl<'a, 'c> CssModule<'a, 'c> {
       None => {
         // Local export. Mark as used.
         match self.exports_by_source_index[source_index as usize].entry(name.into()) {
-          std::collections::hash_map::Entry::Occupied(mut entry) => {
+          hash_map_entry::Entry::Occupied(mut entry) => {
             entry.get_mut().is_referenced = true;
           }
-          std::collections::hash_map::Entry::Vacant(entry) => {
+          hash_map_entry::Entry::Vacant(entry) => {
             entry.insert(CssModuleExport {
               name: self
                 .config
@@ -536,14 +567,26 @@ impl<'a, 'c> CssModule<'a, 'c> {
 }
 
 pub(crate) fn hash(s: &str, at_start: bool) -> String {
-  let mut hasher = DefaultHasher::new();
+  let mut hasher = DefaultHasher::default();
   s.hash(&mut hasher);
   let hash = hasher.finish() as u32;
 
+  #[cfg(not(all(feature = "trueos-native", target_os = "trueos")))]
   let hash = ENCODER.encode(&hash.to_le_bytes());
+  #[cfg(all(feature = "trueos-native", target_os = "trueos"))]
+  let hash = {
+    let mut spec = Specification::new();
+    spec.symbols.push_str("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890_-");
+    spec.encoding().unwrap().encode(&hash.to_le_bytes())
+  };
   if at_start && matches!(hash.as_bytes()[0], b'0'..=b'9') {
     format!("_{}", hash)
   } else {
     hash
   }
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

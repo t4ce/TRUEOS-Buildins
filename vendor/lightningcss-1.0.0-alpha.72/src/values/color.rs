@@ -20,9 +20,9 @@ use bitflags::bitflags;
 use cssparser::color::{parse_hash_color, parse_named_color};
 use cssparser::*;
 use cssparser_color::{hsl_to_rgb, AngleOrNumber, ColorParser, NumberOrPercentage};
-use std::any::TypeId;
-use std::f32::consts::PI;
-use std::fmt::Write;
+use core::any::TypeId;
+use core::f32::consts::PI;
+use core::fmt::Write;
 
 /// A CSS [`<color>`](https://www.w3.org/TR/css-color-4/#color-type) value.
 ///
@@ -633,7 +633,7 @@ impl<'i> Parse<'i> for CssColor {
 impl ToCss for CssColor {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     match self {
       CssColor::CurrentColor => dest.write_str("currentColor"),
@@ -1547,7 +1547,7 @@ fn write_components<W>(
   dest: &mut Printer<W>,
 ) -> Result<(), PrinterError>
 where
-  W: std::fmt::Write,
+  W: core::fmt::Write,
 {
   dest.write_str(name)?;
   dest.write_char('(')?;
@@ -1571,7 +1571,7 @@ where
 #[inline]
 fn write_component<W>(c: f32, dest: &mut Printer<W>) -> Result<(), PrinterError>
 where
-  W: std::fmt::Write,
+  W: core::fmt::Write,
 {
   if c.is_nan() {
     dest.write_str("none")?;
@@ -1584,7 +1584,7 @@ where
 #[inline]
 fn write_predefined<W>(predefined: &PredefinedColor, dest: &mut Printer<W>) -> Result<(), PrinterError>
 where
-  W: std::fmt::Write,
+  W: core::fmt::Write,
 {
   use PredefinedColor::*;
 
@@ -3934,3 +3934,8 @@ impl IsCompatible for SystemColor {
     }
   }
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

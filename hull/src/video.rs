@@ -1,4 +1,5 @@
 //! Detached native playback handoff. Dropping Hull never closes the player.
+use alloc::{string::String, vec::Vec, format};
 use super::javascript::Runtime;
 use trueos::logl;
 unsafe extern "C" {

@@ -69,7 +69,7 @@ impl<'i> Parse<'i> for DisplayInside {
 impl ToCss for DisplayInside {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     match self {
       DisplayInside::Flow => dest.write_str("flow"),
@@ -228,7 +228,7 @@ impl<'i> Parse<'i> for DisplayPair {
 impl ToCss for DisplayPair {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     match self {
       DisplayPair {
@@ -421,7 +421,7 @@ impl<'i> PropertyHandler<'i> for DisplayHandler<'i> {
 
     dest.extend(self.decls.drain(..));
 
-    if let Some(display) = std::mem::take(&mut self.display) {
+    if let Some(display) = core::mem::take(&mut self.display) {
       // If we have an unprefixed `flex` value, then add the necessary prefixed values.
       if let Display::Pair(DisplayPair {
         inside: DisplayInside::Flex(VendorPrefix::None),
@@ -473,3 +473,8 @@ impl<'i> PropertyHandler<'i> for DisplayHandler<'i> {
     }
   }
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

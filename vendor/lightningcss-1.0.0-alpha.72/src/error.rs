@@ -9,7 +9,7 @@ use parcel_selectors::parser::SelectorParseErrorKind;
 use serde::Serialize;
 #[cfg(feature = "into_owned")]
 use static_self::IntoOwned;
-use std::fmt;
+use core::fmt;
 
 /// An error with a source location.
 #[derive(Debug, PartialEq, Clone)]
@@ -34,7 +34,7 @@ impl<T: fmt::Display> fmt::Display for Error<T> {
   }
 }
 
-impl<T: fmt::Display + fmt::Debug> std::error::Error for Error<T> {}
+impl<T: fmt::Display + fmt::Debug> core::error::Error for Error<T> {}
 
 /// A line and column location within a source file.
 #[derive(Debug, PartialEq, Clone)]
@@ -344,7 +344,7 @@ impl<T: fmt::Display> fmt::Display for ErrorWithLocation<T> {
   }
 }
 
-impl<T: fmt::Display + fmt::Debug> std::error::Error for ErrorWithLocation<T> {}
+impl<T: fmt::Display + fmt::Debug> core::error::Error for ErrorWithLocation<T> {}
 
 pub(crate) type MinifyError = ErrorWithLocation<MinifyErrorKind>;
 
@@ -411,7 +411,7 @@ pub enum PrinterErrorKind {
     /// The ambiguous URL.
     url: String,
   },
-  /// A [std::fmt::Error](std::fmt::Error) was encountered in the underlying destination.
+  /// A [core::fmt::Error](core::fmt::Error) was encountered in the underlying destination.
   FmtError,
   /// The CSS modules `composes` property cannot be used within nested rules.
   InvalidComposesNesting,
@@ -450,3 +450,8 @@ impl PrinterErrorKind {
     self.to_string()
   }
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

@@ -40,3 +40,8 @@ fn bench_stylesheet_transform(c: &mut Criterion) {
 
 criterion_group!(benches, bench_stylesheet_parse, bench_stylesheet_transform);
 criterion_main!(benches);
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

@@ -63,7 +63,7 @@ impl<'i> Parse<'i> for LayerName<'i> {
 impl<'i> ToCss for LayerName<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     let mut first = true;
     for name in &self.0 {
@@ -101,7 +101,7 @@ pub struct LayerStatementRule<'i> {
 impl<'i> ToCss for LayerStatementRule<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     #[cfg(feature = "sourcemap")]
     dest.add_mapping(self.loc);
@@ -144,7 +144,7 @@ impl<'i, T: Clone> LayerBlockRule<'i, T> {
 impl<'a, 'i, T: ToCss> ToCss for LayerBlockRule<'i, T> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     #[cfg(feature = "sourcemap")]
     dest.add_mapping(self.loc);
@@ -164,3 +164,8 @@ impl<'a, 'i, T: ToCss> ToCss for LayerBlockRule<'i, T> {
     dest.write_char('}')
   }
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

@@ -44,7 +44,7 @@ impl Ratio {
 impl ToCss for Ratio {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     self.0.to_css(dest)?;
     if self.1 != 1.0 {
@@ -55,10 +55,15 @@ impl ToCss for Ratio {
   }
 }
 
-impl std::ops::Add<CSSNumber> for Ratio {
+impl core::ops::Add<CSSNumber> for Ratio {
   type Output = Self;
 
   fn add(self, other: CSSNumber) -> Ratio {
     Ratio(self.0 + other, self.1)
   }
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

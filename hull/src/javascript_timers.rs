@@ -1,10 +1,9 @@
 //! Finite per-realm timer deadlines; callbacks remain owned by QuickJS.
+use alloc::{vec::Vec};
 use serde_json::{Value, json};
-use std::{
-    cell::RefCell,
-    rc::Rc,
-    time::{Duration, Instant},
-};
+use alloc::rc::Rc;
+use core::cell::RefCell;
+use crate::platform::{Duration, Instant};
 const MAX_TIMERS: usize = 256;
 #[derive(Default)]
 pub(crate) struct Timers {

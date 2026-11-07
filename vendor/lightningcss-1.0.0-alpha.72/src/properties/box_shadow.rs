@@ -96,7 +96,7 @@ impl<'i> Parse<'i> for BoxShadow {
 impl ToCss for BoxShadow {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     if self.inset {
       dest.write_str("inset ")?;
@@ -194,7 +194,7 @@ impl BoxShadowHandler {
       return;
     }
 
-    let box_shadows = std::mem::take(&mut self.box_shadows);
+    let box_shadows = core::mem::take(&mut self.box_shadows);
 
     if let Some((box_shadows, prefixes)) = box_shadows {
       if !self.flushed {
@@ -252,3 +252,8 @@ impl BoxShadowHandler {
     self.flushed = true;
   }
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

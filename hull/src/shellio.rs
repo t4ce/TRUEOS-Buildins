@@ -1,16 +1,30 @@
 //! Bounded console output, URL input and frame diagnostics.
-use std::{cell::RefCell, collections::VecDeque};
+use alloc::{string::{String, ToString}, vec::Vec};
+use alloc::collections::VecDeque;
+#[cfg(not(target_os = "trueos"))]
+use core::cell::RefCell;
 
 const OUTPUT_LINES: usize = 256;
 const LINE_CHARS: usize = 2048;
+#[cfg(not(target_os = "trueos"))]
 thread_local! {
     static OUTPUT: RefCell<VecDeque<String>> = const { RefCell::new(VecDeque::new()) };
 }
 
+#[cfg(target_os = "trueos")]
+static OUTPUT: crate::platform::Mutex<VecDeque<String>> =
+    crate::platform::Mutex::new(VecDeque::new());
+
+fn with_output<R>(f: impl FnOnce(&mut VecDeque<String>) -> R) -> R {
+    #[cfg(target_os = "trueos")]
+    { f(&mut OUTPUT.lock().unwrap()) }
+    #[cfg(not(target_os = "trueos"))]
+    { OUTPUT.with(|output| f(&mut output.borrow_mut())) }
+}
+
 /// All terminal text is plain data, including script-authored escape sequences.
 pub(super) fn line(text: &str) {
-    OUTPUT.with(|output| {
-        let mut output = output.borrow_mut();
+    with_output(|output| {
         for line in text.split('\n').take(OUTPUT_LINES) {
             let plain: String = line
                 .chars()
@@ -33,12 +47,12 @@ pub(super) fn line(text: &str) {
     });
 }
 
-pub(super) fn linef(arguments: std::fmt::Arguments<'_>) {
+pub(super) fn linef(arguments: core::fmt::Arguments<'_>) {
     line(&arguments.to_string());
 }
 
 pub(super) fn take_output() -> Vec<String> {
-    OUTPUT.with(|output| output.borrow_mut().drain(..).collect())
+    with_output(|output| output.drain(..).collect())
 }
 
 pub(super) const MAX_SCRIPT_BYTES: usize = 64 * 1024;
@@ -129,8 +143,8 @@ impl ShellInput {
     pub fn push(&mut self, byte: u8) -> Option<Result<String, &'static str>> {
         match byte {
             b'\r' | b'\n' => {
-                let bytes = std::mem::take(&mut self.bytes);
-                if std::mem::take(&mut self.overflow) {
+                let bytes = core::mem::take(&mut self.bytes);
+                if core::mem::take(&mut self.overflow) {
                     return Some(Err("URL is too long"));
                 }
                 if bytes.is_empty() {

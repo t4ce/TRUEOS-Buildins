@@ -29,7 +29,7 @@ impl LengthPercentage {
 
   pub(crate) fn to_css_unitless<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     match self {
       DimensionPercentage::Dimension(d) => d.to_css_unitless(dest),
@@ -192,7 +192,7 @@ macro_rules! define_length_units {
       }
     }
 
-    impl std::ops::Mul<CSSNumber> for LengthValue {
+    impl core::ops::Mul<CSSNumber> for LengthValue {
       type Output = Self;
 
       fn mul(self, other: CSSNumber) -> LengthValue {
@@ -205,8 +205,8 @@ macro_rules! define_length_units {
       }
     }
 
-    impl std::cmp::PartialOrd<LengthValue> for LengthValue {
-      fn partial_cmp(&self, other: &LengthValue) -> Option<std::cmp::Ordering> {
+    impl core::cmp::PartialOrd<LengthValue> for LengthValue {
+      fn partial_cmp(&self, other: &LengthValue) -> Option<core::cmp::Ordering> {
         use LengthValue::*;
         match (self, other) {
           $(
@@ -457,7 +457,7 @@ define_length_units! {
 impl ToCss for LengthValue {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     let (value, unit) = self.to_unit_value();
 
@@ -474,7 +474,7 @@ impl ToCss for LengthValue {
 impl LengthValue {
   pub(crate) fn to_css_unitless<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     match self {
       LengthValue::Px(value) => value.to_css(dest),
@@ -485,7 +485,7 @@ impl LengthValue {
 
 pub(crate) fn serialize_dimension<W>(value: f32, unit: &str, dest: &mut Printer<W>) -> Result<(), PrinterError>
 where
-  W: std::fmt::Write,
+  W: core::fmt::Write,
 {
   use cssparser::ToCss;
   let int_value = if value.fract() == 0.0 { Some(value as i32) } else { None };
@@ -566,7 +566,7 @@ impl<'i> Parse<'i> for Length {
 impl ToCss for Length {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     match self {
       Length::Value(a) => a.to_css(dest),
@@ -575,7 +575,7 @@ impl ToCss for Length {
   }
 }
 
-impl std::ops::Mul<CSSNumber> for Length {
+impl core::ops::Mul<CSSNumber> for Length {
   type Output = Self;
 
   fn mul(self, other: CSSNumber) -> Length {
@@ -586,7 +586,7 @@ impl std::ops::Mul<CSSNumber> for Length {
   }
 }
 
-impl std::ops::Add<Length> for Length {
+impl core::ops::Add<Length> for Length {
   type Output = Self;
 
   fn add(self, other: Length) -> Length {
@@ -656,7 +656,7 @@ impl Length {
     }
 
     if a.is_sign_negative() && b.is_sign_positive() {
-      std::mem::swap(&mut a, &mut b);
+      core::mem::swap(&mut a, &mut b);
     }
 
     match (a, b) {
@@ -746,7 +746,7 @@ impl TryAdd<Length> for Length {
   }
 }
 
-impl std::convert::Into<Calc<Length>> for Length {
+impl core::convert::Into<Calc<Length>> for Length {
   fn into(self) -> Calc<Length> {
     match self {
       Length::Calc(c) => *c,
@@ -755,14 +755,14 @@ impl std::convert::Into<Calc<Length>> for Length {
   }
 }
 
-impl std::convert::From<Calc<Length>> for Length {
+impl core::convert::From<Calc<Length>> for Length {
   fn from(calc: Calc<Length>) -> Length {
     Length::Calc(Box::new(calc))
   }
 }
 
-impl std::cmp::PartialOrd<Length> for Length {
-  fn partial_cmp(&self, other: &Length) -> Option<std::cmp::Ordering> {
+impl core::cmp::PartialOrd<Length> for Length {
+  fn partial_cmp(&self, other: &Length) -> Option<core::cmp::Ordering> {
     match (self, other) {
       (Length::Value(a), Length::Value(b)) => a.partial_cmp(b),
       _ => None,
@@ -850,3 +850,8 @@ impl IsCompatible for LengthOrNumber {
     }
   }
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

@@ -1,0 +1,21 @@
+[package]
+name = "apps-native-boundary-tests"
+version = "0.0.0"
+edition = "2024"
+
+[workspace]
+
+[dependencies]
+sha2 = { version = "=0.10.9", default-features = false }
+
+[[test]]
+name = "native_fetch"
+path = "native_fetch.rs"
+
+[[test]]
+name = "download_publication"
+path = "download_publication.rs"
+
+[[test]]
+name = "script_and_mouse"
+path = "script_and_mouse.rs"

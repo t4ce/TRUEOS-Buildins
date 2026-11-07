@@ -222,7 +222,7 @@ impl<'i> Parse<'i> for TrackSize {
 impl ToCss for TrackSize {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     match self {
       TrackSize::TrackBreadth(breadth) => breadth.to_css(dest),
@@ -289,7 +289,7 @@ impl TrackBreadth {
 impl ToCss for TrackBreadth {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     match self {
       TrackBreadth::Auto => dest.write_str("auto"),
@@ -335,7 +335,7 @@ impl<'i> Parse<'i> for TrackRepeat<'i> {
 impl<'i> ToCss for TrackRepeat<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     dest.write_str("repeat(")?;
     self.count.to_css(dest)?;
@@ -380,7 +380,7 @@ fn parse_line_names<'i, 't>(
 
 fn serialize_line_names<W>(names: &[CustomIdent], dest: &mut Printer<W>) -> Result<(), PrinterError>
 where
-  W: std::fmt::Write,
+  W: core::fmt::Write,
 {
   dest.write_char('[')?;
   let mut first = true;
@@ -397,7 +397,7 @@ where
 
 fn write_ident<W>(name: &str, dest: &mut Printer<W>) -> Result<(), PrinterError>
 where
-  W: std::fmt::Write,
+  W: core::fmt::Write,
 {
   let css_module_grid_enabled = dest.css_module.as_ref().map_or(false, |css_module| css_module.config.grid);
   if css_module_grid_enabled {
@@ -451,7 +451,7 @@ impl<'i> Parse<'i> for TrackList<'i> {
 impl<'i> ToCss for TrackList<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     let mut items_iter = self.items.iter();
     let line_names_iter = self.line_names.iter();
@@ -513,7 +513,7 @@ impl<'i> Parse<'i> for TrackSizeList {
 impl ToCss for TrackSizeList {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     if self.0.len() == 0 {
       return dest.write_str("auto");
@@ -627,7 +627,7 @@ fn is_name_code_point(c: char) -> bool {
 impl ToCss for GridTemplateAreas {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     match self {
       GridTemplateAreas::None => dest.write_str("none"),
@@ -665,11 +665,11 @@ impl GridTemplateAreas {
   fn write_string<'a, W>(
     &self,
     dest: &mut Printer<W>,
-    iter: &mut std::slice::Iter<'a, Option<String>>,
+    iter: &mut core::slice::Iter<'a, Option<String>>,
     next: &mut Option<&'a Option<String>>,
   ) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     let columns = match self {
       GridTemplateAreas::Areas { columns, .. } => *columns,
@@ -806,7 +806,7 @@ impl<'i> Parse<'i> for GridTemplate<'i> {
 impl ToCss for GridTemplate<'_> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     self.to_css_with_indent(dest, 15)
   }
@@ -815,7 +815,7 @@ impl ToCss for GridTemplate<'_> {
 impl GridTemplate<'_> {
   fn to_css_with_indent<W>(&self, dest: &mut Printer<W>, indent: u8) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     match &self.areas {
       GridTemplateAreas::None => {
@@ -1082,7 +1082,7 @@ impl<'i> Parse<'i> for GridAutoFlow {
 impl ToCss for GridAutoFlow {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     let s = if *self == GridAutoFlow::Row {
       "row"
@@ -1200,7 +1200,7 @@ fn parse_grid_auto_flow<'i, 't>(
 impl ToCss for Grid<'_> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     let is_auto_initial = self.auto_rows == TrackSizeList::default()
       && self.auto_columns == TrackSizeList::default()
@@ -1431,7 +1431,7 @@ impl<'i> Parse<'i> for GridLine<'i> {
 impl ToCss for GridLine<'_> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     match self {
       GridLine::Auto => dest.write_str("auto"),
@@ -1500,7 +1500,7 @@ macro_rules! impl_grid_placement {
     impl ToCss for $name<'_> {
       fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
       where
-        W: std::fmt::Write,
+        W: core::fmt::Write,
       {
         self.start.to_css(dest)?;
 
@@ -1609,7 +1609,7 @@ impl<'i> Parse<'i> for GridArea<'i> {
 impl ToCss for GridArea<'_> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     self.row_start.to_css(dest)?;
 
@@ -1716,16 +1716,16 @@ impl<'i> PropertyHandler<'i> for GridHandler<'i> {
 
     self.has_any = false;
 
-    let mut rows = std::mem::take(&mut self.rows);
-    let mut columns = std::mem::take(&mut self.columns);
-    let mut areas = std::mem::take(&mut self.areas);
-    let mut auto_rows = std::mem::take(&mut self.auto_rows);
-    let mut auto_columns = std::mem::take(&mut self.auto_columns);
-    let mut auto_flow = std::mem::take(&mut self.auto_flow);
-    let mut row_start = std::mem::take(&mut self.row_start);
-    let mut row_end = std::mem::take(&mut self.row_end);
-    let mut column_start = std::mem::take(&mut self.column_start);
-    let mut column_end = std::mem::take(&mut self.column_end);
+    let mut rows = core::mem::take(&mut self.rows);
+    let mut columns = core::mem::take(&mut self.columns);
+    let mut areas = core::mem::take(&mut self.areas);
+    let mut auto_rows = core::mem::take(&mut self.auto_rows);
+    let mut auto_columns = core::mem::take(&mut self.auto_columns);
+    let mut auto_flow = core::mem::take(&mut self.auto_flow);
+    let mut row_start = core::mem::take(&mut self.row_start);
+    let mut row_end = core::mem::take(&mut self.row_end);
+    let mut column_start = core::mem::take(&mut self.column_start);
+    let mut column_end = core::mem::take(&mut self.column_end);
 
     if let (Some(rows_val), Some(columns_val), Some(areas_val)) = (&rows, &columns, &areas) {
       let mut has_template = true;
@@ -1802,23 +1802,23 @@ impl<'i> PropertyHandler<'i> for GridHandler<'i> {
 
     if row_start.is_some() && row_end.is_some() && column_start.is_some() && column_end.is_some() {
       dest.push(Property::GridArea(GridArea {
-        row_start: std::mem::take(&mut row_start).unwrap(),
-        row_end: std::mem::take(&mut row_end).unwrap(),
-        column_start: std::mem::take(&mut column_start).unwrap(),
-        column_end: std::mem::take(&mut column_end).unwrap(),
+        row_start: core::mem::take(&mut row_start).unwrap(),
+        row_end: core::mem::take(&mut row_end).unwrap(),
+        column_start: core::mem::take(&mut column_start).unwrap(),
+        column_end: core::mem::take(&mut column_end).unwrap(),
       }))
     } else {
       if row_start.is_some() && row_end.is_some() {
         dest.push(Property::GridRow(GridRow {
-          start: std::mem::take(&mut row_start).unwrap(),
-          end: std::mem::take(&mut row_end).unwrap(),
+          start: core::mem::take(&mut row_start).unwrap(),
+          end: core::mem::take(&mut row_end).unwrap(),
         }))
       }
 
       if column_start.is_some() && column_end.is_some() {
         dest.push(Property::GridColumn(GridColumn {
-          start: std::mem::take(&mut column_start).unwrap(),
-          end: std::mem::take(&mut column_end).unwrap(),
+          start: core::mem::take(&mut column_start).unwrap(),
+          end: core::mem::take(&mut column_end).unwrap(),
         }))
       }
     }
@@ -1898,3 +1898,8 @@ fn is_grid_property(property_id: &PropertyId) -> bool {
     _ => false,
   }
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

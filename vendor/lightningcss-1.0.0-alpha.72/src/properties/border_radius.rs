@@ -64,7 +64,7 @@ impl<'i> Parse<'i> for BorderRadius {
 impl ToCss for BorderRadius {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     let widths = Rect::new(
       &self.top_left.0,
@@ -219,14 +219,14 @@ impl<'i> BorderRadiusHandler<'i> {
 
     self.has_any = false;
 
-    let mut top_left = std::mem::take(&mut self.top_left);
-    let mut top_right = std::mem::take(&mut self.top_right);
-    let mut bottom_right = std::mem::take(&mut self.bottom_right);
-    let mut bottom_left = std::mem::take(&mut self.bottom_left);
-    let start_start = std::mem::take(&mut self.start_start);
-    let start_end = std::mem::take(&mut self.start_end);
-    let end_end = std::mem::take(&mut self.end_end);
-    let end_start = std::mem::take(&mut self.end_start);
+    let mut top_left = core::mem::take(&mut self.top_left);
+    let mut top_right = core::mem::take(&mut self.top_right);
+    let mut bottom_right = core::mem::take(&mut self.bottom_right);
+    let mut bottom_left = core::mem::take(&mut self.bottom_left);
+    let start_start = core::mem::take(&mut self.start_start);
+    let start_end = core::mem::take(&mut self.start_end);
+    let end_end = core::mem::take(&mut self.end_end);
+    let end_start = core::mem::take(&mut self.end_start);
 
     if let (
       Some((top_left, tl_prefix)),
@@ -351,3 +351,8 @@ fn is_logical_border_radius_property(property_id: &PropertyId) -> bool {
     _ => false,
   }
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

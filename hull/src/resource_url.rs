@@ -1,4 +1,5 @@
 //! Public pages use HTTPS; local IDE preview Blueprints use loopback HTTP.
+use alloc::{string::{String, ToString}};
 pub(crate) fn allowed(url: &url::Url) -> bool {
     url.username().is_empty()
         && url.password().is_none()

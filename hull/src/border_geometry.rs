@@ -1,4 +1,5 @@
 //! A closed native loop: four square corners, or one chord per rounded corner.
+use alloc::{vec::Vec};
 use super::{layout::BorderQuad, viewport::Viewport};
 
 pub(super) struct LoopDraw {

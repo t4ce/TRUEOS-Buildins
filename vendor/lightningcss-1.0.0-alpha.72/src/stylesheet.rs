@@ -19,9 +19,9 @@ use crate::visitor::{Visit, VisitTypes, Visitor};
 use cssparser::{Parser, ParserInput, StyleSheetParser};
 #[cfg(feature = "sourcemap")]
 use parcel_sourcemap::SourceMap;
-use std::collections::{HashMap, HashSet};
+use crate::collections::{HashMap, HashSet};
 
-pub use crate::parser::{ParserFlags, ParserOptions};
+pub use crate::parser::{ParserFlags, ParserOptions, ParserWarnings};
 pub use crate::printer::PrinterOptions;
 pub use crate::printer::PseudoClasses;
 
@@ -303,7 +303,7 @@ where
 
       Ok(ToCssResult {
         dependencies: printer.dependencies,
-        exports: Some(std::mem::take(
+        exports: Some(core::mem::take(
           &mut printer.css_module.unwrap().exports_by_source_index[0],
         )),
         code: dest,
@@ -418,3 +418,8 @@ impl<'i> StyleAttribute<'i> {
     })
   }
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

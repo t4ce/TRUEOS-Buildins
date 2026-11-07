@@ -8,7 +8,7 @@
 //!
 //! CSS properties often also contain many implicit values that are automatically filled in during
 //! parsing when omitted. These are also omitted when possible during serialization. Many properties
-//! also implement the [Default](std::default::Default) trait, which returns the initial value for the property.
+//! also implement the [Default](core::default::Default) trait, which returns the initial value for the property.
 //!
 //! Shorthand properties are represented as structs containing fields for each of the sub-properties.
 //! If some of the sub-properties are not specified in the shorthand, their default values are filled in.
@@ -245,7 +245,7 @@ macro_rules! define_properties {
     }
 
     impl<'i> ToCss for PropertyId<'i> {
-      fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError> where W: std::fmt::Write {
+      fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError> where W: core::fmt::Write {
         let mut first = true;
         macro_rules! delim {
           () => {
@@ -559,7 +559,7 @@ macro_rules! define_properties {
         impl<'de> serde::de::Visitor<'de> for PropertyIdVisitor {
           type Value = PropertyId<'de>;
 
-          fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+          fn expecting(&self, formatter: &mut core::fmt::Formatter) -> core::fmt::Result {
             formatter.write_str("a PropertyId")
           }
 
@@ -772,7 +772,7 @@ macro_rules! define_properties {
       }
 
       /// Serializes the value of a CSS property without its name or `!important` flag.
-      pub fn value_to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError> where W: std::fmt::Write {
+      pub fn value_to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError> where W: core::fmt::Write {
         use Property::*;
 
         match self {
@@ -801,7 +801,7 @@ macro_rules! define_properties {
       }
 
       /// Serializes the CSS property, with an optional `!important` flag.
-      pub fn to_css<W>(&self, dest: &mut Printer<W>, important: bool) -> Result<(), PrinterError> where W: std::fmt::Write {
+      pub fn to_css<W>(&self, dest: &mut Printer<W>, important: bool) -> Result<(), PrinterError> where W: core::fmt::Write {
         use Property::*;
 
         let mut first = true;
@@ -1014,7 +1014,7 @@ macro_rules! define_properties {
         impl<'de> serde::de::Visitor<'de> for PropertyIdVisitor {
           type Value = PartialProperty<'de>;
 
-          fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+          fn expecting(&self, formatter: &mut core::fmt::Formatter) -> core::fmt::Result {
             formatter.write_str("a Property")
           }
 
@@ -1644,7 +1644,7 @@ impl<'i, T: smallvec::Array<Item = V>, V: Parse<'i>> Parse<'i> for SmallVec<T> {
 impl<T: smallvec::Array<Item = V>, V: ToCss> ToCss for SmallVec<T> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     let len = self.len();
     for (idx, val) in self.iter().enumerate() {
@@ -1666,7 +1666,7 @@ impl<'i, T: Parse<'i>> Parse<'i> for Vec<T> {
 impl<T: ToCss> ToCss for Vec<T> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     let len = self.len();
     for (idx, val) in self.iter().enumerate() {
@@ -1694,3 +1694,8 @@ enum_property! {
     "revert-layer": RevertLayer,
   }
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

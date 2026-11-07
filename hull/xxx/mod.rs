@@ -1,4 +1,5 @@
 //! Translucent layout quads. The caller supplies clipped viewport coordinates.
+use alloc::{vec::Vec};
 mod gpu;
 pub use gpu::Quads;
 pub use gpu::Quads as BorderPass;

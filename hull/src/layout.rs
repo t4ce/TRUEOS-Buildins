@@ -1,4 +1,7 @@
 //! Typed Lightning CSS -> Taffy bridge, with token substitution before property resolution.
+#[cfg(target_os = "trueos")]
+use num_traits::Float;
+use alloc::{string::{String, ToString}, vec::Vec, boxed::Box, borrow::ToOwned, format, vec};
 use super::css::Css;
 use crate::selectors::{MatchDom, matches_components};
 #[path = "custom_properties.rs"]
@@ -16,8 +19,8 @@ use lightningcss::values::length::{
     LengthPercentage as CssLengthPercentage, LengthPercentageOrAuto, LengthValue,
 };
 use rp5::{Document, NodeId as HtmlId, NodeKind};
-use std::collections::HashMap;
-use std::fmt::Write;
+use hashbrown::HashMap;
+use core::fmt::Write;
 use taffy::prelude::*;
 
 pub(super) struct Export {
@@ -105,7 +108,7 @@ pub(super) fn compute(
     document: &Document,
     css: &Css,
     viewport: (u32, u32),
-) -> Result<Export, Box<dyn std::error::Error>> {
+) -> Result<Export, Box<dyn core::error::Error>> {
     export(document, css, viewport, true)
 }
 
@@ -114,7 +117,7 @@ pub(super) fn compute_for_render(
     document: &Document,
     css: &Css,
     viewport: (u32, u32),
-) -> Result<Export, Box<dyn std::error::Error>> {
+) -> Result<Export, Box<dyn core::error::Error>> {
     export(document, css, viewport, false)
 }
 
@@ -123,11 +126,11 @@ fn export(
     css: &Css,
     viewport: (u32, u32),
     diagnostics: bool,
-) -> Result<Export, Box<dyn std::error::Error>> {
-    let started = std::time::Instant::now();
+) -> Result<Export, Box<dyn core::error::Error>> {
+    let started = crate::platform::Instant::now();
     let mut phase_started = started;
     let mut phase = |name: &str| {
-        let now = std::time::Instant::now();
+        let now = crate::platform::Instant::now();
         trueos::logl::log(
             trueos::logl::level::INFO,
             format_args!(
@@ -648,7 +651,7 @@ fn export(
             )
         })
         .count();
-    let mut unused = std::collections::BTreeSet::new();
+    let mut unused = alloc::collections::BTreeSet::new();
     let json = if diagnostics {
         for sheet in &css.sheets {
             unused_properties(&sheet.rules.0, &mut unused);
@@ -962,14 +965,14 @@ fn apply_css<'a>(
         (important, inline, specificity, order)
     });
     variables.cascade(declarations.iter().map(|declaration| declaration.4));
-    let computed: Vec<std::borrow::Cow<'_, Property<'static>>> = declarations
+    let computed: Vec<alloc::borrow::Cow<'_, Property<'static>>> = declarations
         .iter()
         .filter_map(|declaration| match declaration.4 {
             Property::Custom(_) => None,
             Property::Unparsed(property) => {
-                variables.property(property).map(std::borrow::Cow::Owned)
+                variables.property(property).map(alloc::borrow::Cow::Owned)
             }
-            property => Some(std::borrow::Cow::Borrowed(property)),
+            property => Some(alloc::borrow::Cow::Borrowed(property)),
         })
         .collect();
     let properties: Vec<_> = computed.iter().map(|property| property.as_ref()).collect();
@@ -2092,7 +2095,7 @@ fn used_for_layout(name: &str) -> bool {
 }
 fn unused_properties(
     rules: &[lightningcss::rules::CssRule<'static>],
-    unused: &mut std::collections::BTreeSet<String>,
+    unused: &mut alloc::collections::BTreeSet<String>,
 ) {
     use lightningcss::rules::CssRule;
     for rule in rules {

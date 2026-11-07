@@ -11,8 +11,12 @@
 // this lint when the set of variants can never grow.
 // `clippy::exhaustive_structs` is deliberately not enabled: event structs must stay
 // constructible by the backend crates, which `#[non_exhaustive]` would forbid.
+#![cfg_attr(all(feature = "trueos-native", target_os = "trueos"), no_std)]
+
 #![warn(clippy::exhaustive_enums)]
 
+#[macro_use]
+extern crate alloc;
 #[macro_use]
 pub mod casting;
 pub mod cursor;
@@ -27,4 +31,5 @@ pub mod keyboard;
 pub mod monitor;
 pub mod window;
 
-pub(crate) use std::time::Instant;
+mod platform;
+pub(crate) use platform::Instant;

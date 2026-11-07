@@ -60,7 +60,7 @@ impl<'i> Parse<'i> for BaselinePosition {
 impl ToCss for BaselinePosition {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     match self {
       BaselinePosition::First => dest.write_str("baseline"),
@@ -207,7 +207,7 @@ impl<'i> Parse<'i> for JustifyContent {
 impl ToCss for JustifyContent {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     match self {
       JustifyContent::Normal => dest.write_str("normal"),
@@ -281,7 +281,7 @@ impl<'i> Parse<'i> for PlaceContent {
 impl ToCss for PlaceContent {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     self.align.to_css(dest)?;
     let is_equal = match self.justify {
@@ -430,7 +430,7 @@ impl<'i> Parse<'i> for JustifySelf {
 impl ToCss for JustifySelf {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     match self {
       JustifySelf::Auto => dest.write_str("auto"),
@@ -502,7 +502,7 @@ impl<'i> Parse<'i> for PlaceSelf {
 impl ToCss for PlaceSelf {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     self.align.to_css(dest)?;
     let is_equal = match &self.justify {
@@ -611,7 +611,7 @@ impl<'i> Parse<'i> for LegacyJustify {
 impl ToCss for LegacyJustify {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     dest.write_str("legacy ")?;
     match self {
@@ -700,7 +700,7 @@ impl<'i> Parse<'i> for JustifyItems {
 impl ToCss for JustifyItems {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     match self {
       JustifyItems::Normal => dest.write_str("normal"),
@@ -771,7 +771,7 @@ impl<'i> Parse<'i> for PlaceItems {
 impl ToCss for PlaceItems {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     self.align.to_css(dest)?;
     let is_equal = match &self.justify {
@@ -834,7 +834,7 @@ impl<'i> Parse<'i> for Gap {
 impl ToCss for Gap {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     self.row.to_css(dest)?;
     if self.column != self.row {
@@ -989,20 +989,20 @@ impl AlignHandler {
 
     self.has_any = false;
 
-    let mut align_content = std::mem::take(&mut self.align_content);
-    let mut justify_content = std::mem::take(&mut self.justify_content);
-    let mut align_self = std::mem::take(&mut self.align_self);
-    let mut justify_self = std::mem::take(&mut self.justify_self);
-    let mut align_items = std::mem::take(&mut self.align_items);
-    let mut justify_items = std::mem::take(&mut self.justify_items);
-    let row_gap = std::mem::take(&mut self.row_gap);
-    let column_gap = std::mem::take(&mut self.column_gap);
-    let box_align = std::mem::take(&mut self.box_align);
-    let box_pack = std::mem::take(&mut self.box_pack);
-    let flex_line_pack = std::mem::take(&mut self.flex_line_pack);
-    let flex_pack = std::mem::take(&mut self.flex_pack);
-    let flex_align = std::mem::take(&mut self.flex_align);
-    let flex_item_align = std::mem::take(&mut self.flex_item_align);
+    let mut align_content = core::mem::take(&mut self.align_content);
+    let mut justify_content = core::mem::take(&mut self.justify_content);
+    let mut align_self = core::mem::take(&mut self.align_self);
+    let mut justify_self = core::mem::take(&mut self.justify_self);
+    let mut align_items = core::mem::take(&mut self.align_items);
+    let mut justify_items = core::mem::take(&mut self.justify_items);
+    let row_gap = core::mem::take(&mut self.row_gap);
+    let column_gap = core::mem::take(&mut self.column_gap);
+    let box_align = core::mem::take(&mut self.box_align);
+    let box_pack = core::mem::take(&mut self.box_pack);
+    let flex_line_pack = core::mem::take(&mut self.flex_line_pack);
+    let flex_pack = core::mem::take(&mut self.flex_pack);
+    let flex_align = core::mem::take(&mut self.flex_align);
+    let flex_item_align = core::mem::take(&mut self.flex_item_align);
 
     // Gets prefixes for standard properties.
     macro_rules! prefixes {
@@ -1205,3 +1205,8 @@ fn is_align_property(property_id: &PropertyId) -> bool {
     _ => false,
   }
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

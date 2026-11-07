@@ -15,11 +15,16 @@
 //! style sheet. See the individual module documentation for more details and examples.
 
 #![deny(missing_docs)]
+#![cfg_attr(all(feature = "trueos-native", target_os = "trueos"), no_std)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
 #[cfg(feature = "bundler")]
 #[cfg_attr(docsrs, doc(cfg(feature = "bundler")))]
 pub mod bundler;
+#[macro_use]
+extern crate alloc;
+/// Heap collections used by the native CSS engine.
+pub mod collections;
 mod compat;
 mod context;
 pub mod css_modules;
@@ -31678,3 +31683,8 @@ mod tests {
     );
   }
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

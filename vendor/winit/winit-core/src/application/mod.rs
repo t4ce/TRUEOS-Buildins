@@ -1,5 +1,6 @@
 //! End user application handling.
 
+use alloc::{boxed::Box};
 use crate::event::{DeviceEvent, DeviceId, StartCause, WindowEvent};
 use crate::event_loop::ActiveEventLoop;
 use crate::window::WindowId;
@@ -121,7 +122,7 @@ pub trait ApplicationHandler {
     /// ```no_run
     /// use std::sync::mpsc;
     /// use std::thread;
-    /// use std::time::Duration;
+    /// use core::time::Duration;
     ///
     /// use winit::event_loop::{EventLoop, EventLoopProvider};
     /// use winit_core::application::ApplicationHandler;
@@ -155,7 +156,7 @@ pub trait ApplicationHandler {
     ///     // Rest of `ApplicationHandler`
     /// }
     ///
-    /// fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// fn main() -> Result<(), Box<dyn core::error::Error>> {
     ///     let event_loop = EventLoop::new()?;
     ///
     ///     let (sender, receiver) = mpsc::channel();

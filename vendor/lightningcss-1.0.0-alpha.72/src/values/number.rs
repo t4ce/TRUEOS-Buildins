@@ -32,7 +32,7 @@ impl<'i> Parse<'i> for CSSNumber {
 impl ToCss for CSSNumber {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     let number = *self;
     if number != 0.0 && number.abs() < 1.0 {
@@ -51,13 +51,13 @@ impl ToCss for CSSNumber {
   }
 }
 
-impl std::convert::Into<Calc<CSSNumber>> for CSSNumber {
+impl core::convert::Into<Calc<CSSNumber>> for CSSNumber {
   fn into(self) -> Calc<CSSNumber> {
     Calc::Value(Box::new(self))
   }
 }
 
-impl std::convert::From<Calc<CSSNumber>> for CSSNumber {
+impl core::convert::From<Calc<CSSNumber>> for CSSNumber {
   fn from(calc: Calc<CSSNumber>) -> CSSNumber {
     match calc {
       Calc::Value(v) => *v,
@@ -124,7 +124,7 @@ impl<'i> Parse<'i> for CSSInteger {
 impl ToCss for CSSInteger {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     cssparser::ToCss::to_css(self, dest)?;
     Ok(())
@@ -140,3 +140,8 @@ impl Zero for CSSInteger {
     *self == 0
   }
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

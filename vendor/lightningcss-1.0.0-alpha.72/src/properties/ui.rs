@@ -72,7 +72,7 @@ impl<'i> Parse<'i> for CursorImage<'i> {
 impl<'i> ToCss for CursorImage<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     self.url.to_css(dest)?;
 
@@ -167,7 +167,7 @@ impl<'i> Parse<'i> for Cursor<'i> {
 impl<'i> ToCss for Cursor<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     for image in &self.images {
       image.to_css(dest)?;
@@ -369,7 +369,7 @@ impl<'i> Parse<'i> for Appearance<'i> {
 impl<'i> ToCss for Appearance<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     dest.write_str(self.to_str())
   }
@@ -477,7 +477,7 @@ impl<'i> Parse<'i> for ColorScheme {
 impl ToCss for ColorScheme {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     if self.is_empty() {
       return dest.write_str("normal");
@@ -603,3 +603,8 @@ fn define_var<'i>(name: &'static str, value: Token<'static>) -> Property<'i> {
     value: TokenList(vec![TokenOrValue::Token(value)]),
   })
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

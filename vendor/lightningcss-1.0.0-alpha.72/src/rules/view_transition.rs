@@ -149,7 +149,7 @@ impl<'i> ViewTransitionRule<'i> {
 impl<'i> ToCss for ViewTransitionRule<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     #[cfg(feature = "sourcemap")]
     dest.add_mapping(self.loc);
@@ -174,7 +174,7 @@ impl<'i> ToCss for ViewTransitionRule<'i> {
 impl<'i> ToCss for ViewTransitionProperty<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     macro_rules! property {
       ($prop: literal, $value: expr) => {{
@@ -195,3 +195,8 @@ impl<'i> ToCss for ViewTransitionProperty<'i> {
     }
   }
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

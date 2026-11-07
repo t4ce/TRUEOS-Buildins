@@ -1,3 +1,4 @@
+use alloc::{vec::Vec, vec};
 use super::Rect;
 use trueos::ui4_winit::{Error, SceneTarget};
 use trueos::vgpu::*;

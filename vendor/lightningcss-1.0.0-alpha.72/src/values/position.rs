@@ -170,7 +170,7 @@ impl<'i> Parse<'i> for Position {
 impl ToCss for Position {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     match (&self.x, &self.y) {
       (x_pos @ &HorizontalPosition::Side { side, offset: Some(_) }, &VerticalPosition::Length(ref y_lp))
@@ -362,7 +362,7 @@ impl<'i, S: Parse<'i>> Parse<'i> for PositionComponent<S> {
 impl<S: ToCss> ToCss for PositionComponent<S> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     use PositionComponent::*;
     match &self {
@@ -429,3 +429,8 @@ pub type HorizontalPosition = PositionComponent<HorizontalPositionKeyword>;
 
 /// A vertical position component.
 pub type VerticalPosition = PositionComponent<VerticalPositionKeyword>;
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

@@ -97,7 +97,7 @@ impl<'i> TryFrom<&Token<'i>> for Time {
 impl ToCss for Time {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     // 0.1s is shorter than 100ms
     // anything smaller is longer
@@ -124,13 +124,13 @@ impl ToCss for Time {
   }
 }
 
-impl std::convert::Into<Calc<Time>> for Time {
+impl core::convert::Into<Calc<Time>> for Time {
   fn into(self) -> Calc<Time> {
     Calc::Value(Box::new(self))
   }
 }
 
-impl std::convert::TryFrom<Calc<Time>> for Time {
+impl core::convert::TryFrom<Calc<Time>> for Time {
   type Error = ();
 
   fn try_from(calc: Calc<Time>) -> Result<Time, Self::Error> {
@@ -141,7 +141,7 @@ impl std::convert::TryFrom<Calc<Time>> for Time {
   }
 }
 
-impl std::ops::Mul<f32> for Time {
+impl core::ops::Mul<f32> for Time {
   type Output = Self;
 
   fn mul(self, other: f32) -> Time {
@@ -158,8 +158,8 @@ impl AddInternal for Time {
   }
 }
 
-impl std::cmp::PartialOrd<Time> for Time {
-  fn partial_cmp(&self, other: &Time) -> Option<std::cmp::Ordering> {
+impl core::cmp::PartialOrd<Time> for Time {
+  fn partial_cmp(&self, other: &Time) -> Option<core::cmp::Ordering> {
     self.to_ms().partial_cmp(&other.to_ms())
   }
 }
@@ -201,7 +201,12 @@ impl Sign for Time {
   }
 }
 
-impl_op!(Time, std::ops::Rem, rem);
-impl_op!(Time, std::ops::Add, add);
+impl_op!(Time, core::ops::Rem, rem);
+impl_op!(Time, core::ops::Add, add);
 
 impl_try_from_angle!(Time);
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

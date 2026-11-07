@@ -1,7 +1,11 @@
 //! Image references and frozen boxes only. Fetching, caching, decoding and GPU
 //! upload belong to the kernel image service; Hull never receives image bytes.
-use std::collections::{HashMap, HashSet, VecDeque};
-use std::time::{Duration, Instant};
+#[cfg(target_os = "trueos")]
+use num_traits::Float;
+use alloc::{string::{String, ToString}, vec::Vec, borrow::ToOwned, format, vec};
+use alloc::collections::VecDeque;
+use hashbrown::{HashMap, HashSet};
+use crate::platform::{Duration, Instant};
 use trueos::logl;
 use trueos::ui4_scene::{
     HULL_IMAGE_FAILED, HULL_IMAGE_READY, hull_image_release, hull_image_request, hull_image_reset,
@@ -277,7 +281,7 @@ impl Images {
             }
         }
         self.choose_favicon();
-        let mut changed = std::mem::take(&mut self.favicon_dirty);
+        let mut changed = core::mem::take(&mut self.favicon_dirty);
         // Chrome discovery stays inert until this navigation's content has
         // published; declared links and shared page target sizes settle first.
         if !self.published {
@@ -599,7 +603,7 @@ fn quad(
     }
 }
 
-fn report(message: std::fmt::Arguments<'_>) {
+fn report(message: core::fmt::Arguments<'_>) {
     logl::log(logl::level::ERROR, format_args!("hull: image {message}"));
 }
 

@@ -1,6 +1,6 @@
 //! The `@supports` rule.
 
-use std::collections::HashMap;
+use crate::collections::HashMap;
 
 use super::Location;
 use super::{CssRuleList, MinifyContext};
@@ -62,7 +62,7 @@ impl<'i, T: Clone> SupportsRule<'i, T> {
 impl<'a, 'i, T: ToCss> ToCss for SupportsRule<'i, T> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     #[cfg(feature = "sourcemap")]
     dest.add_mapping(self.loc);
@@ -339,7 +339,7 @@ impl<'i> SupportsCondition<'i> {
 
   fn to_css_with_parens_if_needed<W>(&self, dest: &mut Printer<W>, needs_parens: bool) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     if needs_parens {
       dest.write_char('(')?;
@@ -355,7 +355,7 @@ impl<'i> SupportsCondition<'i> {
 impl<'i> ToCss for SupportsCondition<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     match self {
       SupportsCondition::Not(condition) => {
@@ -424,3 +424,8 @@ impl<'i> ToCss for SupportsCondition<'i> {
     }
   }
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

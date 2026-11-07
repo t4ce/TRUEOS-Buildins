@@ -180,7 +180,7 @@ impl<'i, S: Parse<'i> + Default, const P: u8> Parse<'i> for GenericBorder<S, P> 
 impl<S: ToCss + Default + PartialEq, const P: u8> ToCss for GenericBorder<S, P> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     if *self == Self::default() {
       self.style.to_css(dest)?;
@@ -984,10 +984,10 @@ impl<'i> BorderHandler<'i> {
             if has_prop {
               if !$is_logical || ($block_start.$key == $block_end.$key && $block_end.$key == $inline_start.$key && $inline_start.$key == $inline_end.$key) {
                 let rect = $prop {
-                  top: std::mem::take(&mut $block_start.$key).unwrap(),
-                  right: std::mem::take(&mut $inline_end.$key).unwrap(),
-                  bottom: std::mem::take(&mut $block_end.$key).unwrap(),
-                  left: std::mem::take(&mut $inline_start.$key).unwrap()
+                  top: core::mem::take(&mut $block_start.$key).unwrap(),
+                  right: core::mem::take(&mut $inline_end.$key).unwrap(),
+                  bottom: core::mem::take(&mut $block_end.$key).unwrap(),
+                  left: core::mem::take(&mut $inline_start.$key).unwrap()
                 };
                 prop!($prop => rect);
               }
@@ -1000,8 +1000,8 @@ impl<'i> BorderHandler<'i> {
             let has_prop = $start.$key.is_some() && $end.$key.is_some();
             if has_prop {
               prop!($prop => $prop {
-                start: std::mem::take(&mut $start.$key).unwrap(),
-                end: std::mem::take(&mut $end.$key).unwrap(),
+                start: core::mem::take(&mut $start.$key).unwrap(),
+                end: core::mem::take(&mut $end.$key).unwrap(),
               });
               $end.$key = None;
             }
@@ -1216,8 +1216,8 @@ impl<'i> BorderHandler<'i> {
                 macro_rules! inline_prop {
                   ($key: ident, $left: ident, $right: ident) => {
                     if $inline_start.$key.is_some() && $inline_start.$key == $inline_end.$key {
-                      prop!($left => std::mem::take(&mut $inline_start.$key).unwrap());
-                      prop!($right => std::mem::take(&mut $inline_end.$key).unwrap());
+                      prop!($left => core::mem::take(&mut $inline_start.$key).unwrap());
+                      prop!($right => core::mem::take(&mut $inline_end.$key).unwrap());
                     }
                   }
                 }
@@ -1417,3 +1417,8 @@ fn is_border_property(property_id: &PropertyId) -> bool {
     _ => false,
   }
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

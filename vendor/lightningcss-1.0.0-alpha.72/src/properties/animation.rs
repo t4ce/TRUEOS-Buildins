@@ -1,6 +1,6 @@
 //! CSS properties related to keyframe animations.
 
-use std::borrow::Cow;
+use alloc::borrow::Cow;
 
 use crate::context::PropertyHandlerContext;
 use crate::declaration::{DeclarationBlock, DeclarationList};
@@ -48,7 +48,7 @@ pub enum AnimationName<'i> {
 impl<'i> ToCss for AnimationName<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     let css_module_animation_enabled =
       dest.css_module.as_ref().map_or(false, |css_module| css_module.config.animation);
@@ -253,7 +253,7 @@ impl<'i> Parse<'i> for ScrollTimeline {
 impl ToCss for ScrollTimeline {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     dest.write_str("scroll(")?;
 
@@ -356,7 +356,7 @@ impl<'i> Parse<'i> for ViewTimeline {
 impl ToCss for ViewTimeline {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     dest.write_str("view(")?;
     let mut needs_space = false;
@@ -448,7 +448,7 @@ impl<'i> AnimationAttachmentRange {
 
   fn to_css<W>(&self, dest: &mut Printer<W>, default: f32) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     match self {
       Self::Normal => dest.write_str("normal"),
@@ -489,7 +489,7 @@ impl<'i> Parse<'i> for AnimationRangeStart {
 impl ToCss for AnimationRangeStart {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     self.0.to_css(dest, 0.0)
   }
@@ -513,7 +513,7 @@ impl<'i> Parse<'i> for AnimationRangeEnd {
 impl ToCss for AnimationRangeEnd {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     self.0.to_css(dest, 1.0)
   }
@@ -558,7 +558,7 @@ impl<'i> Parse<'i> for AnimationRange {
 impl ToCss for AnimationRange {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     self.start.to_css(dest)?;
 
@@ -659,7 +659,7 @@ impl<'i> Parse<'i> for Animation<'i> {
 impl<'i> ToCss for Animation<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     match &self.name {
       AnimationName::None => {}
@@ -891,17 +891,17 @@ impl<'i> AnimationHandler<'i> {
 
     self.has_any = false;
 
-    let mut names = std::mem::take(&mut self.names);
-    let mut durations = std::mem::take(&mut self.durations);
-    let mut timing_functions = std::mem::take(&mut self.timing_functions);
-    let mut iteration_counts = std::mem::take(&mut self.iteration_counts);
-    let mut directions = std::mem::take(&mut self.directions);
-    let mut play_states = std::mem::take(&mut self.play_states);
-    let mut delays = std::mem::take(&mut self.delays);
-    let mut fill_modes = std::mem::take(&mut self.fill_modes);
-    let mut timelines_value = std::mem::take(&mut self.timelines);
-    let range_starts = std::mem::take(&mut self.range_starts);
-    let range_ends = std::mem::take(&mut self.range_ends);
+    let mut names = core::mem::take(&mut self.names);
+    let mut durations = core::mem::take(&mut self.durations);
+    let mut timing_functions = core::mem::take(&mut self.timing_functions);
+    let mut iteration_counts = core::mem::take(&mut self.iteration_counts);
+    let mut directions = core::mem::take(&mut self.directions);
+    let mut play_states = core::mem::take(&mut self.play_states);
+    let mut delays = core::mem::take(&mut self.delays);
+    let mut fill_modes = core::mem::take(&mut self.fill_modes);
+    let mut timelines_value = core::mem::take(&mut self.timelines);
+    let range_starts = core::mem::take(&mut self.range_starts);
+    let range_ends = core::mem::take(&mut self.range_ends);
 
     if let (
       Some((names, names_vp)),
@@ -936,7 +936,7 @@ impl<'i> AnimationHandler<'i> {
         Cow::Borrowed(timelines)
       } else if !intersection.contains(VendorPrefix::None) {
         // Prefixed animation shorthand does not support animation-timeline
-        Cow::Owned(std::iter::repeat(AnimationTimeline::Auto).take(len).collect())
+        Cow::Owned(core::iter::repeat(AnimationTimeline::Auto).take(len).collect())
       } else {
         Cow::Owned(SmallVec::new())
       };
@@ -1093,3 +1093,8 @@ fn is_animation_property(property_id: &PropertyId) -> bool {
     _ => false,
   }
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

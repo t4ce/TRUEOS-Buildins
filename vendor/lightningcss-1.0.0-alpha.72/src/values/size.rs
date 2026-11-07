@@ -34,7 +34,7 @@ where
 {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     self.0.to_css(dest)?;
     if self.1 != self.0 {
@@ -50,3 +50,8 @@ impl<T: IsCompatible> IsCompatible for Size2D<T> {
     self.0.is_compatible(browsers) && self.1.is_compatible(browsers)
   }
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

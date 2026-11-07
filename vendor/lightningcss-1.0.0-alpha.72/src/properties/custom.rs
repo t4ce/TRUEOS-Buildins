@@ -102,7 +102,7 @@ impl<'i> AsRef<str> for CustomPropertyName<'i> {
 impl<'i> ToCss for CustomPropertyName<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     match self {
       CustomPropertyName::Custom(c) => c.to_css(dest),
@@ -178,7 +178,7 @@ impl<'i> UnparsedProperty<'i> {
   #[cfg_attr(docsrs, doc(cfg(feature = "substitute_variables")))]
   pub fn substitute_variables<'x>(
     mut self,
-    vars: &std::collections::HashMap<&str, TokenList<'i>>,
+    vars: &crate::collections::HashMap<&str, TokenList<'i>>,
   ) -> Result<super::Property<'x>, ()> {
     use super::Property;
     use crate::stylesheet::PrinterOptions;
@@ -261,9 +261,9 @@ impl<'i> TokenOrValue<'i> {
 
 impl<'a> Eq for TokenOrValue<'a> {}
 
-impl<'a> std::hash::Hash for TokenOrValue<'a> {
-  fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-    let tag = std::mem::discriminant(self);
+impl<'a> core::hash::Hash for TokenOrValue<'a> {
+  fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
+    let tag = core::mem::discriminant(self);
     tag.hash(state);
     match self {
       TokenOrValue::Token(t) => t.hash(state),
@@ -487,7 +487,7 @@ fn try_parse_color_token<'i, 't>(
 impl<'i> TokenList<'i> {
   pub(crate) fn to_css<W>(&self, dest: &mut Printer<W>, is_custom_property: bool) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     for token_or_value in self.0.iter() {
       match token_or_value {
@@ -556,7 +556,7 @@ impl<'i> TokenList<'i> {
 
   pub(crate) fn to_css_raw<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     for token_or_value in &self.0 {
       match token_or_value {
@@ -842,7 +842,7 @@ impl<'a> ToCss for Token<'a> {
   #[inline]
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     use cssparser::ToCss;
     match self {
@@ -924,9 +924,9 @@ impl<'a> ToCss for Token<'a> {
 
 impl<'a> Eq for Token<'a> {}
 
-impl<'a> std::hash::Hash for Token<'a> {
-  fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-    let tag = std::mem::discriminant(self);
+impl<'a> core::hash::Hash for Token<'a> {
+  fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
+    let tag = core::mem::discriminant(self);
     tag.hash(state);
     match self {
       Token::Ident(x) => x.hash(state),
@@ -1129,19 +1129,19 @@ impl<'i> TokenList<'i> {
   /// Substitutes variables with the provided values.
   #[cfg(feature = "substitute_variables")]
   #[cfg_attr(docsrs, doc(cfg(feature = "substitute_variables")))]
-  pub fn substitute_variables(&mut self, vars: &std::collections::HashMap<&str, TokenList<'i>>) {
+  pub fn substitute_variables(&mut self, vars: &crate::collections::HashMap<&str, TokenList<'i>>) {
     self.visit(&mut VarInliner { vars }).unwrap()
   }
 }
 
 #[cfg(feature = "substitute_variables")]
 struct VarInliner<'a, 'i> {
-  vars: &'a std::collections::HashMap<&'a str, TokenList<'i>>,
+  vars: &'a crate::collections::HashMap<&'a str, TokenList<'i>>,
 }
 
 #[cfg(feature = "substitute_variables")]
 impl<'a, 'i> crate::visitor::Visitor<'i> for VarInliner<'a, 'i> {
-  type Error = std::convert::Infallible;
+  type Error = core::convert::Infallible;
 
   fn visit_types(&self) -> crate::visitor::VisitTypes {
     crate::visit_types!(TOKENS | VARIABLES)
@@ -1149,7 +1149,7 @@ impl<'a, 'i> crate::visitor::Visitor<'i> for VarInliner<'a, 'i> {
 
   fn visit_token_list(&mut self, tokens: &mut TokenList<'i>) -> Result<(), Self::Error> {
     let mut i = 0;
-    let mut seen = std::collections::HashSet::new();
+    let mut seen = crate::collections::HashSet::new();
     while i < tokens.0.len() {
       let token = &mut tokens.0[i];
       token.visit(self).unwrap();
@@ -1210,7 +1210,7 @@ impl<'i> Variable<'i> {
 
   fn to_css<W>(&self, dest: &mut Printer<W>, is_custom_property: bool) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     dest.write_str("var(")?;
     self.name.to_css(dest)?;
@@ -1335,7 +1335,7 @@ impl<'i> Parse<'i> for EnvironmentVariableName<'i> {
 impl<'i> ToCss for EnvironmentVariableName<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     match self {
       EnvironmentVariableName::UA(ua) => ua.to_css(dest),
@@ -1381,7 +1381,7 @@ impl<'i> EnvironmentVariable<'i> {
 
   pub(crate) fn to_css<W>(&self, dest: &mut Printer<W>, is_custom_property: bool) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     dest.write_str("env(")?;
     self.name.to_css(dest)?;
@@ -1428,7 +1428,7 @@ pub struct Function<'i> {
 impl<'i> Function<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>, is_custom_property: bool) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     self.name.to_css(dest)?;
     dest.write_char('(')?;
@@ -1552,7 +1552,7 @@ impl<'i> UnresolvedColor<'i> {
 
   fn to_css<W>(&self, dest: &mut Printer<W>, is_custom_property: bool) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     match self {
       UnresolvedColor::RGB { r, g, b, alpha } => {
@@ -1625,3 +1625,8 @@ impl<'i> UnresolvedColor<'i> {
     }
   }
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

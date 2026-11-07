@@ -99,10 +99,11 @@
 
 #![warn(missing_docs)]
 
-use std::any::Any;
-use std::ops::ControlFlow;
-use std::path::{Path, PathBuf};
-use std::{fmt, io};
+use alloc::{boxed::Box, vec::Vec, string::String};
+use core::any::Any;
+use core::ops::ControlFlow;
+use core::fmt;
+use crate::platform::{io, Path, PathBuf};
 
 /// Unique identifier for a data transfer.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -238,6 +239,9 @@ fn default_try_as_file_paths<T: TypedData + ?Sized>(data: &T) -> io::Result<Vec<
 // drag-and-drop for web targets and the web platform can't directly access paths anyway.
 #[cfg(not(any(unix, windows, target_os = "redox", target_os = "wasi", target_os = "hermit")))]
 fn default_try_as_file_paths<T: TypedData + ?Sized>(_: &T) -> io::Result<Vec<PathBuf>> {
+    #[cfg(all(feature = "trueos-native", target_os = "trueos"))]
+    return Err(io::Error::new(io::ErrorKind::Other, "file URI conversion is unsupported"));
+    #[cfg(not(all(feature = "trueos-native", target_os = "trueos")))]
     Err(io::ErrorKind::Unsupported.into())
 }
 
@@ -270,7 +274,7 @@ pub trait TypedData: Any + fmt::Debug + Send + Sync {
     fn try_as_bytes(&self) -> io::Result<Vec<u8>> {
         let mut reader = self
             .try_read()
-            .ok_or_else(|| io::Error::other("This `TypedData` is not readable as bytes"))?;
+            .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "This `TypedData` is not readable as bytes"))?;
 
         let mut out = Vec::new();
 
@@ -319,7 +323,7 @@ pub trait TypedData: Any + fmt::Debug + Send + Sync {
 // basis.
 impl PartialEq for dyn TypedData {
     fn eq(&self, other: &Self) -> bool {
-        std::ptr::addr_eq(self, other)
+        core::ptr::addr_eq(self, other)
     }
 }
 
@@ -395,7 +399,7 @@ pub enum SendData {
     Uris(Vec<String>),
     /// String
     ///
-    /// This can also be constructed with the [`From<String>`](std::string::String) implementation.
+    /// This can also be constructed with the [`From<String>`](core::string::String) implementation.
     String(String),
     /// Binary blob
     ///

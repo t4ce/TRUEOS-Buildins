@@ -97,7 +97,7 @@ impl<'i> Parse<'i> for Size {
 impl ToCss for Size {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     use Size::*;
     match self {
@@ -230,7 +230,7 @@ impl<'i> Parse<'i> for MaxSize {
 impl ToCss for MaxSize {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     use MaxSize::*;
     match self {
@@ -339,7 +339,7 @@ impl<'i> Parse<'i> for AspectRatio {
 impl ToCss for AspectRatio {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     if self.auto {
       dest.write_str("auto")?;
@@ -504,7 +504,7 @@ impl SizeHandler {
 
     macro_rules! property {
       ($prop: ident, $val: ident, $size: ident) => {{
-        if let Some(val) = std::mem::take(&mut self.$val) {
+        if let Some(val) = core::mem::take(&mut self.$val) {
           match val {
             $size::Stretch(VendorPrefix::None) => prefix!($prop, $size, Stretch),
             $size::MinContent(VendorPrefix::None) => prefix!($prop, $size, MinContent),
@@ -542,3 +542,8 @@ impl SizeHandler {
     logical!(MaxInlineSize, max_inline_size, MaxWidth, MaxSize);
   }
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

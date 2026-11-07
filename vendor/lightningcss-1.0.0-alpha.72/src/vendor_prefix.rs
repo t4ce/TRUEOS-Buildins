@@ -71,7 +71,7 @@ impl VendorPrefix {
 impl ToCss for VendorPrefix {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     cssparser::ToCss::to_css(self, dest)?;
     Ok(())
@@ -79,9 +79,9 @@ impl ToCss for VendorPrefix {
 }
 
 impl cssparser::ToCss for VendorPrefix {
-  fn to_css<W>(&self, dest: &mut W) -> std::fmt::Result
+  fn to_css<W>(&self, dest: &mut W) -> core::fmt::Result
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     match *self {
       VendorPrefix::WebKit => dest.write_str("-webkit-"),
@@ -184,3 +184,8 @@ impl schemars::JsonSchema for VendorPrefix {
     "VendorPrefix".into()
   }
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

@@ -9,8 +9,8 @@ use crate::values::string::CowArcStr;
 use crate::visitor::Visit;
 use cssparser::*;
 use smallvec::SmallVec;
-use std::borrow::Borrow;
-use std::ops::Deref;
+use alloc::borrow::Borrow;
+use core::ops::Deref;
 
 use super::string::impl_string_type;
 
@@ -47,7 +47,7 @@ impl<'i> Parse<'i> for CustomIdent<'i> {
 impl<'i> ToCss for CustomIdent<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     self.to_css_with_options(dest, true)
   }
@@ -61,7 +61,7 @@ impl<'i> CustomIdent<'i> {
     enabled_css_modules: bool,
   ) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     let css_module_custom_idents_enabled = enabled_css_modules
       && dest
@@ -118,7 +118,7 @@ impl<'i> Parse<'i> for NoneOrCustomIdentList<'i> {
 impl<'i> ToCss for NoneOrCustomIdentList<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     match self {
       NoneOrCustomIdentList::None => dest.write_str("none"),
@@ -165,7 +165,7 @@ impl<'i> Parse<'i> for DashedIdent<'i> {
 impl<'i> ToCss for DashedIdent<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     dest.write_dashed_ident(&self.0, true)
   }
@@ -232,7 +232,7 @@ impl<'i> ParseWithOptions<'i> for DashedIdentReference<'i> {
 impl<'i> ToCss for DashedIdentReference<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     match &mut dest.css_module {
       Some(css_module) if css_module.config.dashed_idents => {
@@ -267,7 +267,7 @@ impl<'i> Parse<'i> for Ident<'i> {
 impl<'i> ToCss for Ident<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     serialize_identifier(&self.0, dest)?;
     Ok(())
@@ -275,9 +275,9 @@ impl<'i> ToCss for Ident<'i> {
 }
 
 impl<'i> cssparser::ToCss for Ident<'i> {
-  fn to_css<W>(&self, dest: &mut W) -> std::fmt::Result
+  fn to_css<W>(&self, dest: &mut W) -> core::fmt::Result
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     serialize_identifier(&self.0, dest)
   }
@@ -286,3 +286,8 @@ impl<'i> cssparser::ToCss for Ident<'i> {
 impl_string_type!(Ident);
 impl_string_type!(CustomIdent);
 impl_string_type!(DashedIdent);
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

@@ -1,9 +1,8 @@
 //! Small terminal companion: output, one URL prompt, and an explicit script run.
-use std::{
-    collections::VecDeque,
-    io::{self, Write},
-    time::Duration,
-};
+use alloc::{string::String, vec::Vec, borrow::ToOwned, format};
+use alloc::collections::VecDeque;
+use core::time::Duration;
+use crossterm::io::{self, Write};
 
 use crossterm::{
     cursor::{Hide, MoveTo, Show},
@@ -72,7 +71,7 @@ impl Console {
             EnableBracketedPaste,
             Hide
         )?;
-        #[cfg(unix)]
+        #[cfg(any(unix, target_os = "trueos"))]
         event::discard_buffered_input()?;
         self.dirty = true;
         self.draw()?;
@@ -101,7 +100,7 @@ impl Console {
     }
 
     fn park(&mut self) -> io::Result<()> {
-        #[cfg(unix)]
+        #[cfg(any(unix, target_os = "trueos"))]
         let _ = event::discard_buffered_input();
         let restored = self.restore();
         if let Some(lease) = self.lease.take() {
@@ -141,7 +140,7 @@ impl Console {
                 Event::Resize(_, _) => self.dirty = true,
                 Event::Paste(text) => {
                     if let Some(script) = &mut self.script {
-                        script.append(&std::mem::take(&mut self.input));
+                        script.append(&core::mem::take(&mut self.input));
                         script.append(&text);
                     } else {
                         let text = text.trim_matches(['\r', '\n']);
@@ -215,8 +214,8 @@ impl Console {
     }
 
     fn submit(&mut self, commands: &mut Vec<Command>) {
-        let input = std::mem::take(&mut self.input);
-        let overflow = std::mem::take(&mut self.input_overflow);
+        let input = core::mem::take(&mut self.input);
+        let overflow = core::mem::take(&mut self.input_overflow);
         if self.script.is_some() {
             if overflow {
                 self.script = None;
@@ -323,5 +322,8 @@ impl Drop for Console {
 }
 
 fn lease_error(error: vshell::TerminalLeaseError) -> io::Error {
-    io::Error::other(error.to_string())
+    io::Error::new(io::ErrorKind::Other, match error {
+        vshell::TerminalLeaseError::Unsupported => "terminal lease unsupported",
+        _ => "terminal lease operation failed",
+    })
 }

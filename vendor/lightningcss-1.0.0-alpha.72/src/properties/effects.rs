@@ -118,7 +118,7 @@ impl<'i> Parse<'i> for Filter<'i> {
 impl<'i> ToCss for Filter<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     match self {
       Filter::Blur(val) => {
@@ -280,7 +280,7 @@ impl<'i> Parse<'i> for DropShadow {
 impl ToCss for DropShadow {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     self.x_offset.to_css(dest)?;
     dest.write_char(' ')?;
@@ -346,7 +346,7 @@ impl<'i> Parse<'i> for FilterList<'i> {
 impl<'i> ToCss for FilterList<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     match self {
       FilterList::None => dest.write_str("none"),
@@ -453,3 +453,8 @@ enum_property! {
     PlusLighter,
   }
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

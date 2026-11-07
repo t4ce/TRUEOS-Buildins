@@ -17,7 +17,7 @@ use crate::vendor_prefix::VendorPrefix;
 #[cfg(feature = "visitor")]
 use crate::visitor::Visit;
 use cssparser::*;
-use std::f32::consts::PI;
+use core::f32::consts::PI;
 
 /// A value for the [transform](https://www.w3.org/TR/2019/CR-css-transforms-1-20190214/#propdef-transform) property.
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -49,7 +49,7 @@ impl<'i> Parse<'i> for TransformList {
 impl ToCss for TransformList {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     if self.0.is_empty() {
       dest.write_str("none")?;
@@ -124,7 +124,7 @@ impl ToCss for TransformList {
 impl TransformList {
   fn to_css_base<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     let mut first = true;
     for item in &self.0 {
@@ -1024,7 +1024,7 @@ impl<'i> Parse<'i> for Transform {
 impl ToCss for Transform {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     use Transform::*;
     match self {
@@ -1474,7 +1474,7 @@ impl<'i> Parse<'i> for Translate {
 impl ToCss for Translate {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     match self {
       Translate::None => {
@@ -1575,7 +1575,7 @@ impl<'i> Parse<'i> for Rotate {
 impl ToCss for Rotate {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     match self {
       Rotate::None => dest.write_str("none"),
@@ -1680,7 +1680,7 @@ impl<'i> Parse<'i> for Scale {
 impl ToCss for Scale {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     match self {
       Scale::None => {
@@ -1808,10 +1808,10 @@ impl TransformHandler {
 
     self.has_any = false;
 
-    let transform = std::mem::take(&mut self.transform);
-    let translate = std::mem::take(&mut self.translate);
-    let rotate = std::mem::take(&mut self.rotate);
-    let scale = std::mem::take(&mut self.scale);
+    let transform = core::mem::take(&mut self.transform);
+    let translate = core::mem::take(&mut self.translate);
+    let rotate = core::mem::take(&mut self.rotate);
+    let scale = core::mem::take(&mut self.scale);
 
     if let Some((transform, prefix)) = transform {
       let prefix = context.targets.prefixes(prefix, Feature::Transform);
@@ -1831,3 +1831,8 @@ impl TransformHandler {
     }
   }
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

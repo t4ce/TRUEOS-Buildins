@@ -84,7 +84,7 @@ impl<'i> Parse<'i> for BorderImageRepeat {
 impl ToCss for BorderImageRepeat {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     self.horizontal.to_css(dest)?;
     if self.horizontal != self.vertical {
@@ -171,7 +171,7 @@ impl<'i> Parse<'i> for BorderImageSlice {
 impl ToCss for BorderImageSlice {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     self.offsets.to_css(dest)?;
     if self.fill {
@@ -300,7 +300,7 @@ impl<'i> BorderImage<'i> {
     dest: &mut Printer<W>,
   ) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     if *source != Image::default() {
       source.to_css(dest)?;
@@ -336,7 +336,7 @@ impl<'i> BorderImage<'i> {
 impl<'i> ToCss for BorderImage<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     BorderImage::to_css_internal(&self.source, &self.slice, &self.width, &self.outset, &self.repeat, dest)
   }
@@ -502,11 +502,11 @@ impl<'i> BorderImageHandler<'i> {
       };
     }
 
-    let source = std::mem::take(&mut self.source);
-    let slice = std::mem::take(&mut self.slice);
-    let width = std::mem::take(&mut self.width);
-    let outset = std::mem::take(&mut self.outset);
-    let repeat = std::mem::take(&mut self.repeat);
+    let source = core::mem::take(&mut self.source);
+    let slice = core::mem::take(&mut self.slice);
+    let width = core::mem::take(&mut self.width);
+    let outset = core::mem::take(&mut self.outset);
+    let repeat = core::mem::take(&mut self.repeat);
 
     if source.is_some() && slice.is_some() && width.is_some() && outset.is_some() && repeat.is_some() {
       let mut border_image = BorderImage {
@@ -587,3 +587,8 @@ fn is_border_image_property(property_id: &PropertyId) -> bool {
     _ => false,
   }
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

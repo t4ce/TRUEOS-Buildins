@@ -398,7 +398,7 @@ impl<'i> Parse<'i> for SyntaxString {
 impl ToCss for SyntaxString {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     dest.write_char('"')?;
     match self {
@@ -424,7 +424,7 @@ impl ToCss for SyntaxString {
 impl ToCss for SyntaxComponent {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     self.kind.to_css(dest)?;
     match self.multiplier {
@@ -438,7 +438,7 @@ impl ToCss for SyntaxComponent {
 impl ToCss for SyntaxComponentKind {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     use SyntaxComponentKind::*;
     let s = match self {
@@ -466,7 +466,7 @@ impl ToCss for SyntaxComponentKind {
 impl<'i> ToCss for ParsedComponent<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     use ParsedComponent::*;
     match self {
@@ -665,3 +665,8 @@ mod tests {
     parse_error_test("color>");
   }
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

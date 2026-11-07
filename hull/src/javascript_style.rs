@@ -1,4 +1,5 @@
 //! Inline CSS through Lightning CSS; each authored field commits only once.
+use alloc::{string::{String, ToString}, vec::Vec, borrow::ToOwned, format, vec};
 use super::{DomResult, Gateway, MAX_STRING_BYTES, failure};
 use lightningcss::{
     declaration::DeclarationBlock,
@@ -10,8 +11,8 @@ use lightningcss::{
 };
 use serde_json::{Value, json};
 use static_self::IntoOwned;
-use std::collections::HashSet;
-pub(super) type Locks = std::rc::Rc<std::cell::RefCell<HashSet<(usize, String)>>>;
+use hashbrown::HashSet;
+pub(super) type Locks = alloc::rc::Rc<core::cell::RefCell<HashSet<(usize, String)>>>;
 const MAX_FIELDS: usize = 4096;
 const MAX_DECLARATIONS: usize = 256;
 fn valid(property: &Property) -> bool {

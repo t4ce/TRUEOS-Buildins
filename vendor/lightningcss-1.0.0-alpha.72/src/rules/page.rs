@@ -143,7 +143,7 @@ pub struct PageMarginRule<'i> {
 impl<'i> ToCss for PageMarginRule<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     #[cfg(feature = "sourcemap")]
     dest.add_mapping(self.loc);
@@ -211,7 +211,7 @@ impl<'i> PageRule<'i> {
 impl<'i> ToCss for PageRule<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     #[cfg(feature = "sourcemap")]
     dest.add_mapping(self.loc);
@@ -284,7 +284,7 @@ impl<'i> ToCss for PageRule<'i> {
 impl<'i> ToCss for PageSelector<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     if let Some(name) = &self.name {
       dest.write_str(&name)?;
@@ -376,3 +376,8 @@ impl<'a, 'i> RuleBodyItemParser<'i, (), ParserError<'i>> for PageRuleParser<'a, 
     true
   }
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

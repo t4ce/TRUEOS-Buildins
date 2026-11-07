@@ -171,7 +171,7 @@ impl<'i> Parse<'i> for StrokeDasharray {
 impl ToCss for StrokeDasharray {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     match self {
       StrokeDasharray::None => dest.write_str("none"),
@@ -310,3 +310,8 @@ pub enum ImageRendering {
   /// The UA shall optimize quality over speed.
   OptimizeQuality,
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

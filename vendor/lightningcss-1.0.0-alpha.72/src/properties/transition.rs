@@ -85,7 +85,7 @@ impl<'i> Parse<'i> for Transition<'i> {
 impl<'i> ToCss for Transition<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     self.property.to_css(dest)?;
     if !self.duration.is_zero() || !self.delay.is_zero() {
@@ -250,10 +250,10 @@ impl<'i> TransitionHandler<'i> {
 
     self.has_any = false;
 
-    let mut properties = std::mem::take(&mut self.properties);
-    let mut durations = std::mem::take(&mut self.durations);
-    let mut delays = std::mem::take(&mut self.delays);
-    let mut timing_functions = std::mem::take(&mut self.timing_functions);
+    let mut properties = core::mem::take(&mut self.properties);
+    let mut durations = core::mem::take(&mut self.durations);
+    let mut delays = core::mem::take(&mut self.delays);
+    let mut timing_functions = core::mem::take(&mut self.timing_functions);
 
     let rtl_properties = if let Some((properties, _)) = &mut properties {
       expand_properties(properties, context)
@@ -570,3 +570,8 @@ fn get_logical_properties(property_id: &PropertyId) -> LogicalPropertyId {
     _ => None,
   }
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

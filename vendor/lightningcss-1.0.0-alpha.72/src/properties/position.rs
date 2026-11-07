@@ -57,7 +57,7 @@ impl<'i> Parse<'i> for Position {
 impl ToCss for Position {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     match self {
       Position::Static => dest.write_str("static"),
@@ -119,7 +119,7 @@ impl<'i> PropertyHandler<'i> for PositionHandler {
       return;
     }
 
-    if let Some(position) = std::mem::take(&mut self.position) {
+    if let Some(position) = core::mem::take(&mut self.position) {
       match position {
         Position::Sticky(mut prefix) => {
           prefix = context.targets.prefixes(prefix, Feature::Sticky);
@@ -136,3 +136,8 @@ impl<'i> PropertyHandler<'i> for PositionHandler {
     }
   }
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

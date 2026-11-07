@@ -1,5 +1,19 @@
 # Apps start scripts
 
+Apps uses the kernel's native HTTP/TLS fetch service. Each request is bounded
+to 90 seconds, with a 1 MiB catalog limit and a 128 MiB archive limit before
+body accumulation. Apps retains catalog parsing and its SHA-256 verification
+policy; verified archives are durably published through typed filesystem writes
+before AppDB import or launch. Dropping a download cancels its native operation.
+Diagnostics report endpoint categories, elapsed time, native status codes and
+completed byte counts; transport details belong to the kernel service.
+
+Host parser, mouse, script and native transport ownership tests can be run with:
+
+```sh
+CARGO_TARGET_DIR=../../TRUEOS/tgt/apps-boundary-tests cargo +nightly-2026-07-10 test --manifest-path tests/Cargo.toml --target x86_64-unknown-linux-gnu
+```
+
 Apps consumes `vFile:launch` before opening its interactive UI. Each line
 is `pull NAME_OR_ID` or `launch NAME_OR_ID`; blank lines and comments are ignored.
 It resolves the catalog entry, downloads and verifies the blueprint, and launches

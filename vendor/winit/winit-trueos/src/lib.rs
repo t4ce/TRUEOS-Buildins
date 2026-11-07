@@ -3,6 +3,12 @@
 //! A TRUEOS window has a triple-buffered scene behind a retained double-buffered
 //! UI layer. Released UI buffers can be scanned directly; UI4 synchronizes their
 //! producer/display ownership.
+#![cfg_attr(all(feature = "trueos-native", target_os = "trueos"), no_std)]
+
+#[macro_use]
+extern crate alloc;
+use alloc::boxed::Box;
+mod platform;
 mod abi;
 mod device_input;
 mod event_loop;

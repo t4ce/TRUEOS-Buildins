@@ -370,7 +370,7 @@ impl<'i> Parse<'i> for ImageSet<'i> {
 impl<'i> ToCss for ImageSet<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     self.vendor_prefix.to_css(dest)?;
     dest.write_str("image-set(")?;
@@ -447,7 +447,7 @@ impl<'i> Parse<'i> for ImageSetOption<'i> {
 impl<'i> ImageSetOption<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>, is_prefixed: bool) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     match &self.image {
       // Prefixed syntax didn't allow strings, only url()
@@ -478,7 +478,7 @@ impl<'i> ImageSetOption<'i> {
     // Safari only supports the x resolution unit in image-set().
     // In other places, x was added as an alias later.
     // Temporarily ignore the targets while printing here.
-    let targets = std::mem::take(&mut dest.targets.current);
+    let targets = core::mem::take(&mut dest.targets.current);
     self.resolution.to_css(dest)?;
     dest.targets.current = targets;
 
@@ -496,3 +496,8 @@ fn parse_file_type<'i, 't>(input: &mut Parser<'i, 't>) -> Result<CowRcStr<'i>, P
   input.expect_function_matching("type")?;
   input.parse_nested_block(|input| Ok(input.expect_string_cloned()?))
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

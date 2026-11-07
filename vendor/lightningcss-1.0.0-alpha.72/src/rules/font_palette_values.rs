@@ -204,7 +204,7 @@ impl<'i> Parse<'i> for BasePalette {
 impl ToCss for BasePalette {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     match self {
       BasePalette::Light => dest.write_str("light"),
@@ -236,7 +236,7 @@ impl<'i> Parse<'i> for OverrideColors {
 impl ToCss for OverrideColors {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     (self.index as CSSInteger).to_css(dest)?;
     dest.write_char(' ')?;
@@ -360,7 +360,7 @@ impl<'i> FontPaletteValuesRule<'i> {
 impl<'i> ToCss for FontPaletteValuesRule<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     #[cfg(feature = "sourcemap")]
     dest.add_mapping(self.loc);
@@ -386,7 +386,7 @@ impl<'i> ToCss for FontPaletteValuesRule<'i> {
 impl<'i> ToCss for FontPaletteValuesProperty<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     macro_rules! property {
       ($prop: literal, $value: expr) => {{
@@ -408,3 +408,8 @@ impl<'i> ToCss for FontPaletteValuesProperty<'i> {
     }
   }
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

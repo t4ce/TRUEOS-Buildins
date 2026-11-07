@@ -312,7 +312,7 @@ impl<'i> Parse<'i> for Mask<'i> {
 impl<'i> ToCss for Mask<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     self.image.to_css(dest)?;
 
@@ -429,7 +429,7 @@ impl<'i> Parse<'i> for ClipPath<'i> {
 impl<'i> ToCss for ClipPath<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     match self {
       ClipPath::None => dest.write_str("none"),
@@ -518,7 +518,7 @@ impl<'i> Parse<'i> for MaskBorder<'i> {
 impl<'i> ToCss for MaskBorder<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     BorderImage::to_css_internal(&self.source, &self.slice, &self.width, &self.outset, &self.repeat, dest)?;
     if self.mode != MaskBorderMode::default() {
@@ -771,14 +771,14 @@ impl<'i> MaskHandler<'i> {
   }
 
   fn flush_mask(&mut self, dest: &mut DeclarationList<'i>, context: &mut PropertyHandlerContext<'i, '_>) {
-    let mut images = std::mem::take(&mut self.images);
-    let mut positions = std::mem::take(&mut self.positions);
-    let mut sizes = std::mem::take(&mut self.sizes);
-    let mut repeats = std::mem::take(&mut self.repeats);
-    let mut clips = std::mem::take(&mut self.clips);
-    let mut origins = std::mem::take(&mut self.origins);
-    let mut composites = std::mem::take(&mut self.composites);
-    let mut modes = std::mem::take(&mut self.modes);
+    let mut images = core::mem::take(&mut self.images);
+    let mut positions = core::mem::take(&mut self.positions);
+    let mut sizes = core::mem::take(&mut self.sizes);
+    let mut repeats = core::mem::take(&mut self.repeats);
+    let mut clips = core::mem::take(&mut self.clips);
+    let mut origins = core::mem::take(&mut self.origins);
+    let mut composites = core::mem::take(&mut self.composites);
+    let mut modes = core::mem::take(&mut self.modes);
 
     if let (
       Some((images, images_vp)),
@@ -973,13 +973,13 @@ impl<'i> MaskHandler<'i> {
       let mut needs_composites = false;
       let mut needs_modes = false;
       for mask in &mut webkit {
-        let composite = std::mem::take(&mut mask.composite);
+        let composite = core::mem::take(&mut mask.composite);
         if composite != MaskComposite::default() {
           needs_composites = true;
         }
         composites.push(composite.into());
 
-        let mode = std::mem::take(&mut mask.mode);
+        let mode = core::mem::take(&mut mask.mode);
         if mode != MaskMode::default() {
           needs_modes = true;
         }
@@ -1004,12 +1004,12 @@ impl<'i> MaskHandler<'i> {
   }
 
   fn flush_mask_border(&mut self, dest: &mut DeclarationList<'i>, context: &mut PropertyHandlerContext<'i, '_>) {
-    let mut source = std::mem::take(&mut self.border_source);
-    let mut slice = std::mem::take(&mut self.border_slice);
-    let mut width = std::mem::take(&mut self.border_width);
-    let mut outset = std::mem::take(&mut self.border_outset);
-    let mut repeat = std::mem::take(&mut self.border_repeat);
-    let mut mode = std::mem::take(&mut self.border_mode);
+    let mut source = core::mem::take(&mut self.border_source);
+    let mut slice = core::mem::take(&mut self.border_slice);
+    let mut width = core::mem::take(&mut self.border_width);
+    let mut outset = core::mem::take(&mut self.border_outset);
+    let mut repeat = core::mem::take(&mut self.border_repeat);
+    let mut mode = core::mem::take(&mut self.border_mode);
 
     if let (
       Some((source, source_vp)),
@@ -1181,3 +1181,8 @@ pub(crate) fn get_webkit_mask_property(property_id: &PropertyId) -> Option<Prope
     _ => return None,
   })
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

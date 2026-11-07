@@ -1,5 +1,6 @@
-use std::collections::VecDeque;
-use std::sync::Mutex;
+use alloc::{vec::Vec};
+use alloc::collections::VecDeque;
+use crate::platform::Mutex;
 
 use crate::{KeyboardOutputEvent, PanEvent, PointerEvent};
 use winit_core::event::DeviceId;
@@ -117,7 +118,7 @@ impl InputQueue {
     pub(crate) fn take(&mut self) -> InputBatch {
         InputBatch {
             events: self.events.drain(..).collect(),
-            dropped: std::mem::take(&mut self.dropped),
+            dropped: core::mem::take(&mut self.dropped),
         }
     }
 }

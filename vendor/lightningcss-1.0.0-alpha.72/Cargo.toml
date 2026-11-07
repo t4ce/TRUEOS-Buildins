@@ -38,6 +38,7 @@ rustdoc-args = [
 ]
 
 [features]
+trueos-native = []
 browserslist = ["browserslist-rs"]
 bundler = [
     "dashmap",
@@ -135,6 +136,9 @@ harness = false
 [dependencies.ahash]
 version = "0.8.7"
 
+default-features = false
+features = ["no-rng"]
+
 [dependencies.bitflags]
 version = "2.2.1"
 
@@ -163,14 +167,22 @@ optional = true
 [dependencies.data-encoding]
 version = "2.3.2"
 
+default-features = false
+features = ["alloc"]
+
 [dependencies.indexmap]
 version = "2.2.6"
 features = ["serde"]
 
+default-features = false
+
 [dependencies.itertools]
 version = "0.10.1"
 
-[dependencies.lazy_static]
+default-features = false
+features = ["use_alloc"]
+
+[target.'cfg(not(target_os = "trueos"))'.dependencies.lazy_static]
 version = "1.4.0"
 
 [dependencies.lightningcss-derive]
@@ -187,7 +199,7 @@ optional = true
 [dependencies.pastey]
 version = "0.1.0"
 
-[dependencies.pathdiff]
+[target.'cfg(not(target_os = "trueos"))'.dependencies.pathdiff]
 version = "0.2.1"
 
 [dependencies.rayon]
@@ -204,8 +216,10 @@ optional = true
 
 [dependencies.serde]
 version = "1.0.228"
-features = ["derive"]
+features = ["derive", "alloc"]
 optional = true
+
+default-features = false
 
 [dependencies.serde-content]
 version = "0.1.2"
@@ -259,3 +273,17 @@ optional = true
 lto = true
 codegen-units = 1
 panic = "abort"
+
+[dependencies.hashbrown]
+version = "0.17"
+default-features = false
+features = ["default-hasher"]
+
+[dependencies.rustc-hash]
+version = "2"
+default-features = false
+
+[dependencies.num-traits]
+version = "0.2.19"
+default-features = false
+features = ["libm"]

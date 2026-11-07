@@ -291,7 +291,7 @@ impl<'i, V: Visitor<'i, AtRule>> Visit<'i, AtRule, V> for AtRule {
 }
 
 impl ToCss for AtRule {
-  fn to_css<W: std::fmt::Write>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError> {
+  fn to_css<W: core::fmt::Write>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError> {
     match self {
       AtRule::Tailwind(rule) => {
         let _ = rule.loc; // TODO: source maps
@@ -307,3 +307,8 @@ impl ToCss for AtRule {
     }
   }
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

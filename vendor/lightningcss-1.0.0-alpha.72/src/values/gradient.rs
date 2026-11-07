@@ -18,7 +18,7 @@ use crate::vendor_prefix::VendorPrefix;
 #[cfg(feature = "visitor")]
 use crate::visitor::Visit;
 use cssparser::*;
-use std::f32::consts::PI;
+use core::f32::consts::PI;
 
 #[cfg(feature = "serde")]
 use crate::serialization::ValueWrapper;
@@ -193,7 +193,7 @@ impl<'i> Parse<'i> for Gradient {
 impl ToCss for Gradient {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     let (f, prefix) = match self {
       Gradient::Linear(g) => ("linear-gradient(", Some(g.vendor_prefix)),
@@ -266,7 +266,7 @@ impl LinearGradient {
 
   fn to_css<W>(&self, dest: &mut Printer<W>, is_prefixed: bool) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     let angle = match &self.direction {
       LineDirection::Vertical(VerticalPositionKeyword::Bottom) => 180.0,
@@ -394,7 +394,7 @@ impl<'i> RadialGradient {
 impl ToCss for RadialGradient {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     if self.shape != EndingShape::default() {
       self.shape.to_css(dest)?;
@@ -499,7 +499,7 @@ impl LineDirection {
 
   fn to_css<W>(&self, dest: &mut Printer<W>, is_prefixed: bool) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     match self {
       LineDirection::Angle(angle) => angle.to_css(dest),
@@ -678,7 +678,7 @@ impl<'i> Parse<'i> for Circle {
 impl ToCss for Circle {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     match self {
       Circle::Radius(r) => r.to_css(dest),
@@ -758,7 +758,7 @@ impl<'i> Parse<'i> for Ellipse {
 impl ToCss for Ellipse {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     // The `ellipse` keyword is optional, so we don't emit it.
     match self {
@@ -833,7 +833,7 @@ impl ConicGradient {
 impl ToCss for ConicGradient {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     if !self.angle.is_zero() {
       dest.write_str("from ")?;
@@ -898,7 +898,7 @@ impl<'i, D: Parse<'i>> Parse<'i> for ColorStop<D> {
 impl<D: ToCss> ToCss for ColorStop<D> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     self.color.to_css(dest)?;
     if let Some(position) = &self.position {
@@ -938,7 +938,7 @@ pub enum GradientItem<D> {
 impl<D: ToCss> ToCss for GradientItem<D> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     match self {
       GradientItem::ColorStop(stop) => stop.to_css(dest),
@@ -1022,14 +1022,14 @@ fn parse_items<'i, 't, D: Parse<'i>>(
 }
 
 fn serialize_items<
-  D: ToCss + std::cmp::PartialEq<D> + std::ops::Mul<f32, Output = D> + TrySign + Clone + std::fmt::Debug,
+  D: ToCss + core::cmp::PartialEq<D> + core::ops::Mul<f32, Output = D> + TrySign + Clone + core::fmt::Debug,
   W,
 >(
   items: &Vec<GradientItem<DimensionPercentage<D>>>,
   dest: &mut Printer<W>,
 ) -> Result<(), PrinterError>
 where
-  W: std::fmt::Write,
+  W: core::fmt::Write,
 {
   let mut first = true;
   let mut last: Option<&GradientItem<DimensionPercentage<D>>> = None;
@@ -1154,7 +1154,7 @@ impl<'i> Parse<'i> for WebKitGradient {
 impl ToCss for WebKitGradient {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     match self {
       WebKitGradient::Linear { from, to, stops } => {
@@ -1257,7 +1257,7 @@ impl<'i> Parse<'i> for WebKitColorStop {
 impl ToCss for WebKitColorStop {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     if self.position == 0.0 {
       dest.write_str("from(")?;
@@ -1308,7 +1308,7 @@ impl<'i> Parse<'i> for WebKitGradientPoint {
 impl ToCss for WebKitGradientPoint {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     self.x.to_css(dest)?;
     dest.write_char(' ')?;
@@ -1353,7 +1353,7 @@ impl<'i, S: Parse<'i>> Parse<'i> for WebKitGradientPointComponent<S> {
 impl<S: ToCss + Clone + Into<LengthPercentage>> ToCss for WebKitGradientPointComponent<S> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     use WebKitGradientPointComponent::*;
     match &self {
@@ -1522,3 +1522,8 @@ fn convert_stops_to_webkit(items: &Vec<GradientItem<LengthPercentage>>) -> Resul
 
   Ok(stops)
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

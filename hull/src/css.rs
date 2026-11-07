@@ -1,7 +1,13 @@
 //! One-shot CSS parsing. HTML extraction stays in rp5; CSS syntax belongs to Lightning CSS.
-use std::collections::{HashMap, HashSet};
+use alloc::{string::{String, ToString}, vec::Vec, borrow::ToOwned, format, vec};
+use hashbrown::{HashMap, HashSet};
+#[cfg(not(target_os = "trueos"))]
 use std::sync::{Arc, RwLock};
-use std::time::{Duration, Instant};
+#[cfg(target_os = "trueos")]
+use alloc::rc::Rc;
+#[cfg(target_os = "trueos")]
+use core::cell::RefCell;
+use crate::platform::{Duration, Instant};
 
 use lightningcss::rules::CssRule;
 use lightningcss::stylesheet::{ParserOptions, StyleAttribute, StyleSheet};
@@ -87,7 +93,7 @@ impl Css {
                     origin: base.to_string(),
                     code: code.to_owned(),
                 });
-                let warnings = Arc::new(RwLock::new(Vec::new()));
+                let warnings = parse_warnings();
                 let options = ParserOptions {
                     filename: base.to_string(),
                     error_recovery: true,
@@ -144,7 +150,7 @@ impl Css {
     }
 
     fn parse_sheet(&mut self, code: &str, source: &Url) -> Option<usize> {
-        let warnings = Arc::new(RwLock::new(Vec::new()));
+        let warnings = parse_warnings();
         let options = ParserOptions {
             filename: source.to_string(),
             // Web stylesheets recover at invalid rules and declarations, so one
@@ -317,14 +323,24 @@ fn attribute<'a>(attrs: &'a [rp5::Attribute], name: &str) -> Option<&'a str> {
         .map(|attr| attr.value.as_str())
 }
 
-fn report(message: std::fmt::Arguments<'_>) {
+fn report(message: core::fmt::Arguments<'_>) {
     logl::log(logl::level::ERROR, format_args!("hull: {message}"));
 }
 
-fn report_recoveries<T: std::fmt::Display>(
-    warnings: &Arc<RwLock<Vec<T>>>,
-    context: std::fmt::Arguments<'_>,
+fn parse_warnings<'i>() -> lightningcss::stylesheet::ParserWarnings<'i> {
+    #[cfg(target_os = "trueos")]
+    { Rc::new(RefCell::new(Vec::new())) }
+    #[cfg(not(target_os = "trueos"))]
+    { Arc::new(RwLock::new(Vec::new())) }
+}
+
+fn report_recoveries(
+    warnings: &lightningcss::stylesheet::ParserWarnings<'_>,
+    context: core::fmt::Arguments<'_>,
 ) {
+    #[cfg(target_os = "trueos")]
+    let mut warnings = warnings.borrow_mut();
+    #[cfg(not(target_os = "trueos"))]
     let Ok(mut warnings) = warnings.write() else {
         report(format_args!("{context}: CSS parse warnings unavailable"));
         return;

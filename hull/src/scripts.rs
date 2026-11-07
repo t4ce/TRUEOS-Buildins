@@ -1,4 +1,5 @@
 //! Extract inert script sources. Extraction never parses or executes JavaScript.
+use alloc::{string::{String, ToString}, vec::Vec, borrow::ToOwned, vec};
 
 use rp5::{Document, Namespace, NodeId};
 use trueos::logl;
@@ -108,6 +109,6 @@ fn attribute<'a>(attrs: &'a [rp5::Attribute], name: &str) -> Option<&'a str> {
         .map(|attr| attr.value.as_str())
 }
 
-fn report(message: std::fmt::Arguments<'_>) {
+fn report(message: core::fmt::Arguments<'_>) {
     logl::log(logl::level::ERROR, format_args!("hull: {message}"));
 }

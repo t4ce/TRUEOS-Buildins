@@ -1,5 +1,6 @@
+use alloc::{vec::Vec};
 use crate::{InputDevice, abi, input, input_ext};
-use std::collections::BTreeMap;
+use alloc::collections::BTreeMap;
 use winit_core::event::{
     DeviceEvent, DeviceId, ElementState, MouseScrollDelta, RawKeyEvent, WindowEvent,
 };
@@ -87,7 +88,7 @@ impl DeviceInput {
     }
     fn reset_buttons(&mut self) -> Vec<(DeviceId, DeviceEvent)> {
         let mut events = Vec::new();
-        for (id, down) in std::mem::take(&mut self.buttons) {
+        for (id, down) in core::mem::take(&mut self.buttons) {
             for bit in 0..32 {
                 if down & (1 << bit) != 0 {
                     events.push((
@@ -111,7 +112,7 @@ impl DeviceInput {
         // is discarded until each reader catches up, avoiding historical key presses.
         let mut cursor = [abi::CursorEvent::default(); 256];
         let mut dropped = 0;
-        let cursor_started = std::time::Instant::now();
+        let cursor_started = crate::platform::Instant::now();
         let count = unsafe {
             abi::trueos_cabi_input_read_cursor_events_since(
                 self.cursor_seq,
@@ -137,7 +138,7 @@ impl DeviceInput {
         }
         let mut keyboard = [abi::KeyboardOutputEvent::default(); 256];
         dropped = 0;
-        let keyboard_started = std::time::Instant::now();
+        let keyboard_started = crate::platform::Instant::now();
         let count = unsafe {
             abi::trueos_cabi_input_read_keyboard_output_since(
                 self.keyboard_seq,

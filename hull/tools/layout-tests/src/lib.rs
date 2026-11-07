@@ -1,4 +1,7 @@
 #![allow(dead_code)]
+extern crate alloc;
+#[path = "../../../src/platform.rs"]
+mod platform;
 extern crate self as trueos;
 pub mod logl {
     use std::cell::RefCell;

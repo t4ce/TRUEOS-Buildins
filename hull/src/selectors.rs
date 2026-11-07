@@ -1,11 +1,12 @@
 //! Shared static CSS matching and bounded selectors for the script-visible DOM.
+use alloc::{string::String, vec::Vec, borrow::ToOwned, format, vec};
 use lightningcss::selector::{Component, Selector, SelectorList};
 use lightningcss::stylesheet::ParserOptions;
 use lightningcss::traits::ParseWithOptions;
 use rp5::{Document, NodeId as HtmlId, NodeKind};
-use std::cell::Cell;
-use std::collections::HashMap;
-use std::time::{Duration, Instant};
+use core::cell::Cell;
+use hashbrown::HashMap;
+use crate::platform::{Duration, Instant};
 
 #[derive(Clone, Copy, Default)]
 struct SiblingPosition {
@@ -24,7 +25,7 @@ pub(crate) struct MatchDom<'a> {
     deadline: Option<Instant>,
     exhausted: Cell<bool>,
     attributes: Vec<HashMap<&'a str, &'a str>>,
-    classes: Vec<std::collections::HashSet<&'a str>>,
+    classes: Vec<hashbrown::HashSet<&'a str>>,
     siblings: Vec<SiblingPosition>,
 }
 
@@ -34,7 +35,7 @@ impl<'a> MatchDom<'a> {
         let mut classes = Vec::with_capacity(document.nodes.len());
         for id in 0..document.nodes.len() {
             let mut node_attributes = HashMap::new();
-            let mut node_classes = std::collections::HashSet::new();
+            let mut node_classes = hashbrown::HashSet::new();
             if let Some((_, _, attrs)) = document.element(id) {
                 for attribute in attrs
                     .iter()

@@ -1,6 +1,6 @@
 //! CSS properties related to fonts.
 
-use std::collections::HashSet;
+use crate::collections::HashSet;
 
 use super::{Property, PropertyId};
 use crate::compat::Feature;
@@ -83,7 +83,7 @@ impl Default for AbsoluteFontWeight {
 impl ToCss for AbsoluteFontWeight {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     use AbsoluteFontWeight::*;
     match self {
@@ -264,7 +264,7 @@ impl Into<Percentage> for &FontStretch {
 impl ToCss for FontStretch {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     if dest.minify {
       let percentage: Percentage = self.into();
@@ -365,7 +365,7 @@ impl<'i> Parse<'i> for FontFamily<'i> {
 impl<'i> ToCss for FontFamily<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     match self {
       FontFamily::Generic(val) => val.to_css(dest),
@@ -414,7 +414,7 @@ impl<'i> Parse<'i> for FamilyName<'i> {
 impl<'i> ToCss for FamilyName<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     // Generic family names such as sans-serif must be quoted if parsed as a string.
     // CSS wide keywords, as well as "default", must also be quoted.
@@ -509,7 +509,7 @@ impl<'i> Parse<'i> for FontStyle {
 impl ToCss for FontStyle {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     match self {
       FontStyle::Normal => dest.write_str("normal"),
@@ -757,7 +757,7 @@ impl<'i> Parse<'i> for Font<'i> {
 impl<'i> ToCss for Font<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     if self.style != FontStyle::default() {
       self.style.to_css(dest)?;
@@ -912,16 +912,16 @@ impl<'i> FontHandler<'i> {
       };
     }
 
-    let mut family = std::mem::take(&mut self.family);
+    let mut family = core::mem::take(&mut self.family);
     if !self.flushed_properties.contains(FontProperty::FontFamily) {
       family = compatible_font_family(family, !should_compile!(context.targets, FontFamilySystemUi));
     }
-    let size = std::mem::take(&mut self.size);
-    let style = std::mem::take(&mut self.style);
-    let weight = std::mem::take(&mut self.weight);
-    let stretch = std::mem::take(&mut self.stretch);
-    let line_height = std::mem::take(&mut self.line_height);
-    let variant_caps = std::mem::take(&mut self.variant_caps);
+    let size = core::mem::take(&mut self.size);
+    let style = core::mem::take(&mut self.style);
+    let weight = core::mem::take(&mut self.weight);
+    let stretch = core::mem::take(&mut self.stretch);
+    let line_height = core::mem::take(&mut self.line_height);
+    let variant_caps = core::mem::take(&mut self.variant_caps);
 
     if let Some(family) = &mut family {
       if family.len() > 1 {
@@ -1046,3 +1046,8 @@ fn is_font_property(property_id: &PropertyId) -> bool {
     _ => false,
   }
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

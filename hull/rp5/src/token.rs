@@ -1,3 +1,4 @@
+use alloc::{string::String, vec::Vec};
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Attribute {
     pub name: String,

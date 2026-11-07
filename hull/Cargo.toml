@@ -13,18 +13,21 @@ bench = false
 trueos-ide = { path = "../../TRUEOS-Blueprints/crates/trueos-ide", default-features = false }
 infer = { path = "../../TRUEOS/vendor/infer", default-features = false }
 hull-quickjs = { path = "crates/quickjs-engine" }
-crossterm = { path = "../../vendor/crossterm-0.29.0-trueos", default-features = false, features = ["events", "bracketed-paste"] }
-trueos = { path = "../../api", features = ["ui4-scene", "tokio-runtime"] }
+crossterm = { path = "../vendor/crossterm-0.29.0-trueos", default-features = false, features = ["events", "bracketed-paste", "native-core"] }
+trueos = { path = "../vendor/trueos", features = ["ui4-scene", "native-runtime"] }
 rp5 = { path = "rp5" }
 rjqry = { path = "rjqry" }
-lightningcss = { version = "=1.0.0-alpha.72", default-features = false, features = ["into_owned", "substitute_variables"] }
+lightningcss = { version = "=1.0.0-alpha.72", default-features = false, features = ["into_owned", "substitute_variables", "trueos-native"] }
 static-self = "0.1.2"
-taffy = { version = "=0.15.0", path = "../../vendor/taffy-0.15.0-trueos", default-features = false, features = ["std", "taffy_tree", "block_layout", "flexbox", "grid"] }
+hashbrown = { version = "0.17", default-features = false, features = ["default-hasher"] }
+num-traits = { version = "0.2.19", default-features = false, features = ["libm"] }
+trueos-runtime = { path = "../../TRUEOS/crates/trueos-runtime" }
+taffy = { version = "=0.15.0", path = "../vendor/taffy-0.15.0-trueos", default-features = false, features = ["alloc", "taffy_tree", "block_layout", "flexbox", "grid"] }
 parcel_selectors = "0.28.3"
 cssparser = "0.37"
-serde_json = "1"
-url = "2.5"
-winit = { path = "../../vendor/winit/winit", default-features = false }
+serde_json = { version = "1", default-features = false, features = ["alloc"] }
+url = { version = "2.5.8", default-features = false }
+winit = { path = "../vendor/winit/winit", default-features = false, features = ["trueos-native"] }
 
 [profile.release]
 codegen-units = 1           # reduces binary size by ~2%
@@ -37,4 +40,14 @@ strip = "symbols"           # See split-debuginfo - allows us to drop the size b
 incremental = true          # Improves re-compile times
 
 [workspace]
-exclude = ["crates/quickjs-engine", "rjqry", "rcorejs", "tools/js-tests", "tools/layout-tests", "tools/sandbox"]
+exclude = ["crates/quickjs-engine", "rp5", "rjqry", "rcorejs", "tools/js-tests", "tools/layout-tests", "tools/sandbox"]
+
+[patch.crates-io]
+lightningcss = { path = "../vendor/lightningcss-1.0.0-alpha.72" }
+lightningcss-derive = { path = "../vendor/lightningcss-derive-1.0.0-alpha.43" }
+cssparser = { path = "../vendor/cssparser-0.37.0" }
+cssparser-color = { path = "../vendor/cssparser-color-0.5.0" }
+parcel_selectors = { path = "../vendor/parcel_selectors-0.28.3" }
+static-self = { path = "../vendor/static-self-0.1.2" }
+static-self-derive = { path = "../vendor/static-self-derive-0.1.1" }
+cssparser-macros = { path = "../vendor/cssparser-macros-0.7.1" }

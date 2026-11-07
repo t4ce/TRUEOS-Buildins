@@ -122,10 +122,10 @@ fn modulo(a: f32, b: f32) -> f32 {
   ((a % b) + b) % b
 }
 
-impl<V: ToCss + std::ops::Mul<f32, Output = V> + TrySign + Clone + std::fmt::Debug> ToCss for MathFunction<V> {
+impl<V: ToCss + core::ops::Mul<f32, Output = V> + TrySign + Clone + core::fmt::Debug> ToCss for MathFunction<V> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     match self {
       MathFunction::Calc(calc) => {
@@ -292,7 +292,7 @@ enum_property! {
 
 impl Into<f32> for Constant {
   fn into(self) -> f32 {
-    use std::f32::consts;
+    use core::f32::consts;
     use Constant::*;
     match self {
       E => consts::E,
@@ -307,18 +307,18 @@ impl Into<f32> for Constant {
 impl<
     'i,
     V: Parse<'i>
-      + std::ops::Mul<f32, Output = V>
+      + core::ops::Mul<f32, Output = V>
       + AddInternal
       + TryOp
       + TryMap
       + TrySign
-      + std::cmp::PartialOrd<V>
+      + core::cmp::PartialOrd<V>
       + Into<Calc<V>>
       + TryFrom<Calc<V>>
       + TryFrom<Angle>
       + TryInto<Angle>
       + Clone
-      + std::fmt::Debug,
+      + core::fmt::Debug,
   > Parse<'i> for Calc<V>
 {
   fn parse<'t>(input: &mut Parser<'i, 't>) -> Result<Self, ParseError<'i, ParserError<'i>>> {
@@ -329,18 +329,18 @@ impl<
 impl<
     'i,
     V: Parse<'i>
-      + std::ops::Mul<f32, Output = V>
+      + core::ops::Mul<f32, Output = V>
       + AddInternal
       + TryOp
       + TryMap
       + TrySign
-      + std::cmp::PartialOrd<V>
+      + core::cmp::PartialOrd<V>
       + Into<Calc<V>>
       + TryFrom<Calc<V>>
       + TryFrom<Angle>
       + TryInto<Angle>
       + Clone
-      + std::fmt::Debug,
+      + core::fmt::Debug,
   > Calc<V>
 {
   pub(crate) fn parse_with<'t, Parse: Copy + Fn(&str) -> Option<Calc<V>>>(
@@ -359,7 +359,7 @@ impl<
       },
       "min" => {
         let mut args = input.parse_nested_block(|input| input.parse_comma_separated(|input| Calc::parse_sum(input, parse_ident)))?;
-        let mut reduced = Calc::reduce_args(&mut args, std::cmp::Ordering::Less);
+        let mut reduced = Calc::reduce_args(&mut args, core::cmp::Ordering::Less);
         if reduced.len() == 1 {
           return Ok(reduced.remove(0))
         }
@@ -367,7 +367,7 @@ impl<
       },
       "max" => {
         let mut args = input.parse_nested_block(|input| input.parse_comma_separated(|input| Calc::parse_sum(input, parse_ident)))?;
-        let mut reduced = Calc::reduce_args(&mut args, std::cmp::Ordering::Greater);
+        let mut reduced = Calc::reduce_args(&mut args, core::cmp::Ordering::Greater);
         if reduced.len() == 1 {
           return Ok(reduced.remove(0))
         }
@@ -393,8 +393,8 @@ impl<
         // If center is known to be greater than the maximum, replace it with maximum and remove the max argument.
         // Otherwise, if center is known to be less than the maximum, remove the max argument.
         match cmp {
-          Some(std::cmp::Ordering::Greater) => {
-            center = std::mem::take(&mut max).unwrap();
+          Some(core::cmp::Ordering::Greater) => {
+            center = core::mem::take(&mut max).unwrap();
           }
           Some(_) => {
             max = None;
@@ -412,8 +412,8 @@ impl<
           // If center is known to be less than the minimum, replace it with minimum and remove the min argument.
           // Otherwise, if center is known to be greater than the minimum, remove the min argument.
           match cmp {
-            Some(std::cmp::Ordering::Less) => {
-              center = std::mem::take(&mut min).unwrap();
+            Some(core::cmp::Ordering::Less) => {
+              center = core::mem::take(&mut min).unwrap();
             }
             Some(_) => {
               min = None;
@@ -449,7 +449,7 @@ impl<
       },
       "rem" => {
         input.parse_nested_block(|input| {
-          Self::parse_math_fn(input, std::ops::Rem::rem, MathFunction::Rem, parse_ident)
+          Self::parse_math_fn(input, core::ops::Rem::rem, MathFunction::Rem, parse_ident)
         })
       },
       "mod" => {
@@ -655,7 +655,7 @@ impl<
     Ok(Calc::Value(Box::new(value)))
   }
 
-  fn reduce_args(args: &mut Vec<Calc<V>>, cmp: std::cmp::Ordering) -> Vec<Calc<V>> {
+  fn reduce_args(args: &mut Vec<Calc<V>>, cmp: core::cmp::Ordering) -> Vec<Calc<V>> {
     // Reduces the arguments of a min() or max() expression, combining compatible values.
     // e.g. min(1px, 1em, 2px, 3in) => min(1px, 1em)
     // Also handles plain numbers: min(1, 2, 3) => min(1, 2)
@@ -899,7 +899,7 @@ impl<
   }
 }
 
-impl<V: std::ops::Mul<f32, Output = V>> std::ops::Mul<f32> for Calc<V> {
+impl<V: core::ops::Mul<f32, Output = V>> core::ops::Mul<f32> for Calc<V> {
   type Output = Self;
 
   fn mul(self, other: f32) -> Self {
@@ -926,7 +926,7 @@ impl<V: std::ops::Mul<f32, Output = V>> std::ops::Mul<f32> for Calc<V> {
   }
 }
 
-impl<V: AddInternal + std::convert::Into<Calc<V>> + std::convert::TryFrom<Calc<V>> + std::fmt::Debug> Calc<V> {
+impl<V: AddInternal + core::convert::Into<Calc<V>> + core::convert::TryFrom<Calc<V>> + core::fmt::Debug> Calc<V> {
   pub(crate) fn add(self, other: Calc<V>) -> Result<Calc<V>, <V as TryFrom<Calc<V>>>::Error> {
     Ok(match (self, other) {
       (Calc::Value(a), Calc::Value(b)) => (a.add(*b)).into(),
@@ -962,10 +962,10 @@ impl<V: AddInternal + std::convert::Into<Calc<V>> + std::convert::TryFrom<Calc<V
   }
 }
 
-impl<V: ToCss + std::ops::Mul<f32, Output = V> + TrySign + Clone + std::fmt::Debug> ToCss for Calc<V> {
+impl<V: ToCss + core::ops::Mul<f32, Output = V> + TrySign + Clone + core::fmt::Debug> ToCss for Calc<V> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     let was_in_calc = dest.in_calc;
     dest.in_calc = true;
@@ -1061,3 +1061,8 @@ impl<V: TrySign> TrySign for MathFunction<V> {
     }
   }
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

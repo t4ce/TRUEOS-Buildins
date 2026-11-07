@@ -1,11 +1,12 @@
 //! Cascaded, inherited custom properties. Lightning CSS owns token parsing and substitution.
+use alloc::{string::{String, ToString}, vec::Vec, borrow::ToOwned};
 use lightningcss::properties::{
     Property, PropertyId,
     custom::{CustomPropertyName, TokenList, TokenOrValue, Variable},
 };
 use lightningcss::visitor::{Visit, VisitTypes, Visitor};
-use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
+use hashbrown::{HashMap, HashSet};
+use alloc::sync::Arc;
 
 const MAX_TOKENS: usize = 8192;
 const MAX_DEPTH: usize = 32;

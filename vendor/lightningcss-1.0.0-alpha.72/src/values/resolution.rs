@@ -67,7 +67,7 @@ impl<'i> TryFrom<&Token<'i>> for Resolution {
 impl ToCss for Resolution {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     let (value, unit) = match self {
       Resolution::Dpi(dpi) => (*dpi, "dpi"),
@@ -85,7 +85,7 @@ impl ToCss for Resolution {
   }
 }
 
-impl std::ops::Add<CSSNumber> for Resolution {
+impl core::ops::Add<CSSNumber> for Resolution {
   type Output = Self;
 
   fn add(self, other: CSSNumber) -> Resolution {
@@ -96,3 +96,8 @@ impl std::ops::Add<CSSNumber> for Resolution {
     }
   }
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

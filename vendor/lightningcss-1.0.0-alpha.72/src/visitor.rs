@@ -10,7 +10,7 @@
 //! This example transforms a stylesheet, adding a prefix to all URLs, and converting pixels to rems.
 //!
 //! ```
-//! use std::convert::Infallible;
+//! use core::convert::Infallible;
 //! use lightningcss::{
 //!   stylesheet::{StyleSheet, ParserOptions, PrinterOptions},
 //!   visitor::{Visitor, Visit, VisitTypes},
@@ -82,7 +82,7 @@ use crate::{
   },
 };
 use bitflags::bitflags;
-use indexmap::IndexMap;
+use crate::collections::IndexMap;
 use smallvec::SmallVec;
 
 pub(crate) use lightningcss_derive::Visit;
@@ -429,3 +429,8 @@ impl_visit!(char);
 impl_visit!(str);
 impl_visit!(String);
 impl_visit!((f32, f32));
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

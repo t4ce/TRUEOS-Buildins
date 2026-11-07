@@ -5,7 +5,7 @@ use trueos::{netfs, time::{self, Instant}};
 
 pub const TIMEOUT_MS: u32 = 90_000;
 pub const CATALOG_LIMIT: usize = 1024 * 1024;
-pub const ARCHIVE_LIMIT: usize = 512 * 1024 * 1024;
+pub const ARCHIVE_LIMIT: usize = 128 * 1024 * 1024;
 
 struct Download(u32);
 impl Drop for Download {

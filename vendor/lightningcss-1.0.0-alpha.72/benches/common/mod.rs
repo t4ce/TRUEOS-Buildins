@@ -1,6 +1,6 @@
 use criterion::black_box;
 use lightningcss::stylesheet::{MinifyOptions, ParserOptions, PrinterOptions, StyleSheet};
-use std::fmt::Write;
+use core::fmt::Write;
 
 pub struct Fixture {
   pub name: &'static str,
@@ -245,3 +245,8 @@ fn conditional_run_fixture(rule_count: usize) -> String {
 
   css
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

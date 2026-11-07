@@ -1,7 +1,7 @@
 //! CSS declarations.
 
-use std::borrow::Cow;
-use std::ops::Range;
+use alloc::borrow::Cow;
+use core::ops::Range;
 
 use crate::context::{DeclarationContext, PropertyHandlerContext};
 use crate::error::{ParserError, PrinterError, PrinterErrorKind};
@@ -41,7 +41,7 @@ use crate::values::string::CowArcStr;
 #[cfg(feature = "visitor")]
 use crate::visitor::Visit;
 use cssparser::*;
-use indexmap::IndexMap;
+use crate::collections::IndexMap;
 use smallvec::SmallVec;
 
 /// A CSS declaration block.
@@ -126,7 +126,7 @@ impl<'i> DeclarationBlock<'i> {
 impl<'i> ToCss for DeclarationBlock<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     let len = self.declarations.len() + self.important_declarations.len();
     let mut i = 0;
@@ -154,7 +154,7 @@ impl<'i> DeclarationBlock<'i> {
   /// Writes the declarations to a CSS block, including starting and ending braces.
   pub fn to_css_block<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     dest.whitespace()?;
     dest.write_char('{')?;
@@ -191,7 +191,7 @@ impl<'i> DeclarationBlock<'i> {
     source_index: u32,
   ) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     let mut i = 0;
     let len = self.len();
@@ -259,8 +259,8 @@ impl<'i> DeclarationBlock<'i> {
 
     handler.finalize(context);
     important_handler.finalize(context);
-    self.important_declarations = std::mem::take(&mut important_handler.decls);
-    self.declarations = std::mem::take(&mut handler.decls);
+    self.important_declarations = core::mem::take(&mut important_handler.decls);
+    self.declarations = core::mem::take(&mut handler.decls);
   }
 
   /// Returns whether the declaration block is empty.
@@ -308,7 +308,7 @@ impl<'i> DeclarationBlock<'i> {
 
 impl<'i> DeclarationBlock<'i> {
   /// Returns an iterator over all properties in the declaration.
-  pub fn iter(&self) -> impl std::iter::DoubleEndedIterator<Item = (&Property<'i>, bool)> {
+  pub fn iter(&self) -> impl core::iter::DoubleEndedIterator<Item = (&Property<'i>, bool)> {
     self
       .declarations
       .iter()
@@ -317,7 +317,7 @@ impl<'i> DeclarationBlock<'i> {
   }
 
   /// Returns a mutable iterator over all properties in the declaration.
-  pub fn iter_mut(&mut self) -> impl std::iter::DoubleEndedIterator<Item = &mut Property<'i>> {
+  pub fn iter_mut(&mut self) -> impl core::iter::DoubleEndedIterator<Item = &mut Property<'i>> {
     self.declarations.iter_mut().chain(self.important_declarations.iter_mut())
   }
 
@@ -693,10 +693,10 @@ impl<'i> DeclarationHandler<'i> {
   }
 
   pub fn finalize(&mut self, context: &mut PropertyHandlerContext<'i, '_>) {
-    if let Some(direction) = std::mem::take(&mut self.direction) {
+    if let Some(direction) = core::mem::take(&mut self.direction) {
       self.decls.push(Property::Direction(direction));
     }
-    if let Some(unicode_bidi) = std::mem::take(&mut self.unicode_bidi) {
+    if let Some(unicode_bidi) = core::mem::take(&mut self.unicode_bidi) {
       self.decls.push(Property::UnicodeBidi(unicode_bidi));
     }
 
@@ -730,3 +730,8 @@ impl<'i> DeclarationHandler<'i> {
     self.custom_properties.clear();
   }
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

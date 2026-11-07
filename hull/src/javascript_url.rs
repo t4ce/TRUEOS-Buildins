@@ -1,5 +1,6 @@
 //! URL parsing uses Hull's existing WHATWG-oriented `url` dependency. There is
 //! no resource loader, network operation, navigation or persistent native store.
+use alloc::{string::{String, ToString}, vec::Vec};
 use super::{DomResult, failure, input};
 use hull_quickjs::Engine;
 use serde_json::{Value, json};

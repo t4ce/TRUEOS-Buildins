@@ -5,7 +5,11 @@ compile_error!("native-runtime must have a core+alloc dependency closure; select
 
 extern crate alloc;
 pub extern crate alloc as alloc_crate;
-#[cfg(any(feature = "tokio-runtime", feature = "tracing"))]
+#[cfg(any(
+    feature = "tokio-runtime",
+    feature = "tracing",
+    all(feature = "native-runtime", not(any(target_os = "trueos", target_os = "zkvm"))),
+))]
 extern crate std;
 use core::alloc::{GlobalAlloc, Layout};
 use core::ptr::null_mut;

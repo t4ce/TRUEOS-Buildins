@@ -14,7 +14,7 @@ use crate::traits::{
 #[cfg(feature = "visitor")]
 use crate::visitor::Visit;
 use cssparser::*;
-use std::f32::consts::PI;
+use core::f32::consts::PI;
 
 /// A CSS [`<angle>`](https://www.w3.org/TR/css-values-4/#angles) value.
 ///
@@ -104,7 +104,7 @@ impl<'i> TryFrom<&Token<'i>> for Angle {
 impl ToCss for Angle {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     let (value, unit) = match self {
       Angle::Deg(val) => (*val, "deg"),
@@ -132,7 +132,7 @@ impl Angle {
   /// Prints the angle, allowing unitless zero values.
   pub fn to_css_with_unitless_zero<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     if self.is_zero() {
       (0.0).to_css(dest)
@@ -196,7 +196,7 @@ impl TryFrom<Calc<Angle>> for Angle {
   }
 }
 
-impl std::ops::Mul<CSSNumber> for Angle {
+impl core::ops::Mul<CSSNumber> for Angle {
   type Output = Self;
 
   fn mul(self, other: CSSNumber) -> Angle {
@@ -221,14 +221,14 @@ impl TryAdd<Angle> for Angle {
   }
 }
 
-impl std::cmp::PartialEq<Angle> for Angle {
+impl core::cmp::PartialEq<Angle> for Angle {
   fn eq(&self, other: &Angle) -> bool {
     self.to_degrees() == other.to_degrees()
   }
 }
 
-impl std::cmp::PartialOrd<Angle> for Angle {
-  fn partial_cmp(&self, other: &Angle) -> Option<std::cmp::Ordering> {
+impl core::cmp::PartialOrd<Angle> for Angle {
+  fn partial_cmp(&self, other: &Angle) -> Option<core::cmp::Ordering> {
     self.to_degrees().partial_cmp(&other.to_degrees())
   }
 }
@@ -274,8 +274,8 @@ impl Sign for Angle {
   }
 }
 
-impl_op!(Angle, std::ops::Rem, rem);
-impl_op!(Angle, std::ops::Add, add);
+impl_op!(Angle, core::ops::Rem, rem);
+impl_op!(Angle, core::ops::Add, add);
 
 /// A CSS [`<angle-percentage>`](https://www.w3.org/TR/css-values-4/#typedef-angle-percentage) value.
 /// May be specified as either an angle or a percentage that resolves to an angle.
@@ -300,3 +300,8 @@ macro_rules! impl_try_from_angle {
 }
 
 pub(crate) use impl_try_from_angle;
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

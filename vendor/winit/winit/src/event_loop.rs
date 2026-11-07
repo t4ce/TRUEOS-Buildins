@@ -8,7 +8,7 @@
 //!
 //! See the root-level documentation for information on how to create and use an event loop to
 //! handle events.
-use std::marker::PhantomData;
+use core::marker::PhantomData;
 #[cfg(any(x11_platform, wayland_platform))]
 use std::os::unix::io::{AsFd, AsRawFd, BorrowedFd, RawFd};
 
@@ -269,7 +269,7 @@ impl AsRawFd for EventLoop {
 impl winit_core::event_loop::pump_events::EventLoopExtPumpEvents for EventLoop {
     fn pump_app_events<A: ApplicationHandler>(
         &mut self,
-        timeout: Option<std::time::Duration>,
+        timeout: Option<core::time::Duration>,
         app: A,
     ) -> winit_core::event_loop::pump_events::PumpStatus {
         self.event_loop.pump_app_events(timeout, app)

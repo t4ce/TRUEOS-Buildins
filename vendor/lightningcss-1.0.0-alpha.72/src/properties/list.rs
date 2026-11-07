@@ -215,7 +215,7 @@ impl<'i> Parse<'i> for CounterStyle<'i> {
 impl ToCss for CounterStyle<'_> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     match self {
       CounterStyle::Predefined(style) => style.to_css(dest),
@@ -414,7 +414,7 @@ impl<'i> Parse<'i> for ListStyle<'i> {
 impl<'i> ToCss for ListStyle<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     let mut needs_space = false;
     if self.position != ListStylePosition::default() {
@@ -462,3 +462,8 @@ shorthand_handler!(ListStyleHandler -> ListStyle<'i> fallbacks: true {
   list_style_type: ListStyleType(ListStyleType<'i>),
   position: ListStylePosition(ListStylePosition),
 });
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

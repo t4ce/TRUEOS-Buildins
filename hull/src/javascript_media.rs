@@ -1,4 +1,5 @@
 //! One URL handoff slot per navigation. No decoder, network or pixel API in JS.
+use alloc::{string::{String, ToString}, format};
 #[derive(Clone)]
 pub(crate) struct Request {
     pub id: u32,
@@ -9,11 +10,11 @@ pub(crate) struct Request {
 #[derive(Default)]
 pub(crate) struct Media {
     next: u32,
-    pub inspection_navigation: std::collections::VecDeque<String>,
+    pub inspection_navigation: alloc::collections::VecDeque<String>,
     pub pending: Option<Request>,
     pub receipt: Option<(u32, i32)>,
 }
-pub(crate) type SharedMedia = std::rc::Rc<std::cell::RefCell<Media>>;
+pub(crate) type SharedMedia = alloc::rc::Rc<core::cell::RefCell<Media>>;
 impl Media {
     pub fn has_request(&self) -> bool {
         self.next != 0

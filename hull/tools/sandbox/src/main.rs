@@ -3,6 +3,8 @@
 extern crate self as trueos;
 pub use tokio;
 extern crate alloc;
+#[path = "../../../src/platform.rs"]
+mod platform;
 #[allow(unexpected_cfgs)]
 #[path = "../../../../../TRUEOS-Blueprints/api/src/worker.rs"]
 pub mod native_worker;

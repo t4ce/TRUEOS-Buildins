@@ -7,7 +7,7 @@ use crate::values::number::{CSSInteger, CSSNumber};
 #[cfg(feature = "visitor")]
 use crate::visitor::Visit;
 use cssparser::*;
-use std::fmt::Write;
+use core::fmt::Write;
 
 /// A CSS [easing function](https://www.w3.org/TR/css-easing-1/#easing-functions).
 #[derive(Debug, Clone, PartialEq)]
@@ -112,7 +112,7 @@ impl<'i> Parse<'i> for EasingFunction {
 impl ToCss for EasingFunction {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     match self {
       EasingFunction::Linear => dest.write_str("linear"),
@@ -233,3 +233,8 @@ impl<'i> Parse<'i> for StepPosition {
     Ok(keyword)
   }
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

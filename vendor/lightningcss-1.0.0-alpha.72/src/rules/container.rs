@@ -101,7 +101,7 @@ define_query_features! {
 impl FeatureToCss for ContainerSizeFeatureId {
   fn to_css_with_prefix<W>(&self, prefix: &str, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     dest.write_str(prefix)?;
     self.to_css(dest)
@@ -188,7 +188,7 @@ define_query_features! {
 impl FeatureToCss for ScrollStateFeatureId {
   fn to_css_with_prefix<W>(&self, prefix: &str, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     dest.write_str(prefix)?;
     self.to_css(dest)
@@ -351,7 +351,7 @@ impl<'i> ParseWithOptions<'i> for ContainerCondition<'i> {
 impl<'i> ToCss for ContainerCondition<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     match *self {
       ContainerCondition::Feature(ref f) => f.to_css(dest),
@@ -388,7 +388,7 @@ impl<'i> ToCss for ContainerCondition<'i> {
 impl<'i> ToCss for StyleQuery<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     match *self {
       StyleQuery::Declaration(ref f) => f.to_css(dest, false),
@@ -408,7 +408,7 @@ impl<'i> ToCss for StyleQuery<'i> {
 impl<'i> ToCss for ScrollStateQuery<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     match *self {
       ScrollStateQuery::Feature(ref f) => f.to_css(dest),
@@ -445,7 +445,7 @@ impl<'i> Parse<'i> for ContainerName<'i> {
 impl<'i> ToCss for ContainerName<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     // Container name should not be hashed
     // https://github.com/vercel/next.js/issues/71233
@@ -473,7 +473,7 @@ impl<'i, T: Clone> ContainerRule<'i, T> {
 impl<'a, 'i, T: ToCss> ToCss for ContainerRule<'i, T> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     #[cfg(feature = "sourcemap")]
     dest.add_mapping(self.loc);
@@ -505,3 +505,8 @@ impl<'a, 'i, T: ToCss> ToCss for ContainerRule<'i, T> {
     dest.write_char('}')
   }
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

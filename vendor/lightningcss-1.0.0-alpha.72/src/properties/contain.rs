@@ -93,7 +93,7 @@ impl<'i> Parse<'i> for ContainerNameList<'i> {
 impl<'i> ToCss for ContainerNameList<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     match self {
       ContainerNameList::None => dest.write_str("none"),
@@ -145,7 +145,7 @@ impl<'i> Parse<'i> for Container<'i> {
 impl<'i> ToCss for Container<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     self.name.to_css(dest)?;
     if self.container_type != ContainerType::default() {
@@ -160,3 +160,8 @@ shorthand_handler!(ContainerHandler -> Container<'i> {
   name: ContainerName(ContainerNameList<'i>),
   container_type: ContainerType(ContainerType),
 });
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

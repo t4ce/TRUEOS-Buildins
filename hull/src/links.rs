@@ -1,7 +1,8 @@
 //! Document link actions: navigation opens a fresh Hull; download links are submitted to Trauma.
+use alloc::{string::String, vec::Vec, format, vec};
 use super::{layout::LinkBox, shellio, viewport::Viewport};
 use rp5::Document;
-use std::collections::HashMap;
+use hashbrown::HashMap;
 use url::Url;
 
 #[derive(Default)]

@@ -12,7 +12,8 @@ hull-quickjs = { path = "../../crates/quickjs-engine" }
 url = "2.5"
 serde_json = "1"
 static-self = "0.1.2"
-lightningcss = { version = "=1.0.0-alpha.72", default-features = false, features = ["into_owned", "substitute_variables"] }
+hashbrown = { version = "0.17", default-features = false, features = ["default-hasher"] }
+lightningcss = { version = "=1.0.0-alpha.72", default-features = false, features = ["into_owned", "substitute_variables", "trueos-native"] }
 parcel_selectors = "0.28.3"
 cssparser = "0.37"
 winit-trueos = { path = "../../../vendor/winit/winit-trueos" }
@@ -20,3 +21,13 @@ winit-core = { path = "../../../vendor/winit/winit-core" }
 tokio = { path = "../../../vendor/tokio-1.54.1", default-features = false, features = ["rt", "sync", "time"] }
 
 [workspace]
+
+[patch.crates-io]
+lightningcss = { path = "../../../vendor/lightningcss-1.0.0-alpha.72" }
+lightningcss-derive = { path = "../../../vendor/lightningcss-derive-1.0.0-alpha.43" }
+cssparser = { path = "../../../vendor/cssparser-0.37.0" }
+cssparser-color = { path = "../../../vendor/cssparser-color-0.5.0" }
+parcel_selectors = { path = "../../../vendor/parcel_selectors-0.28.3" }
+static-self = { path = "../../../vendor/static-self-0.1.2" }
+static-self-derive = { path = "../../../vendor/static-self-derive-0.1.1" }
+cssparser-macros = { path = "../../../vendor/cssparser-macros-0.7.1" }

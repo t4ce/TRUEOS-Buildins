@@ -1,6 +1,11 @@
 //! One-shot HTML document and fragment parsing, translated from parse5.
 //! Input is decoded Unicode; byte encoding detection belongs to the caller.
+#![no_std]
+
 extern crate alloc;
+use alloc::{string::String, vec::Vec};
+#[cfg(test)]
+extern crate std;
 
 pub mod dom;
 mod entities;

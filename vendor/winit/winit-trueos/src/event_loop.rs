@@ -1,8 +1,11 @@
+use alloc::{boxed::Box, vec::Vec};
 use core::num::NonZeroU64;
-use std::collections::{HashSet, VecDeque};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Condvar, Mutex};
-use std::time::{Duration, Instant};
+use alloc::collections::{BTreeSet, VecDeque};
+use core::sync::atomic::{AtomicBool, Ordering};
+use alloc::sync::Arc;
+use crate::platform::{Condvar, Mutex};
+use core::time::Duration;
+use crate::platform::Instant;
 
 use winit_core::application::ApplicationHandler;
 use winit_core::cursor::{CustomCursor, CustomCursorSource};
@@ -74,7 +77,7 @@ pub struct ActiveEventLoop {
     exiting: AtomicBool,
     pub(crate) redraws: Arc<Mutex<VecDeque<WindowId>>>,
     pub(crate) pending_window_events: Arc<Mutex<VecDeque<(WindowId, WindowEvent)>>>,
-    pub(crate) windows: Mutex<Vec<std::sync::Weak<WindowInner>>>,
+    pub(crate) windows: Mutex<Vec<alloc::sync::Weak<WindowInner>>>,
     pub(crate) proxy: Arc<EventLoopProxy>,
     pub(crate) connection: Arc<Ui4Connection>,
 }
@@ -130,7 +133,7 @@ impl EventLoop {
         let windows = {
             let mut windows = self.active.windows.lock().unwrap();
             windows.retain(|window| window.strong_count() != 0);
-            windows.iter().filter_map(std::sync::Weak::upgrade).collect::<Vec<_>>()
+            windows.iter().filter_map(alloc::sync::Weak::upgrade).collect::<Vec<_>>()
         };
         report_slow_stage("lifecycle and queued callbacks", lifecycle_started);
         for window in &windows {
@@ -296,7 +299,7 @@ impl EventLoop {
             .iter()
             .filter(|window| !window.closed.load(Ordering::Acquire))
             .map(|window| WindowId::from_raw(window.id as usize))
-            .collect::<HashSet<_>>();
+            .collect::<BTreeSet<_>>();
         let redraws = self.drain_redraws();
         for id in redraws {
             if live_window_ids.contains(&id) {
@@ -402,7 +405,7 @@ impl CoreActiveEventLoop for ActiveEventLoop {
         Err(NotSupportedError::new("custom cursors are not supported by TRUEOS UI4").into())
     }
     fn available_monitors(&self) -> Box<dyn Iterator<Item = MonitorHandle>> {
-        Box::new(std::iter::empty())
+        Box::new(core::iter::empty())
     }
     fn primary_monitor(&self) -> Option<MonitorHandle> {
         None

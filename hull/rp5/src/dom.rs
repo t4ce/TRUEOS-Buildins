@@ -1,3 +1,4 @@
+use alloc::{string::String, vec::Vec, vec};
 use crate::{Attribute, ParseError};
 use alloc::collections::BTreeMap;
 

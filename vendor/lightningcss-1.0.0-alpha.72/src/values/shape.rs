@@ -236,7 +236,7 @@ impl<'i> Parse<'i> for Point {
 impl ToCss for BasicShape {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     match self {
       BasicShape::Inset(rect) => {
@@ -266,7 +266,7 @@ impl ToCss for BasicShape {
 impl ToCss for InsetRect {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     self.rect.to_css(dest)?;
     if self.radius != BorderRadius::default() {
@@ -280,7 +280,7 @@ impl ToCss for InsetRect {
 impl ToCss for Circle {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     let mut has_output = false;
     if self.radius != ShapeRadius::default() {
@@ -303,7 +303,7 @@ impl ToCss for Circle {
 impl ToCss for Ellipse {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     let mut has_output = false;
     if self.radius_x != ShapeRadius::default() || self.radius_y != ShapeRadius::default() {
@@ -328,7 +328,7 @@ impl ToCss for Ellipse {
 impl ToCss for Polygon {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     if self.fill_rule != FillRule::default() {
       self.fill_rule.to_css(dest)?;
@@ -352,10 +352,15 @@ impl ToCss for Polygon {
 impl ToCss for Point {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     self.x.to_css(dest)?;
     dest.write_char(' ')?;
     self.y.to_css(dest)
   }
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

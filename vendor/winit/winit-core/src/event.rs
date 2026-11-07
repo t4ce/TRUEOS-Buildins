@@ -1,8 +1,10 @@
 //! The event enums and assorted supporting types.
-use std::cell::LazyCell;
-use std::cmp::Ordering;
-use std::f64;
-use std::sync::{Arc, Mutex, Weak};
+use alloc::{string::String};
+use core::cell::LazyCell;
+use core::cmp::Ordering;
+use core::f64;
+use alloc::sync::{Arc, Weak};
+use crate::platform::Mutex;
 
 use dpi::{PhysicalPosition, PhysicalSize};
 #[cfg(feature = "serde")]
@@ -10,6 +12,8 @@ use serde::{Deserialize, Serialize};
 use smol_str::SmolStr;
 
 use crate::Instant;
+#[cfg(all(feature = "trueos-native", target_os = "trueos"))]
+use num_traits::Float;
 use crate::data_transfer::{DataTransferId, TypedData};
 use crate::error::RequestError;
 use crate::event_loop::{AsyncRequestSerial, DndAction};
@@ -1296,7 +1300,7 @@ impl TabletToolTilt {
     pub fn angle(self) -> TabletToolAngle {
         // See <https://www.w3.org/TR/2024/WD-pointerevents3-20240326/#converting-between-tiltx-tilty-and-altitudeangle-azimuthangle>.
 
-        use std::f64::consts::*;
+        use core::f64::consts::*;
 
         const PI_0_5: f64 = FRAC_PI_2;
         const PI_1_5: f64 = 3. * FRAC_PI_2;
@@ -1389,7 +1393,7 @@ impl TabletToolAngle {
     pub fn tilt(self) -> TabletToolTilt {
         // See <https://www.w3.org/TR/2024/WD-pointerevents3-20240326/#converting-between-tiltx-tilty-and-altitudeangle-azimuthangle>.
 
-        use std::f64::consts::*;
+        use core::f64::consts::*;
 
         const PI_0_5: f64 = FRAC_PI_2;
         const PI_1_5: f64 = 3. * FRAC_PI_2;
@@ -1775,7 +1779,7 @@ mod tests {
 
     #[test]
     fn test_tilt_angle_conversions() {
-        use std::f64::consts::*;
+        use core::f64::consts::*;
 
         use event::{TabletToolAngle, TabletToolTilt};
 
@@ -1847,7 +1851,7 @@ mod tests {
         let force3 = event::Force::Calibrated { force: 5.0, max_possible_force: 2.5 };
         assert_eq!(
             force3.normalized(Some(event::TabletToolAngle {
-                altitude: std::f64::consts::PI / 2.0,
+                altitude: core::f64::consts::PI / 2.0,
                 azimuth: 0.
             })),
             2.0

@@ -89,7 +89,7 @@ fn parse_one_ident<'i, 't>(
 impl ToCss for Composes<'_> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     let mut first = true;
     for name in &self.names {
@@ -124,7 +124,7 @@ impl<'i> Parse<'i> for Specifier<'i> {
 impl<'i> ToCss for Specifier<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     match self {
       Specifier::Global => dest.write_str("global")?,
@@ -134,3 +134,8 @@ impl<'i> ToCss for Specifier<'i> {
     Ok(())
   }
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

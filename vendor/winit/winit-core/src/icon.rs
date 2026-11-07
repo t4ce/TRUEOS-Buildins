@@ -1,8 +1,10 @@
-use std::any::Any;
-use std::error::Error;
-use std::ops::Deref;
-use std::sync::Arc;
-use std::{fmt, io, mem};
+use alloc::{vec::Vec};
+use core::any::Any;
+use core::error::Error;
+use core::ops::Deref;
+use alloc::sync::Arc;
+use core::{fmt, mem};
+use crate::platform::io;
 
 pub(crate) const PIXEL_SIZE: usize = mem::size_of::<u32>();
 

@@ -1,3 +1,4 @@
+use alloc::{vec::Vec};
 use dpi::PhysicalPosition;
 use winit_core::event::{
     ButtonSource, ElementState, KeyEvent, Modifiers, MouseButton, MouseScrollDelta, PointerSource,
@@ -62,7 +63,7 @@ pub(crate) fn keyboard_event(raw: &KeyboardOutputEvent) -> Option<WindowEvent> {
     }
     let state = if raw.flags & 1 != 0 { ElementState::Pressed } else { ElementState::Released };
     let bytes = raw.utf8.get(..usize::from(raw.utf8_len))?;
-    let decoded = std::str::from_utf8(bytes).ok()?;
+    let decoded = core::str::from_utf8(bytes).ok()?;
     // Named keys with no text are encoded as a NUL by the current host producer.
     let text = if raw.kind == 2 && raw.codepoint == 0 || decoded.is_empty() {
         None
@@ -400,7 +401,7 @@ fn physical_named(usage: u16) -> Option<NamedKey> {
 fn physical_event(raw: &KeyboardOutputEvent) -> Option<WindowEvent> {
     let state = if raw.flags & 1 != 0 { ElementState::Pressed } else { ElementState::Released };
     let text: Option<winit_core::keyboard::SmolStr> = if state.is_pressed() && raw.utf8_len != 0 {
-        Some(std::str::from_utf8(raw.utf8.get(..usize::from(raw.utf8_len))?).ok()?.into())
+        Some(core::str::from_utf8(raw.utf8.get(..usize::from(raw.utf8_len))?).ok()?.into())
     } else {
         None
     };
@@ -434,9 +435,9 @@ fn physical_event(raw: &KeyboardOutputEvent) -> Option<WindowEvent> {
 
 #[derive(Debug, Default)]
 pub(crate) struct KeyboardState {
-    held: std::collections::BTreeMap<(u32, u32, u32, u16), KeyEvent>,
+    held: alloc::collections::BTreeMap<(u32, u32, u32, u16), KeyEvent>,
     modifiers: Modifiers,
-    device_modifiers: std::collections::BTreeMap<(u32, u32, u32), u8>,
+    device_modifiers: alloc::collections::BTreeMap<(u32, u32, u32), u8>,
 }
 
 impl KeyboardState {

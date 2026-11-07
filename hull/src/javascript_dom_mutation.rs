@@ -1,8 +1,9 @@
 //! Bounded native node creation and pre-insertion over the existing rp5 arena.
+use alloc::{string::{String, ToString}, vec::Vec, borrow::ToOwned, vec};
 use super::{DomResult, Gateway, MAX_QUERY_RESULTS, MAX_STRING_BYTES, failure, input};
 use rp5::{Document, Namespace, NodeKind};
 use serde_json::{Value, json};
-use std::time::{Duration, Instant};
+use crate::platform::{Duration, Instant};
 
 fn hierarchy() -> (&'static str, String) {
     failure(
@@ -198,7 +199,7 @@ pub(super) fn call(
                             None
                         }
                     })
-                    .collect::<std::collections::HashMap<_, _>>()
+                    .collect::<hashbrown::HashMap<_, _>>()
             });
             parent = hosts.get(&current).copied();
         }
@@ -241,7 +242,7 @@ pub(super) fn call(
         let moved = moving
             .iter()
             .copied()
-            .collect::<std::collections::HashSet<_>>();
+            .collect::<hashbrown::HashSet<_>>();
         let mut final_children = doc.nodes[id]
             .children
             .iter()
@@ -286,9 +287,9 @@ pub(super) fn call(
     let mut doc = gateway.document.borrow_mut();
     // Keep validation atomic. After detaching once, splice once rather than
     // repeatedly scanning/removing sibling lists for fragment children.
-    let mut moved = std::collections::HashSet::new();
+    let mut moved = hashbrown::HashSet::new();
     moved.extend(moving.iter().copied());
-    let mut old_parents = std::collections::HashSet::new();
+    let mut old_parents = hashbrown::HashSet::new();
     for node in &moving {
         if let Some(parent) = doc.nodes[*node].parent {
             old_parents.insert(parent);

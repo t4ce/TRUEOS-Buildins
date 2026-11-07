@@ -22,8 +22,8 @@ use parcel_selectors::{
   parser::SelectorImpl,
 };
 use smallvec::SmallVec;
-use std::collections::HashSet;
-use std::fmt;
+use crate::collections::HashSet;
+use core::fmt;
 
 #[cfg(feature = "serde")]
 use crate::serialization::*;
@@ -79,9 +79,9 @@ impl<'i> SelectorImpl<'i> for Selectors {
 
   type ExtraMatchingData = ();
 
-  fn to_css<W: fmt::Write>(selectors: &SelectorList<'i>, dest: &mut W) -> std::fmt::Result {
+  fn to_css<W: fmt::Write>(selectors: &SelectorList<'i>, dest: &mut W) -> core::fmt::Result {
     let mut printer = Printer::new(dest, PrinterOptions::default());
-    serialize_selector_list(selectors.0.iter(), &mut printer, None, false).map_err(|_| std::fmt::Error)
+    serialize_selector_list(selectors.0.iter(), &mut printer, None, false).map_err(|_| core::fmt::Error)
   }
 }
 
@@ -667,13 +667,13 @@ impl<'i> parcel_selectors::parser::NonTSPseudoClass<'i> for PseudoClass<'i> {
 }
 
 impl<'i> cssparser::ToCss for PseudoClass<'i> {
-  fn to_css<W>(&self, dest: &mut W) -> std::fmt::Result
+  fn to_css<W>(&self, dest: &mut W) -> core::fmt::Result
   where
     W: fmt::Write,
   {
     let mut s = String::new();
     serialize_pseudo_class(self, &mut Printer::new(&mut s, Default::default()), None)
-      .map_err(|_| std::fmt::Error)?;
+      .map_err(|_| core::fmt::Error)?;
     write!(dest, "{}", s)
   }
 }
@@ -840,7 +840,7 @@ where
 
     Local { selector } => serialize_selector(selector, dest, context, false),
     Global { selector } => {
-      let css_module = std::mem::take(&mut dest.css_module);
+      let css_module = core::mem::take(&mut dest.css_module);
       serialize_selector(selector, dest, context, false)?;
       dest.css_module = css_module;
       Ok(())
@@ -1104,7 +1104,7 @@ impl<'i> Parse<'i> for ViewTransitionPartName<'i> {
 impl<'i> ToCss for ViewTransitionPartName<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     match self {
       ViewTransitionPartName::All => dest.write_char('*'),
@@ -1153,7 +1153,7 @@ impl<'i> Parse<'i> for ViewTransitionPartSelector<'i> {
 impl<'i> ToCss for ViewTransitionPartSelector<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     if let Some(name) = &self.name {
       name.to_css(dest)?;
@@ -1167,13 +1167,13 @@ impl<'i> ToCss for ViewTransitionPartSelector<'i> {
 }
 
 impl<'i> cssparser::ToCss for PseudoElement<'i> {
-  fn to_css<W>(&self, dest: &mut W) -> std::fmt::Result
+  fn to_css<W>(&self, dest: &mut W) -> core::fmt::Result
   where
     W: fmt::Write,
   {
     let mut s = String::new();
     serialize_pseudo_element(self, &mut Printer::new(&mut s, Default::default()), None)
-      .map_err(|_| std::fmt::Error)?;
+      .map_err(|_| core::fmt::Error)?;
     write!(dest, "{}", s)
   }
 }
@@ -2230,7 +2230,7 @@ fn downlevel_dir<'i>(dir: Direction, targets: Targets) -> Component<'i> {
 /// Determines whether a selector list contains only unused selectors.
 /// A selector is considered unused if it contains a class or id component that exists in the set of unused symbols.
 pub(crate) fn is_unused(
-  selectors: &mut std::slice::Iter<Selector>,
+  selectors: &mut core::slice::Iter<Selector>,
   unused_symbols: &HashSet<String>,
   parent_is_unused: bool,
 ) -> bool {
@@ -2346,3 +2346,8 @@ impl<'i> ParseWithOptions<'i> for SelectorList<'i> {
     )
   }
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

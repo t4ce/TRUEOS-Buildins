@@ -78,7 +78,7 @@ impl<'i> Parse<'i> for TextTransformOther {
 impl ToCss for TextTransformOther {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     let mut needs_space = false;
     if self.contains(TextTransformOther::FullWidth) {
@@ -198,7 +198,7 @@ impl<'i> Parse<'i> for TextTransform {
 impl ToCss for TextTransform {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     let mut needs_space = false;
     if self.case != TextTransformCase::None || self.other.is_empty() {
@@ -429,7 +429,7 @@ impl<'i> Parse<'i> for TextIndent {
 impl ToCss for TextIndent {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     self.value.to_css(dest)?;
     if self.hanging {
@@ -533,7 +533,7 @@ impl<'i> Parse<'i> for TextDecorationLine {
 impl ToCss for TextDecorationLine {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     if self.is_empty() {
       return dest.write_str("none");
@@ -774,7 +774,7 @@ impl<'i> Parse<'i> for TextDecoration {
 impl ToCss for TextDecoration {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     self.line.to_css(dest)?;
     if self.line.is_empty() {
@@ -922,7 +922,7 @@ impl<'i> Parse<'i> for TextEmphasisStyle<'i> {
 impl<'i> ToCss for TextEmphasisStyle<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     match self {
       TextEmphasisStyle::None => dest.write_str("none"),
@@ -990,7 +990,7 @@ impl<'i> Parse<'i> for TextEmphasis<'i> {
 impl<'i> ToCss for TextEmphasis<'i> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     self.style.to_css(dest)?;
 
@@ -1085,7 +1085,7 @@ impl Default for BoxDecorationBreak {
 impl ToCss for TextEmphasisPosition {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     self.vertical.to_css(dest)?;
     if self.horizontal != TextEmphasisPositionHorizontal::Right {
@@ -1217,13 +1217,13 @@ impl<'i> PropertyHandler<'i> for TextDecorationHandler<'i> {
 
     self.has_any = false;
 
-    let mut line = std::mem::take(&mut self.line);
-    let mut thickness = std::mem::take(&mut self.thickness);
-    let mut style = std::mem::take(&mut self.style);
-    let mut color = std::mem::take(&mut self.color);
-    let mut emphasis_style = std::mem::take(&mut self.emphasis_style);
-    let mut emphasis_color = std::mem::take(&mut self.emphasis_color);
-    let emphasis_position = std::mem::take(&mut self.emphasis_position);
+    let mut line = core::mem::take(&mut self.line);
+    let mut thickness = core::mem::take(&mut self.thickness);
+    let mut style = core::mem::take(&mut self.style);
+    let mut color = core::mem::take(&mut self.color);
+    let mut emphasis_style = core::mem::take(&mut self.emphasis_style);
+    let mut emphasis_color = core::mem::take(&mut self.emphasis_color);
+    let emphasis_position = core::mem::take(&mut self.emphasis_position);
 
     if let (Some((line, line_vp)), Some(thickness_val), Some((style, style_vp)), Some((color, color_vp))) =
       (&mut line, &mut thickness, &mut style, &mut color)
@@ -1423,7 +1423,7 @@ impl<'i> Parse<'i> for TextShadow {
 impl ToCss for TextShadow {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     self.x_offset.to_css(dest)?;
     dest.write_char(' ')?;
@@ -1548,3 +1548,8 @@ enum_property! {
     Plaintext,
   }
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

@@ -1,5 +1,7 @@
 //! One navigation-local box for cookies and Web Storage. No disk reads or network integration.
-use std::{cell::RefCell, rc::Rc};
+use alloc::{string::{String, ToString}, vec::Vec, borrow::ToOwned, format};
+use alloc::rc::Rc;
+use core::cell::RefCell;
 
 pub(crate) type SharedCookies = Rc<RefCell<CookieJar>>;
 pub(crate) const MAX_COOKIE_BYTES: usize = 1024 * 1024;

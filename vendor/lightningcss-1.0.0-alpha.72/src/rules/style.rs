@@ -1,7 +1,7 @@
 //! Style rules.
 
-use std::hash::{Hash, Hasher};
-use std::ops::Range;
+use core::hash::{Hash, Hasher};
+use core::ops::Range;
 
 use super::Location;
 use super::MinifyContext;
@@ -92,7 +92,7 @@ impl<'i, T: Clone> StyleRule<'i, T> {
 
     if !self.rules.0.is_empty() {
       let mut handler_context = context.handler_context.child(DeclarationContext::StyleRule);
-      std::mem::swap(&mut context.handler_context, &mut handler_context);
+      core::mem::swap(&mut context.handler_context, &mut handler_context);
       self.rules.minify(context, unused)?;
       context.handler_context = handler_context;
       if unused && self.rules.0.is_empty() {
@@ -214,7 +214,7 @@ where
 impl<'a, 'i, T: ToCss> ToCss for StyleRule<'i, T> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     if self.vendor_prefix.is_empty() {
       self.to_css_base(dest)
@@ -242,7 +242,7 @@ impl<'a, 'i, T: ToCss> ToCss for StyleRule<'i, T> {
 impl<'a, 'i, T: ToCss> StyleRule<'i, T> {
   fn to_css_base<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     // If supported, or there are no targets, preserve nesting. Otherwise, write nested rules after parent.
     let supports_nesting = self.rules.0.is_empty() || !should_compile!(dest.targets.current, Nesting);
@@ -332,3 +332,8 @@ impl<'a, 'i, T: ToCss> StyleRule<'i, T> {
     Ok(())
   }
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

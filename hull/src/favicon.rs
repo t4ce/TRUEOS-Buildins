@@ -1,5 +1,6 @@
 //! Bounded favicon discovery. The image service remains the decoder and owner.
-use std::collections::HashSet;
+use alloc::{string::{String, ToString}, vec::Vec, format, vec};
+use hashbrown::HashSet;
 
 use rp5::{Document, Namespace};
 use url::Url;

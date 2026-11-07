@@ -1,4 +1,5 @@
 //! Prepare selector components and import URLs once, immediately after CSS parsing.
+use alloc::{string::{String, ToString}, vec::Vec, borrow::ToOwned};
 use lightningcss::{rules::CssRule, selector::Component};
 use url::Url;
 

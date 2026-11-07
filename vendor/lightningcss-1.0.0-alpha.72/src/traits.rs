@@ -78,7 +78,7 @@ pub trait ToCss {
   /// Serialize `self` in CSS syntax, writing to `dest`.
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write;
+    W: core::fmt::Write;
 
   /// Serialize `self` in CSS syntax and return a string.
   ///
@@ -100,7 +100,7 @@ where
 {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     (*self).to_css(dest)
   }
@@ -109,7 +109,7 @@ where
 impl<T: ToCss> ToCss for Box<T> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     (**self).to_css(dest)
   }
@@ -118,7 +118,7 @@ impl<T: ToCss> ToCss for Box<T> {
 impl<T: ToCss> ToCss for Option<T> {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     if let Some(v) = self {
       v.to_css(dest)?;
@@ -324,7 +324,7 @@ pub trait AtRuleParser<'i>: Sized {
   /// and before the `;` semicolon or `{ /* ... */ }` block.
   ///
   /// At-rule name matching should be case-insensitive in the ASCII range.
-  /// This can be done with `std::ascii::Ascii::eq_ignore_ascii_case`,
+  /// This can be done with `core::ascii::Ascii::eq_ignore_ascii_case`,
   /// or with the `match_ignore_ascii_case!` macro.
   ///
   /// The given `input` is a "delimited" parser
@@ -390,3 +390,8 @@ pub trait AtRuleParser<'i>: Sized {
     Err(input.new_error(BasicParseErrorKind::AtRuleBodyInvalid))
   }
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;

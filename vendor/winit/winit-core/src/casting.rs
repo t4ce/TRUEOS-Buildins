@@ -6,7 +6,7 @@ macro_rules! impl_dyn_casting {
             ///
             /// Returns `None` if the object was not from that backend.
             pub fn cast_ref<T: $trait>(&self) -> Option<&T> {
-                let this: &dyn std::any::Any = self;
+                let this: &dyn core::any::Any = self;
                 this.downcast_ref::<T>()
             }
 
@@ -14,16 +14,16 @@ macro_rules! impl_dyn_casting {
             ///
             /// Returns `None` if the object was not from that backend.
             pub fn cast_mut<T: $trait>(&mut self) -> Option<&mut T> {
-                let this: &mut dyn std::any::Any = self;
+                let this: &mut dyn core::any::Any = self;
                 this.downcast_mut::<T>()
             }
 
             /// Owned downcast to the backend concrete type.
             ///
             /// Returns `Err` with `self` if the object was not from that backend.
-            pub fn cast<T: $trait>(self: Box<Self>) -> Result<Box<T>, Box<Self>> {
+            pub fn cast<T: $trait>(self: alloc::boxed::Box<Self>) -> Result<alloc::boxed::Box<T>, alloc::boxed::Box<Self>> {
                 if self.cast_ref::<T>().is_some() {
-                    let this: Box<dyn std::any::Any> = self;
+                    let this: alloc::boxed::Box<dyn core::any::Any> = self;
                     // Unwrap is okay, we just checked the type of `self` is `T`.
                     Ok(this.downcast::<T>().unwrap())
                 } else {
@@ -38,7 +38,7 @@ pub use impl_dyn_casting;
 
 #[cfg(test)]
 mod tests {
-    use std::any::Any;
+    use core::any::Any;
 
     struct Foo;
     trait FooTrait: Any {}
@@ -47,7 +47,7 @@ mod tests {
 
     #[test]
     fn dyn_casting() {
-        let foo_owned: Box<dyn FooTrait> = Box::new(Foo);
+        let foo_owned: alloc::boxed::Box<dyn FooTrait> = Box::new(Foo);
         assert!(foo_owned.cast::<Foo>().is_ok());
 
         let mut foo = Foo;

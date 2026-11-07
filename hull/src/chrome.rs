@@ -1,4 +1,5 @@
 //! Window chrome in frame coordinates, independent of the HTML layout and SVG.
+use alloc::{string::{String, ToString}, vec::Vec, vec};
 use trueos::ui4_winit::{HullTextRun, SpriteCorner, SpriteQuad};
 use url::Url;
 

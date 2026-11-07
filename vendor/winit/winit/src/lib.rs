@@ -226,6 +226,7 @@
 //! [`EventLoopExtPumpEvents::pump_app_events()`]: crate::event_loop::pump_events::EventLoopExtPumpEvents::pump_app_events()
 //! [^1]: `EventLoopExtPumpEvents::pump_app_events()` is only available on Windows, macOS, Android, Redox, X11 and Wayland.
 
+#![cfg_attr(all(feature = "trueos-native", target_os = "trueos"), no_std)]
 #![deny(rust_2018_idioms)]
 #![deny(rustdoc::broken_intra_doc_links)]
 #![deny(clippy::all)]

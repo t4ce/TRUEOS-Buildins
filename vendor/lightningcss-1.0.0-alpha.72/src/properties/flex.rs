@@ -105,7 +105,7 @@ impl<'i> Parse<'i> for FlexFlow {
 impl ToCss for FlexFlow {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     let mut needs_space = false;
     if self.direction != FlexDirection::default() || self.wrap == FlexWrap::default() {
@@ -182,7 +182,7 @@ impl<'i> Parse<'i> for Flex {
 impl ToCss for Flex {
   fn to_css<W>(&self, dest: &mut Printer<W>) -> Result<(), PrinterError>
   where
-    W: std::fmt::Write,
+    W: core::fmt::Write,
   {
     if self.grow == 0.0 && self.shrink == 0.0 && self.basis == LengthPercentageOrAuto::Auto {
       dest.write_str("none")?;
@@ -620,21 +620,21 @@ impl FlexHandler {
 
     self.has_any = false;
 
-    let mut direction = std::mem::take(&mut self.direction);
-    let mut wrap = std::mem::take(&mut self.wrap);
-    let mut grow = std::mem::take(&mut self.grow);
-    let mut shrink = std::mem::take(&mut self.shrink);
-    let mut basis = std::mem::take(&mut self.basis);
-    let box_orient = std::mem::take(&mut self.box_orient);
-    let box_direction = std::mem::take(&mut self.box_direction);
-    let box_flex = std::mem::take(&mut self.box_flex);
-    let box_ordinal_group = std::mem::take(&mut self.box_ordinal_group);
-    let box_lines = std::mem::take(&mut self.box_lines);
-    let flex_positive = std::mem::take(&mut self.flex_positive);
-    let flex_negative = std::mem::take(&mut self.flex_negative);
-    let preferred_size = std::mem::take(&mut self.preferred_size);
-    let order = std::mem::take(&mut self.order);
-    let flex_order = std::mem::take(&mut self.flex_order);
+    let mut direction = core::mem::take(&mut self.direction);
+    let mut wrap = core::mem::take(&mut self.wrap);
+    let mut grow = core::mem::take(&mut self.grow);
+    let mut shrink = core::mem::take(&mut self.shrink);
+    let mut basis = core::mem::take(&mut self.basis);
+    let box_orient = core::mem::take(&mut self.box_orient);
+    let box_direction = core::mem::take(&mut self.box_direction);
+    let box_flex = core::mem::take(&mut self.box_flex);
+    let box_ordinal_group = core::mem::take(&mut self.box_ordinal_group);
+    let box_lines = core::mem::take(&mut self.box_lines);
+    let flex_positive = core::mem::take(&mut self.flex_positive);
+    let flex_negative = core::mem::take(&mut self.flex_negative);
+    let preferred_size = core::mem::take(&mut self.preferred_size);
+    let order = core::mem::take(&mut self.order);
+    let flex_order = core::mem::take(&mut self.flex_order);
 
     macro_rules! single_property {
       ($prop: ident, $key: ident $(, 2012: $prop_2012: ident )? $(, 2009: $prop_2009: ident )?) => {
@@ -808,3 +808,8 @@ fn is_flex_property(property_id: &PropertyId) -> bool {
     _ => false,
   }
 }
+
+#[allow(unused_imports)]
+use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+#[allow(unused_imports)]
+use num_traits::Float as _;
