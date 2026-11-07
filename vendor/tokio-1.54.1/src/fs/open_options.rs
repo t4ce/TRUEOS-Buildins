@@ -581,11 +581,13 @@ impl OpenOptions {
 
 #[cfg(target_os = "trueos")]
 impl OpenOptions {
-    /// Accepts Unix creation permissions as a compatibility hint.
-    ///
-    /// TRUEOSFS controls access through access keys when opening and writing.
-    /// Mode bits do not change that authority or the requested I/O options.
-    pub fn mode(&mut self, _mode: u32) -> &mut OpenOptions {
+    /// Pass requested protection to native std, which rejects unsupported Unix
+    /// permissions instead of silently promising a mode it cannot enforce.
+    pub fn mode(&mut self, mode: u32) -> &mut OpenOptions {
+        #[cfg(not(feature = "native"))]
+        match &mut self.inner { Kind::Std(options) => options.mode = Some(mode) }
+        #[cfg(feature = "native")]
+        let _ = mode;
         self
     }
 }

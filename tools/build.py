@@ -394,7 +394,12 @@ def input_roots(kernel: Path):
             kernel / "Cargo.toml",
             kernel / "tools/testpy/apply_trueos_rust_std_thread_backend.py", kernel / "tools/rust-std/trueos_thread.rs",
             kernel / "tools/rust-std/trueos_futex.rs", kernel / "tools/rust-std/trueos_tls_key.rs",
-            kernel / "tools/rust-std/trueos_tls_guard.rs"]
+            kernel / "tools/rust-std/trueos_tls_guard.rs",
+            kernel / "tools/testpy/apply_trueos_rust_std_environment_backend.py",
+            kernel / "tools/testpy/apply_trueos_rust_std_fs_backend.py",
+            *(kernel / "tools/rust-std" / name for name in (
+                "trueos_env.rs", "trueos_args.rs", "trueos_stdio.rs", "trueos_is_terminal.rs",
+                "trueos_paths.rs", "trueos_exit.rs", "trueos_fs.rs"))]
 
 
 def external_dependency_roots():

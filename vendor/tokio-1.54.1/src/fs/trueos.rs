@@ -706,6 +706,7 @@ fn stat_sync(path: &Path) -> io::Result<Metadata> {
 
 #[derive(Clone, Debug)]
 pub(crate) struct TrueosOpenOptions {
+    pub(crate) mode: Option<u32>,
     read: bool,
     write: bool,
     append: bool,
@@ -717,6 +718,7 @@ pub(crate) struct TrueosOpenOptions {
 impl TrueosOpenOptions {
     pub(crate) fn new() -> Self {
         Self {
+            mode: None,
             read: false,
             write: false,
             append: false,
@@ -751,6 +753,17 @@ impl TrueosOpenOptions {
     }
 
     pub(crate) fn open(&self, path: PathBuf) -> io::Result<TrueosFile> {
+        #[cfg(all(target_os = "trueos", not(feature = "native")))]
+        {
+            let mut options = std::fs::OpenOptions::new();
+            options.read(self.read).write(self.write).append(self.append)
+                .truncate(self.truncate).create(self.create).create_new(self.create_new);
+            if let Some(mode) = self.mode {
+                use std::os::unix::fs::OpenOptionsExt;
+                options.mode(mode);
+            }
+            return options.open(path).map(TrueosFile::from);
+        }
         if !self.read && !self.write && !self.append {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
@@ -989,10 +1002,9 @@ impl TrueosFile {
         if let Some(file) = self.std_file.as_ref() {
             let metadata = file.metadata()?;
             let file_type = metadata.file_type();
-            use std::os::unix::fs::MetadataExt;
             return Ok(Metadata {
-                revision: (metadata.ctime() as u64).saturating_mul(1_000_000_000).saturating_add(metadata.ctime_nsec() as u64),
-                file_id: metadata.ino(), root_id: metadata.dev() as u32,
+                revision: metadata.revision().unwrap_or(0),
+                file_id: metadata.file_id().unwrap_or(0), root_id: metadata.root_id(),
                 len: metadata.len(),
                 file_type: FileType {
                     is_file: file_type.is_file(),
@@ -1143,6 +1155,9 @@ impl Seek for &TrueosFile {
 }
 
 pub(crate) async fn read(path: &Path) -> io::Result<Vec<u8>> {
+    #[cfg(all(target_os = "trueos", not(feature = "native")))]
+    return std::fs::read(path);
+
     read_async(path).await
 }
 
@@ -1157,10 +1172,16 @@ pub(crate) async fn read_to_string(path: &Path) -> io::Result<String> {
 }
 
 pub(crate) async fn write(path: &Path, contents: &[u8]) -> io::Result<()> {
+    #[cfg(all(target_os = "trueos", not(feature = "native")))]
+    return std::fs::write(path, contents);
+
     write_async(path, contents).await
 }
 
 pub(crate) async fn create_dir(path: &Path) -> io::Result<()> {
+    #[cfg(all(target_os = "trueos", not(feature = "native")))]
+    return std::fs::create_dir(path);
+
     create_dir_all(path).await
 }
 
@@ -1205,6 +1226,9 @@ pub(crate) async fn read_dir(path: &Path) -> io::Result<TrueosReadDir> {
 }
 
 pub(crate) async fn set_permissions(path: &Path, perm: Permissions) -> io::Result<()> {
+    #[cfg(all(target_os = "trueos", not(feature = "native")))]
+    return std::fs::set_permissions(path, perm);
+
     #[cfg(any(target_os = "trueos", feature = "native"))]
     {
         let _ = perm;
@@ -1218,9 +1242,15 @@ pub(crate) async fn set_permissions(path: &Path, perm: Permissions) -> io::Resul
 }
 
 pub(crate) async fn remove_file(path: &Path) -> io::Result<()> {
+    #[cfg(all(target_os = "trueos", not(feature = "native")))]
+    return std::fs::remove_file(path);
+
     remove_async(path).await
 }
 
 pub(crate) async fn rename(source: &Path, destination: &Path) -> io::Result<()> {
+    #[cfg(all(target_os = "trueos", not(feature = "native")))]
+    return std::fs::rename(source, destination);
+
     rename_async(source, destination).await
 }
