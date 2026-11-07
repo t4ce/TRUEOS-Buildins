@@ -71,7 +71,7 @@ class BuildInputs(unittest.TestCase):
 
     def test_only_audited_core_alloc_apps_select_the_native_target(self):
         names = json.loads((build.ROOT / "buildins.json").read_text())["buildins"]
-        admitted = {"apps", "backup", "commander", "edit", "hull", "img", "os", "paper", "share", "termdir", "trauma"}
+        admitted = {"apps", "backup", "commander", "edit", "hull", "img", "os", "paper", "share", "ssh", "termdir", "trauma"}
         self.assertEqual(set(build.NATIVE_CORE_ALLOC_BUILTINS), admitted)
         for name in names:
             needs_std = build.settings(name)[2]
@@ -626,6 +626,28 @@ class CargoObjects(unittest.TestCase):
 
 
 class SharedKernelSources(unittest.TestCase):
+    def test_direct_kernel_vendor_dependency_is_fingerprinted(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            builtins = root / "TRUEOS-Buildins"
+            app = builtins / "ssh"
+            app.mkdir(parents=True)
+            manifest = app / "Cargo.toml"
+            manifest.write_text('[dependencies]\nsunset={path="../../TRUEOS/vendor/sunset"}\n')
+            (builtins / "buildins.json").write_text('{"buildins":["ssh"]}')
+            engine = root / "TRUEOS/vendor/sunset"
+            engine.mkdir(parents=True)
+            (engine / "Cargo.toml").write_text('[package]\nname="sunset"\nversion="0.5.0"\n')
+            source = engine / "lib.rs"
+            source.write_text("first")
+            with patch.object(build, "ROOT", builtins), patch.object(build, "input_roots", return_value=[app]), patch.object(build, "patches", return_value={}):
+                staged = root / "output/ssh/Cargo.toml"
+                self.assertIn(str(engine), build.staged_manifest(staged, manifest).decode())
+                self.assertEqual(build.external_dependency_roots(), [engine])
+                before = build.source_digest(root / "TRUEOS")
+                source.write_text("changed engine")
+                self.assertNotEqual(before, build.source_digest(root / "TRUEOS"))
+
     def test_nested_staging_and_external_dependency_fingerprint(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

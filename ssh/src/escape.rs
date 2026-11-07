@@ -39,4 +39,28 @@ impl LocalEscape {
         false
     }
 }
-
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn local_escape_only_disconnects_at_line_start() {
+        let mut e = LocalEscape::new();
+        let mut out = Vec::new();
+        assert!(!e.forward(b"echo ~. stays\r\n", &mut out));
+        assert_eq!(out, b"echo ~. stays\r\n");
+        out.clear();
+        assert!(e.forward(b"~.", &mut out));
+        assert!(out.is_empty());
+    }
+    #[test]
+    fn fragmented_tilde_and_literal_tilde_keep_exact_bytes() {
+        let mut e = LocalEscape::new();
+        let mut out = Vec::new();
+        assert!(!e.forward(b"~", &mut out));
+        assert!(out.is_empty());
+        assert!(!e.forward(b"~x\r~", &mut out));
+        assert_eq!(out, b"~x\r");
+        assert!(!e.forward(b"y", &mut out));
+        assert_eq!(out, b"~x\r~y");
+    }
+}

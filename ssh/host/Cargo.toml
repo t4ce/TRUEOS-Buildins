@@ -1,0 +1,17 @@
+# Run the same app sources with upstream host Tokio. The native SDK's target
+# feature declarations require the native Tokio fork during normal rig builds.
+[package]
+name = "ssh-host"
+version = "0.1.0"
+edition = "2024"
+[workspace]
+[[bin]]
+name = "ssh"
+path = "../src/main.rs"
+[dependencies]
+sunset = { path = "../../../TRUEOS/vendor/sunset", default-features = false, features = ["alloc", "larger", "ecdsa-all", "key-import", "mlkem"] }
+tokio = { version = "=1.54.1", default-features = false, features = ["io-util", "io-std", "net", "rt", "time", "macros", "sync"] }
+sha2 = { version = "=0.10.9", default-features = false }
+zeroize = { version = "1", default-features = false, features = ["alloc"] }
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("trueos", "zkvm"))'] }

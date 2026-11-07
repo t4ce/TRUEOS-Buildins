@@ -40,7 +40,7 @@ PACKAGE_REVISION = 3
 # These apps have an audited core/alloc target dependency closure. Keep this
 # admission explicit: an entry's no_std attribute alone cannot establish that
 # its dependencies avoid std or support a target without Unix platform cfgs.
-NATIVE_CORE_ALLOC_BUILTINS = frozenset({"apps", "backup", "commander", "edit", "hull", "img", "os", "paper", "share", "termdir", "trauma"})
+NATIVE_CORE_ALLOC_BUILTINS = frozenset({"apps", "backup", "commander", "edit", "hull", "img", "os", "paper", "share", "ssh", "termdir", "trauma"})
 
 
 def run(args, **kwargs):
@@ -413,9 +413,11 @@ def external_dependency_roots():
                     for spec in child.values():
                         if isinstance(spec, dict) and isinstance(spec.get("path"), str):
                             relative = spec["path"]
-                            if relative.endswith("/api") or "/vendor/" in relative:
-                                continue  # Existing SDK and vendor input roots cover these.
+                            if relative.endswith("/api"):
+                                continue  # The staged SDK has its own complete input root.
                             dest = dependency_path(relative, manifest, manifest, app).resolve()
+                            if dest.is_relative_to((ROOT / "vendor").resolve()):
+                                continue  # Only this repository's vendor tree is covered above.
                             if not dest.is_relative_to(app.resolve()):
                                 external.add(dest)
                                 pending.append((dest / "Cargo.toml", app))
