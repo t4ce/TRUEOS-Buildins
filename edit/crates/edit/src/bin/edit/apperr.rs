@@ -1,7 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-use std::io;
+#[allow(unused_imports)]
+use stdext::platform::prelude::*;
+
+use stdext::platform::io;
 
 use edit::{buffer, icu};
 
@@ -12,7 +15,7 @@ pub enum Error {
     Icu(icu::Error),
 }
 
-pub type Result<T> = std::result::Result<T, Error>;
+pub type Result<T> = stdext::platform::result::Result<T, Error>;
 
 impl From<io::Error> for Error {
     fn from(err: io::Error) -> Self {

@@ -1,7 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-use std::ptr;
+#[allow(unused_imports)]
+use stdext::platform::prelude::*;
+
+use stdext::platform::ptr;
 
 use crate::helpers::CoordType;
 
@@ -80,7 +83,7 @@ unsafe fn lines_fwd_dispatch(
     line: CoordType,
     line_stop: CoordType,
 ) -> (*const u8, CoordType) {
-    let func = if is_x86_feature_detected!("avx2") { lines_fwd_avx2 } else { lines_fwd_fallback };
+    let func = if stdext::platform::avx2_available() { lines_fwd_avx2 } else { lines_fwd_fallback };
     unsafe { LINES_FWD_DISPATCH = func };
     unsafe { func(beg, end, line, line_stop) }
 }
@@ -94,7 +97,7 @@ unsafe fn lines_fwd_avx2(
     line_stop: CoordType,
 ) -> (*const u8, CoordType) {
     unsafe {
-        use std::arch::x86_64::*;
+        use stdext::platform::arch::x86_64::*;
 
         #[inline(always)]
         unsafe fn horizontal_sum_i64(v: __m256i) -> i64 {
@@ -176,7 +179,7 @@ unsafe fn lines_fwd_dispatch(
     line: CoordType,
     line_stop: CoordType,
 ) -> (*const u8, CoordType) {
-    use std::arch::is_loongarch_feature_detected;
+    use stdext::platform::arch::is_loongarch_feature_detected;
 
     let func = if is_loongarch_feature_detected!("lasx") {
         lines_fwd_lasx
@@ -198,7 +201,7 @@ unsafe fn lines_fwd_lasx(
     line_stop: CoordType,
 ) -> (*const u8, CoordType) {
     unsafe {
-        use std::arch::loongarch64::*;
+        use stdext::platform::arch::loongarch64::*;
 
         #[inline(always)]
         unsafe fn horizontal_sum(sum: m256i) -> u32 {
@@ -271,7 +274,7 @@ unsafe fn lines_fwd_lsx(
     line_stop: CoordType,
 ) -> (*const u8, CoordType) {
     unsafe {
-        use std::arch::loongarch64::*;
+        use stdext::platform::arch::loongarch64::*;
 
         #[inline(always)]
         unsafe fn horizontal_sum(sum: m128i) -> u32 {
@@ -341,7 +344,7 @@ unsafe fn lines_fwd_neon(
     line_stop: CoordType,
 ) -> (*const u8, CoordType) {
     unsafe {
-        use std::arch::aarch64::*;
+        use stdext::platform::arch::aarch64::*;
 
         let lf = vdupq_n_u8(b'\n');
         let off = beg.align_offset(16);

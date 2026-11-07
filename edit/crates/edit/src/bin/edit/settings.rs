@@ -1,4 +1,7 @@
-use std::path::PathBuf;
+#[allow(unused_imports)]
+use stdext::platform::prelude::*;
+
+use stdext::platform::path::PathBuf;
 
 use edit::buffer::TextBuffer;
 use edit::cell::{Ref, SemiRefCell};
@@ -10,7 +13,7 @@ use stdext::arena_format;
 use crate::apperr;
 
 pub struct Settings {
-    pub path: PathBuf,
+    pub path: Option<PathBuf>,
     pub file_associations: Vec<(String, &'static Language)>,
 }
 
@@ -28,7 +31,7 @@ impl Settings {
     }
 
     const fn new() -> Self {
-        Settings { path: PathBuf::new(), file_associations: Vec::new() }
+        Settings { path: None, file_associations: Vec::new() }
     }
 
     pub fn borrow() -> Ref<'static, Settings> {
@@ -39,13 +42,12 @@ impl Settings {
         let s = &mut *SETTINGS.0.borrow_mut();
 
         // Reset all members if we had been loaded previously.
-        if !s.path.as_os_str().is_empty() {
+        if s.path.is_some() {
             *s = Settings::new();
         }
 
-        // The built-in editor has no direct filesystem capability.  Settings
-        // will become an explicit async TRUEOS VFS operation alongside file
-        // open/save, rather than implicitly loading a host-style config path.
+        // Host XDG/HOME discovery is not part of the native launch contract.
+        // Keep native settings absent until an explicit settings path is supplied.
         #[cfg(target_os = "trueos")]
         {
             let _ = s;
@@ -59,14 +61,12 @@ impl Settings {
 
     #[cfg(not(target_os = "trueos"))]
     fn load(&mut self) -> apperr::Result<()> {
-        self.path = match settings_json_path() {
-            Some(p) => p,
-            None => return Ok(()),
-        };
+        self.path = settings_json_path();
+        let Some(path) = self.path.as_ref() else { return Ok(()) };
 
         let scratch = scratch_arena(None);
-        let str = match read_to_string(&scratch, &self.path) {
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        let str = match read_to_string(&scratch, path) {
+            Err(err) if err.kind() == stdext::platform::io::ErrorKind::NotFound => return Ok(()),
             Err(err) => return Err(err.into()),
             Ok(str) => str,
         };
@@ -106,7 +106,7 @@ fn settings_json_path() -> Option<PathBuf> {
 
 fn config_dir() -> Option<PathBuf> {
     fn var_path(key: &str) -> Option<PathBuf> {
-        std::env::var_os(key).map(PathBuf::from)
+        stdext::platform::env::var_os(key).map(PathBuf::from)
     }
 
     fn push(mut path: PathBuf, suffix: &str) -> PathBuf {

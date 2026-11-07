@@ -3,9 +3,12 @@
 
 #![allow(clippy::missing_safety_doc, clippy::mut_from_ref)]
 
-use std::io;
-use std::ops::Deref;
-use std::ptr::NonNull;
+#[allow(unused_imports)]
+use crate::platform::prelude::*;
+
+use crate::platform::io;
+use crate::platform::ops::Deref;
+use crate::platform::ptr::NonNull;
 
 use super::release;
 use crate::alloc::Allocator;

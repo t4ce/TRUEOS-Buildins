@@ -40,7 +40,7 @@ PACKAGE_REVISION = 3
 # These apps have an audited core/alloc target dependency closure. Keep this
 # admission explicit: an entry's no_std attribute alone cannot establish that
 # its dependencies avoid std or support a target without Unix platform cfgs.
-NATIVE_CORE_ALLOC_BUILTINS = frozenset({"backup", "commander", "img", "os", "paper", "termdir"})
+NATIVE_CORE_ALLOC_BUILTINS = frozenset({"backup", "commander", "edit", "img", "os", "paper", "termdir"})
 
 
 def run(args, **kwargs):
@@ -261,6 +261,18 @@ def staged_manifest(path: Path, original: Path):
     return ("\n".join(lines) + "\n").encode()
 
 
+def native_no_std_entry(source: str) -> bool:
+    """Recognize target-active entry attributes without counting comments.
+
+    Hosted editor tests keep std; their TRUEOS entry uses the same audited
+    core/alloc target as entries that declare no_std on every platform.
+    """
+    return bool(re.search(
+        r'(?m)^\s*#!\[\s*(?:no_std|cfg_attr\(\s*target_os\s*=\s*"trueos"\s*,\s*no_std\s*,?\s*\))\s*\]\s*$',
+        source,
+    ))
+
+
 def settings(name: str):
     manifest = ROOT / name / ("crates/edit/Cargo.toml" if name == "edit" else "Cargo.toml")
     doc = tomllib.loads(manifest.read_text())
@@ -284,7 +296,7 @@ def settings(name: str):
     if native_runtime and std_runtime:
         raise ValueError(f"{name}: native-runtime cannot be combined with std Tokio runtime features")
     uses_runtime = any(token in text for token in ("runtime", "worker", "task::", "tokio::"))
-    needs_std = "#![no_std]" not in text or (uses_runtime and not native_runtime)
+    needs_std = not native_no_std_entry(text) or (uses_runtime and not native_runtime)
     if uses_runtime:
         features.add("trueos/native-runtime" if native_runtime else "trueos/tokio-runtime")
     if not native_runtime and any(token in text for token in ("trueos::net", "tokio::net", "current_thread_net")):
@@ -312,8 +324,8 @@ def stage_app(name: str, output: Path, manifest: Path, source: Path):
         if not any(part in IGNORED for part in original.relative_to(ROOT / name).parts):
             transformed[original] = staged_manifest(stage / original.relative_to(ROOT / name), original)
     text = source.read_text()
-    if name in NATIVE_CORE_ALLOC_BUILTINS and not re.search(r"(?m)^\s*#!\[no_std\]\s*$", text):
-        raise ValueError(f"{name}: native core/alloc entry must declare #![no_std]")
+    if name in NATIVE_CORE_ALLOC_BUILTINS and not native_no_std_entry(text):
+        raise ValueError(f"{name}: native core/alloc entry must declare #![no_std] for TRUEOS")
     if not re.search(r'(?m)^\s*#!\[(?:no_main|cfg_attr\(target_os\s*=\s*"trueos",\s*no_main\))\]', text):
         text = '#![no_main]\n' + text + '''
 #[allow(unsafe_code)]
@@ -453,6 +465,14 @@ def verify_abi(kernel: Path, output: Path, names):
     for source, function in [(unix, "unsupported_unix_import_reason"), (prebind, "retired_import_error")]:
         body = source.split("fn " + function + "(", 1)[1].split("\n}", 1)[0]
         rejected.update(re.findall(r'"([^"\n]+)"', body))
+    # The kernel keeps its historical classifier for diagnostics after retiring
+    # the compatibility implementations. Only its freestanding helpers bind.
+    if "is_unix_import(name) && resolve_import(name).is_none()" in unix:
+        classifier = unix.split("pub(crate) fn is_unix_import", 1)[1].split(
+            "pub(crate) fn resolve_import", 1)[0]
+        resolver = unix.split("pub(crate) fn resolve_import", 1)[1]
+        rejected.update(set(re.findall(r'"([^"\n]+)"', classifier)) -
+                        set(re.findall(r'"([^"\n]+)"\s*=>', resolver)))
     for name in names:
         for line in capture(["nm", "-u", output / "objects" / name / "module.stripped.o"]).splitlines():
             symbol = line.split()[-1]
@@ -465,12 +485,30 @@ def verify_abi(kernel: Path, output: Path, names):
                 raise ValueError(f"{name}: kernel has no literal import binding for {symbol}")
 
 
-def check_ready(output: Path, kernel: Path, profile: str):
+def selected_manifest(native_only=False):
+    """A complete experimental set, without changing builtin ownership."""
+    data = (ROOT / "buildins.json").read_bytes()
+    names = json.loads(data)["buildins"]
+    if not names or len(set(names)) != len(names) or any(not re.fullmatch(r"[A-Za-z0-9_-]+", name) for name in names):
+        raise ValueError("buildins.json must contain unique, nonempty app names")
+    if native_only:
+        names = [name for name in names if name in NATIVE_CORE_ALLOC_BUILTINS]
+        if not names:
+            raise ValueError("no audited native builtins are configured")
+        for name in names:
+            if settings(name)[2]:
+                raise ValueError(f"{name}: native-only selection now requires std")
+        data = (json.dumps({"buildins": names}, indent=2) + "\n").encode()
+    return names, data
+
+
+def check_ready(output: Path, kernel: Path, profile: str, native_only=False):
     ready = json.loads((output / "ready.json").read_text())
-    names = json.loads((ROOT / "buildins.json").read_text())["buildins"]
+    names, manifest = selected_manifest(native_only)
     if (output / ".building").exists() or ready["profile"] != profile or ready["sources"] != source_digest(kernel):
         raise ValueError("builtins are stale or the last build failed; prepare the kernel and builtins together")
-    if list(ready["packages"]) != names or (output / "buildins.json").read_bytes() != (ROOT / "buildins.json").read_bytes():
+    if (ready.get("native_only", False) != native_only
+            or list(ready["packages"]) != names or (output / "buildins.json").read_bytes() != manifest):
         raise ValueError("the prepared builtins do not match buildins.json")
     for name, expected in ready["packages"].items():
         if hashlib.sha256((output / "dist" / f"{name}.bp").read_bytes()).hexdigest() != expected:
@@ -497,6 +535,10 @@ def build_database(output: Path, kernel: Path, cargo: Path, env: dict, names):
     inputs.update(os.environ.get("SOURCE_DATE_EPOCH", "").encode())
     signature = inputs.hexdigest()
     state = output / "database.json"
+    # The host seed tool reads exactly this generation's selection, never a
+    # cached database or the default manifest when an experiment is selected.
+    manifest = output / "database-buildins.json"
+    write_changed(manifest, (json.dumps({"buildins": list(names)}, indent=2) + "\n").encode())
     if state.is_file():
         previous = json.loads(state.read_text())
         if previous["inputs"] == signature and all((output / name).is_file() and hashlib.sha256((output / name).read_bytes()).hexdigest() == digest
@@ -512,7 +554,7 @@ def build_database(output: Path, kernel: Path, cargo: Path, env: dict, names):
     # An external working directory keeps the host helper out of kernel Cargo config.
     with tempfile.TemporaryDirectory(prefix="trueos-appdb-host-") as directory:
         run([cargo, "run", "--quiet", "--release", "--target", "x86_64-unknown-linux-gnu",
-             "--manifest-path", tool / "Cargo.toml", "--", ROOT / "buildins.json", output / "dist", output / "app.db", updated],
+             "--manifest-path", tool / "Cargo.toml", "--", manifest, output / "dist", output / "app.db", updated],
             cwd=directory, env=host_env)
     write_changed(output / "app.db.lz4", lz4_frame((output / "app.db").read_bytes()), durable=True)
     database = {name: hashlib.sha256((output / name).read_bytes()).hexdigest() for name in ("app.db", "app.db.lz4")}
@@ -655,17 +697,16 @@ def main():
     parser.add_argument("--profile", choices=("dev", "release"), default="dev")
     parser.add_argument("--app", action="append", help="compile selected apps for diagnostics; no complete-set marker")
     parser.add_argument("--check", action="store_true", help="verify the complete prepared set without building")
+    parser.add_argument("--native-only", action="store_true", help="complete image containing only the audited core/alloc builtins")
     args = parser.parse_args()
     output, kernel = args.output.resolve(), args.kernel.resolve()
     output.mkdir(parents=True, exist_ok=True)
     if args.check:
-        check_ready(output, kernel, args.profile)
+        check_ready(output, kernel, args.profile, args.native_only)
         return
     lock = (output / "build.lock").open("w")
     fcntl.flock(lock, fcntl.LOCK_EX)
-    names = json.loads((ROOT / "buildins.json").read_text())["buildins"]
-    if not names or len(set(names)) != len(names) or any(not re.fullmatch(r"[A-Za-z0-9_-]+", name) for name in names):
-        raise ValueError("buildins.json must contain unique, nonempty app names")
+    names, manifest = selected_manifest(args.native_only)
     selected = args.app or names
     if any(name not in names for name in selected):
         raise ValueError("unknown built-in app")
@@ -677,6 +718,15 @@ def main():
     for name in selected:
         build_app(name, output, args.profile, cargo, binaries, env, overlays)
     verify_abi(kernel, output, selected)
+    if args.native_only:
+        classifier = (kernel / "src/unix_compat.rs").read_text().split(
+            "pub(crate) fn is_unix_import", 1)[1].split("pub(crate) fn resolve_import", 1)[0]
+        unix = set(re.findall(r'"([^"\n]+)"', classifier))
+        for name in selected:
+            imports = {line.split()[-1] for line in capture(
+                ["nm", "-u", output / "objects" / name / "module.stripped.o"]).splitlines()}
+            if forbidden := sorted(imports & unix):
+                raise ValueError(f"{name}: native-only image imports Unix compatibility: {forbidden}")
     if not args.app:
         prune_obsolete_packages(output, names)
         checkpoint(output, "app.db", "image start")
@@ -685,9 +735,11 @@ def main():
     if source_digest(kernel) != before:
         raise ValueError("built-in inputs changed during the build; run the build again")
     if not args.app:
-        write_changed(output / "buildins.json", (ROOT / "buildins.json").read_bytes())
+        write_changed(output / "buildins.json", manifest)
         ready = {"profile": args.profile, "sources": before, "database": database, "packages": {
             name: hashlib.sha256((output / "dist" / f"{name}.bp").read_bytes()).hexdigest() for name in names}}
+        if args.native_only:
+            ready["native_only"] = True
         write_changed(output / "ready.json", (json.dumps(ready, indent=2) + "\n").encode(), durable=True)
         (output / ".building").unlink()
         print(f"buildins: complete set of {len(names)} apps ready for the kernel", flush=True)

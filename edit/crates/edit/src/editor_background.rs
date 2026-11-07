@@ -4,7 +4,10 @@
 //! Cell-space metadata for the terminal's independent Conway background task.
 //! The terminal rasterizer supplies glyph coverage and color, not this module.
 
-use std::fmt;
+#[allow(unused_imports)]
+use stdext::platform::prelude::*;
+
+use stdext::platform::fmt;
 
 use crate::helpers::{CoordType, Point, Rect};
 

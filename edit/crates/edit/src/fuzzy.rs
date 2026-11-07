@@ -5,6 +5,9 @@
 //! Other algorithms exist, such as Sublime Text's, or the one used in `fzf`,
 //! but I figured that this one is what lots of people may be familiar with.
 
+#[allow(unused_imports)]
+use stdext::platform::prelude::*;
+
 use stdext::arena::{Arena, scratch_arena};
 use stdext::collections::BVec;
 
@@ -41,8 +44,8 @@ pub fn score_fuzzy<'a>(
     let mut scores = BVec::empty();
     let mut matches = BVec::empty();
 
-    scores.extend(&*scratch, std::iter::repeat_n(0, area));
-    matches.extend(&*scratch, std::iter::repeat_n(0, area));
+    scores.extend(&*scratch, stdext::platform::iter::repeat_n(0, area));
+    matches.extend(&*scratch, stdext::platform::iter::repeat_n(0, area));
 
     //
     // Build Scorer Matrix:

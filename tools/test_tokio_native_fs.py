@@ -104,7 +104,7 @@ name="tokio-native-fs-linked"
 path={json.dumps(str(BUILDINS / 'tools/tokio_native_fs/native_entry.rs'))}
 [dependencies]
 tokio={{path={json.dumps(str(TOKIO))},default-features=false,features={json.dumps(FEATURES)}}}
-trueos={{path={json.dumps(str(BUILDINS / 'vendor/trueos'))},default-features=false,features=["default-global-allocator","default-panic-handler","native-runtime"]}}
+trueos={{path={json.dumps(str(BUILDINS / 'vendor/trueos'))},default-features=false,features=["default-global-allocator","default-panic-handler","native-net"]}}
 [patch.crates-io]
 tokio={{path={json.dumps(str(TOKIO))}}}
 mio={{path={json.dumps(str(ROOT / 'vendor/mio-1.2.0'))}}}
@@ -137,6 +137,37 @@ panic="abort"
                                 ("minimal-native-stdio", ["native", "io-std"])]:
             run(label, cargo + ["check", "--offline", "--manifest-path", str(minimal / "Cargo.toml"),
                 "--features", ",".join("tokio/" + feature for feature in selected), *target_flags], native_target)
+        sdk_base = work / "sdk-base"
+        sdk_base.mkdir()
+        (sdk_base / "Cargo.toml").write_text(f'''[package]
+name="sdk-native-base-feature-check"
+version="0.0.0"
+edition="2024"
+[workspace]
+[lib]
+path="lib.rs"
+[dependencies]
+trueos={{path={json.dumps(str(BUILDINS / 'vendor/trueos'))},default-features=false,features=["native-runtime"]}}
+[patch.crates-io]
+tokio={{path={json.dumps(str(TOKIO))}}}
+mio={{path={json.dumps(str(ROOT / 'vendor/mio-1.2.0'))}}}
+[profile.dev]
+panic="abort"
+''')
+        (sdk_base / "lib.rs").write_text('#![no_std]\npub use trueos::{fs,io,runtime};\n')
+        run("sdk-native-base", cargo + ["check", "--offline", "--manifest-path", str(sdk_base / "Cargo.toml"),
+            *target_flags], native_target)
+        run("sdk-native-base-features", cargo + ["tree", "--offline", "--manifest-path", str(sdk_base / "Cargo.toml"),
+            "--target", str(target), "-Zjson-target-spec", "--edges", "normal", "--prefix", "none",
+            "--format", "{p} [{f}]"], native_target)
+        base_graph = (output / "sdk-native-base-features.log").read_text()
+        for forbidden in ["mio v", "socket2 v", "libc v"]:
+            # Cargo also names unused patches in warnings; only a dependency
+            # entry at the beginning of a tree line establishes inclusion.
+            assert not re.search("^" + re.escape(forbidden), base_graph, re.MULTILINE), base_graph
+        tokio_features = re.search(r"^tokio v[^\n]+\[([^\]]*)\]", base_graph, re.MULTILINE).group(1).split(",")
+        assert "native" in tokio_features and "fs" in tokio_features and "io-std" in tokio_features
+        assert "net" not in tokio_features and "std-compat" not in tokio_features, tokio_features
         module = native_target / target.stem / "release/tokio-native-fs-linked.o"
         symbols = sorted({line.split()[-1] for line in subprocess.check_output(["nm", "-u", str(module)], text=True).splitlines() if line.strip()})
         assert not list((native_target / target.stem).rglob("libstd-*.rlib"))
@@ -165,6 +196,8 @@ panic="abort"
         assert "unix" not in cfg and 'target_env=""' in cfg and not any(x.startswith("target_family=") for x in cfg)
         (output / "receipt.json").write_text(json.dumps({"checks": checks, "native_fs_cases": 16,
             "native_stdio_cases": 11, "native_features": FEATURES, "build_std": ["core", "compiler_builtins", "alloc"],
+            "sdk_combined_feature": "native-net", "sdk_base_feature": "native-runtime",
+            "sdk_base_tokio_features": tokio_features, "sdk_base_has_mio_or_socket2_or_libc": False,
             "target_cfg": cfg, "imports": symbols, "unknown_source_contracts": unknown,
             "object": {"path": str(saved_module), "bytes": saved_module.stat().st_size,
                        "sha256": hashlib.sha256(saved_module.read_bytes()).hexdigest()},

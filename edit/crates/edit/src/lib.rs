@@ -1,3 +1,4 @@
+#![cfg_attr(target_os = "trueos", no_std)]
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
@@ -7,6 +8,9 @@
     allow(clippy::incompatible_msrv)
 )]
 #![allow(clippy::missing_transmute_annotations, clippy::new_without_default, stable_features)]
+
+#[allow(unused_imports)]
+use stdext::platform::prelude::*;
 
 pub mod base64;
 pub mod buffer;

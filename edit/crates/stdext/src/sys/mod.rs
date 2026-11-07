@@ -3,10 +3,13 @@
 
 //! Platform abstractions.
 
-#[cfg(unix)]
+#[allow(unused_imports)]
+use crate::platform::prelude::*;
+
+#[cfg(any(unix, target_os = "trueos"))]
 mod unix;
 
-pub use std::fs::canonicalize;
+pub use crate::platform::fs::canonicalize;
 
-#[cfg(unix)]
+#[cfg(any(unix, target_os = "trueos"))]
 pub use unix::*;

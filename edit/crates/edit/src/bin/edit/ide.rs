@@ -3,10 +3,13 @@
 
 //! Shared source-backed state for the feature-enabled TRUEOS IDE.
 
-use std::cell::RefCell;
-use std::io;
-use std::path::Path;
-use std::rc::Rc;
+#[allow(unused_imports)]
+use stdext::platform::prelude::*;
+
+use stdext::platform::cell::RefCell;
+use stdext::platform::io;
+use stdext::platform::path::Path;
+use stdext::platform::rc::Rc;
 
 use trueos_ide::{LoadedSource, ProjectBuildConfig, ProjectSummary, SourceFileInput};
 #[cfg(not(target_os = "trueos"))]
@@ -83,7 +86,7 @@ impl IdeSession {
         if let Some(parent) = database.parent()
             && !parent.as_os_str().is_empty()
         {
-            std::fs::create_dir_all(parent)?;
+            stdext::platform::fs::create_dir_all(parent)?;
         }
         let mut database = SourceDatabase::open(database).map_err(io::Error::other)?;
         let (source, config) = select_project(&mut database, project, mode)?;
@@ -232,13 +235,15 @@ impl IdeSession {
         return Err(io::Error::new(io::ErrorKind::Unsupported, "Compiler VMs require TRUEOS"));
         #[cfg(target_os = "trueos")]
         {
-            let prepared = self.tracker.prepare(Path::new(trueos_ide::workspace::BUILD_ROOT),
-                &self.project.borrow().source, self.backend.ok_or_else(|| io::Error::other("Project compiler is missing"))?, &self.entry)?;
+            let prepared = self.tracker.prepare_with_storage(&mut NativeBuildStorage,
+                trueos_ide::workspace::BUILD_ROOT,
+                &self.project.borrow().source, self.backend.ok_or_else(|| io::Error::other("Project compiler is missing"))?, &self.entry)
+                .map_err(io::Error::other)?;
             let program = match self.backend.ok_or_else(|| io::Error::other("Project compiler is missing"))? {
                 CompilerBackend::OdinSon => "odin-son.bp",
                 CompilerBackend::RustcMin => "rustc-min.bp",
             };
-            let path = prepared.request_path.to_str().ok_or_else(|| io::Error::other("Compiler request path must be UTF-8"))?;
+            let path = prepared.request_path.as_str();
             match CompilerJob::start(program, path) {
                 Ok(child) => {
                     self.compiler = Some(child);
@@ -275,7 +280,7 @@ impl IdeSession {
             if *revision_id != self.project.borrow().source.revision.id {
                 return Err(io::Error::other("Compile the current project revision before running"));
             }
-            let bytes = std::fs::read(&artifact.path)?;
+            let bytes = stdext::platform::fs::read(&artifact.path)?;
             if bytes.len() as u64 != artifact.bytes || trueos_ide::workspace::sha256(&bytes) != artifact.sha256 {
                 return Err(io::Error::other("Built application changed; compile it again before running"));
             }
@@ -383,7 +388,7 @@ impl IdeSession {
         let Some((child, _)) = &mut self.codex_download else { return Ok(false) };
         let result = child.poll();
         match result {
-            Ok(false) if child.started.elapsed() < std::time::Duration::from_secs(600) => return Ok(false),
+            Ok(false) if child.started.elapsed() < stdext::platform::time::Duration::from_secs(600) => return Ok(false),
             Ok(true) => {},
             other => {
                 self.codex_download.take();
@@ -409,7 +414,7 @@ impl IdeSession {
         let child = &mut job.child;
         let result = child.poll();
         match result {
-            Ok(false) if child.started.elapsed() < std::time::Duration::from_secs(600) => Ok(false),
+            Ok(false) if child.started.elapsed() < stdext::platform::time::Duration::from_secs(600) => Ok(false),
             Ok(false) => {
                 let error = compiler_failure(&mut self.tracker,
                     io::Error::new(io::ErrorKind::TimedOut, "Compiler job exceeded its ten minute timeout"),
@@ -436,7 +441,7 @@ impl IdeSession {
                     }
                 }
                 let child = job.child;
-                let artifact = match self.tracker.finish() {
+                let artifact = match self.tracker.finish_with_storage(&mut NativeBuildStorage).map_err(io::Error::other) {
                     Ok(artifact) => artifact,
                     Err(error) => return Err(compiler_failure(&mut self.tracker, error, child.diagnostics.as_ref())),
                 };
@@ -477,9 +482,33 @@ impl IdeSession {
     }
 }
 
+#[cfg(target_os = "trueos")]
+struct NativeBuildStorage;
+
+#[cfg(target_os = "trueos")]
+impl trueos_ide::workspace::BuildStorage for NativeBuildStorage {
+    type Error = io::Error;
+    fn create_dir_all(&mut self, path: &str) -> io::Result<()> {
+        stdext::platform::fs::create_dir_all(path)
+    }
+    fn create_dir(&mut self, path: &str) -> io::Result<()> {
+        stdext::platform::fs::create_dir(path)
+    }
+    fn is_already_exists(&self, error: &Self::Error) -> bool { error.kind() == io::ErrorKind::AlreadyExists }
+    fn write(&mut self, path: &str, bytes: &[u8]) -> io::Result<()> {
+        stdext::platform::fs::write(path, bytes)
+    }
+    fn len(&mut self, path: &str) -> io::Result<u64> {
+        stdext::platform::fs::metadata(path).map(|metadata| metadata.len)
+    }
+    fn read(&mut self, path: &str) -> io::Result<Vec<u8>> {
+        stdext::platform::fs::read(path)
+    }
+}
+
 pub fn list_database_projects(database: &Path) -> io::Result<Vec<ProjectSummary>> {
     #[cfg(not(target_os = "trueos"))]
-    match std::fs::metadata(database) {
+    match stdext::platform::fs::metadata(database) {
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
         Err(error) => return Err(error),
         Ok(_) => {},
@@ -587,7 +616,7 @@ fn workspace_epoch() -> u64 {
     #[cfg(target_os = "trueos")]
     return trueos::clock::unix_nanos().unwrap_or(1).max(1);
     #[cfg(not(target_os = "trueos"))]
-    return std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+    return stdext::platform::time::SystemTime::now().duration_since(stdext::platform::time::UNIX_EPOCH)
         .map(|duration| duration.as_nanos() as u64).unwrap_or(1).max(1);
 }
 
@@ -622,7 +651,7 @@ impl CompilerJob {
 #[cfg(target_os = "trueos")]
 struct OwnedChild {
     handle: u64,
-    started: std::time::Instant,
+    started: stdext::platform::time::Instant,
     diagnostics: Option<DiagnosticTail>,
 }
 
@@ -646,7 +675,7 @@ impl OwnedChild {
                 if code == trueos::child_hull::ERR_NOT_FOUND { io::ErrorKind::NotFound } else { io::ErrorKind::Other },
                 format!("Cannot launch {program} ({code})")))?;
         Ok(Self {
-            handle, started: std::time::Instant::now(),
+            handle, started: stdext::platform::time::Instant::now(),
             diagnostics: capture_diagnostics.then(DiagnosticTail::new),
         })
     }
@@ -785,8 +814,8 @@ impl IdeProject {
 mod tests {
     use super::*;
     use crate::documents::DocumentManager;
-    use std::path::PathBuf;
-    use std::sync::atomic::{AtomicUsize, Ordering};
+    use stdext::platform::path::PathBuf;
+    use stdext::platform::sync::atomic::{AtomicUsize, Ordering};
 
     static NEXT_DATABASE: AtomicUsize = AtomicUsize::new(0);
 
@@ -794,13 +823,13 @@ mod tests {
     impl TestDatabase {
         fn new() -> Self {
             let id = NEXT_DATABASE.fetch_add(1, Ordering::Relaxed);
-            let path = std::env::temp_dir().join(format!("trueos-edit-ide-{}-{id}.redb", std::process::id()));
-            let _ = std::fs::remove_file(&path);
+            let path = stdext::platform::env::temp_dir().join(format!("trueos-edit-ide-{}-{id}.redb", stdext::platform::process::id()));
+            let _ = stdext::platform::fs::remove_file(&path);
             Self(path)
         }
     }
     impl Drop for TestDatabase {
-        fn drop(&mut self) { let _ = std::fs::remove_file(&self.0); }
+        fn drop(&mut self) { let _ = stdext::platform::fs::remove_file(&self.0); }
     }
 
     #[test]
@@ -965,7 +994,7 @@ mod tests {
         tail.append(&diagnostic[split..]);
         assert_eq!(tail.bytes.len(), DiagnosticTail::LIMIT);
         assert_eq!(tail.bytes.capacity(), DiagnosticTail::LIMIT);
-        assert!(std::str::from_utf8(&tail.bytes).unwrap().ends_with("compiler failed: λ 🦀\n"));
+        assert!(stdext::platform::str::from_utf8(&tail.bytes).unwrap().ends_with("compiler failed: λ 🦀\n"));
         tail.append(&[0xff]);
         let message = compiler_failure(&mut BuildTracker::new(1),
             io::Error::other("stream lost"), Some(&tail)).to_string();
@@ -994,7 +1023,7 @@ mod tests {
         assert_eq!(revision_id, source.revision.id);
         assert!(message.contains("compiler crashed before writing result.json"));
         assert_eq!(message, reported.to_string());
-        std::fs::remove_dir_all(root).unwrap();
+        stdext::platform::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

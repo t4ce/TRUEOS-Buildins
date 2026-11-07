@@ -22,8 +22,11 @@
 //! - [`Instruction::address_offset`] returns where, within an instruction, the jump target lives,
 //!   as used by the backend's relocation system.
 
-use std::fmt::{self, Debug};
-use std::mem;
+#[allow(unused_imports)]
+use stdext::platform::prelude::*;
+
+use stdext::platform::fmt::{self, Debug};
+use stdext::platform::mem;
 
 use stdext::arena::Arena;
 use stdext::arena_write_fmt;
@@ -41,7 +44,7 @@ pub struct Language {
 
 impl PartialEq for &'static Language {
     fn eq(&self, other: &Self) -> bool {
-        std::ptr::eq(*self, *other)
+        stdext::platform::ptr::eq(*self, *other)
     }
 }
 
@@ -57,7 +60,7 @@ pub struct Highlight<T> {
 }
 
 impl<T: Debug> Debug for Highlight<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut stdext::platform::fmt::Formatter<'_>) -> stdext::platform::fmt::Result {
         write!(f, "({}, {:?})", self.start, self.kind)
     }
 }
@@ -387,7 +390,7 @@ impl Register {
     #[inline(always)]
     pub fn from_usize(value: usize) -> Self {
         debug_assert!(value < Self::COUNT);
-        unsafe { std::mem::transmute::<u8, Register>(value as u8) }
+        unsafe { stdext::platform::mem::transmute::<u8, Register>(value as u8) }
     }
 
     pub fn mnemonic(&self) -> &'static str {
@@ -455,7 +458,7 @@ impl Registers {
     #[inline(always)]
     fn save_registers(&self, vec: &mut Vec<u32>) {
         const _: () = assert!(2 + 14 <= Register::COUNT);
-        unsafe { vec.extend_from_slice(std::slice::from_raw_parts(self.as_ptr().add(2), 14)) };
+        unsafe { vec.extend_from_slice(stdext::platform::slice::from_raw_parts(self.as_ptr().add(2), 14)) };
     }
 
     #[inline(always)]
@@ -467,7 +470,7 @@ impl Registers {
 
             let src = vec.as_ptr().add(vec.len() - 14);
             let dst = self.as_mut_ptr().add(2);
-            std::ptr::copy_nonoverlapping(src, dst, 14);
+            stdext::platform::ptr::copy_nonoverlapping(src, dst, 14);
             vec.truncate(vec.len() - 14);
             true
         }
@@ -772,7 +775,7 @@ impl Instruction {
 
         let mut bytes = BVec::empty();
         #[allow(clippy::missing_transmute_annotations)]
-        bytes.push(arena, unsafe { std::mem::transmute(std::mem::discriminant(self)) });
+        bytes.push(arena, unsafe { stdext::platform::mem::transmute(stdext::platform::mem::discriminant(self)) });
 
         match *self {
             Instruction::Mov { dst, src }

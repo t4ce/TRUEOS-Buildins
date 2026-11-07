@@ -7,6 +7,9 @@
 ///
 /// This is useful particularly when the terminal doesn't support
 /// OSC 52 or when the clipboard contents are huge (e.g. 1GiB).
+#[allow(unused_imports)]
+use stdext::platform::prelude::*;
+
 #[derive(Default)]
 pub struct Clipboard {
     data: Vec<u8>,

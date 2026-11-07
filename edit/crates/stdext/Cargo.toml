@@ -10,5 +10,16 @@ rust-version.workspace = true
 [features]
 single-threaded = []
 
+[target.'cfg(target_os = "trueos")'.dependencies]
+trueos = { path = "../../../../TRUEOS-Blueprints/api" }
+trueos-io = { path = "../../../../TRUEOS/crates/trueos-io" }
+trueos-path = { path = "../../../../TRUEOS/crates/trueos-path" }
+trueos-runtime = { path = "../../../../TRUEOS/crates/trueos-runtime" }
+infer = { path = "../../../../TRUEOS/vendor/infer", default-features = false }
+
 [target.'cfg(all(unix, not(target_os = "trueos")))'.dependencies]
 libc = "=0.2.186"
+
+[dev-dependencies]
+trueos-path = { path = "../../../../TRUEOS/crates/trueos-path" }
+infer = { path = "../../../../TRUEOS/vendor/infer", default-features = false }

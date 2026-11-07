@@ -3,8 +3,11 @@
 
 //! Path related helpers.
 
-use std::ffi::{OsStr, OsString};
-use std::path::{Component, MAIN_SEPARATOR_STR, Path, PathBuf};
+#[allow(unused_imports)]
+use stdext::platform::prelude::*;
+
+use stdext::platform::ffi::{OsStr, OsString};
+use stdext::platform::path::{Component, MAIN_SEPARATOR_STR, Path, PathBuf};
 
 /// Normalizes a given path by removing redundant components.
 /// The given path must be absolute (e.g. by joining it with the current working directory).
@@ -14,6 +17,7 @@ pub fn normalize(path: &Path) -> PathBuf {
 
     for component in path.components() {
         match component {
+            #[cfg(not(target_os = "trueos"))]
             Component::Prefix(p) => res.push(p.as_os_str()),
             Component::RootDir => {
                 res.push(OsStr::new(MAIN_SEPARATOR_STR));
@@ -46,8 +50,8 @@ pub fn normalize(path: &Path) -> PathBuf {
 
 #[cfg(test)]
 mod tests {
-    use std::ffi::OsString;
-    use std::path::Path;
+    use stdext::platform::ffi::OsString;
+    use stdext::platform::path::Path;
 
     use super::*;
 

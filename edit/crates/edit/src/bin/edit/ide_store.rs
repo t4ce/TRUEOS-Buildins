@@ -1,5 +1,8 @@
 //! Native source-store client. The kernel owns the shared redb file.
-use std::{io, path::{Path, PathBuf}};
+#[allow(unused_imports)]
+use stdext::platform::prelude::*;
+
+use stdext::platform::{io, path::{Path, PathBuf}};
 use trueos_ide::{LoadedSource, ProjectBuildConfig, ProjectSummary, RevisionSummary, SourceFileInput};
 use trueos_ide::store_protocol::{self, Command, Reply, Request};
 

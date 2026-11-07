@@ -3,13 +3,17 @@
 
 //! Bindings to the ICU library.
 
-use std::cmp::Ordering;
-use std::ffi::{CStr, c_char};
-use std::mem::MaybeUninit;
-use std::ops::Range;
-use std::ptr::{null, null_mut};
-use std::sync::OnceLock;
-use std::{fmt, mem};
+#[allow(unused_imports)]
+use stdext::platform::prelude::*;
+
+use stdext::platform::cmp::Ordering;
+use stdext::platform::ffi::{CStr, c_char};
+use stdext::platform::mem::MaybeUninit;
+use stdext::platform::ops::Range;
+use stdext::platform::ptr::{null, null_mut};
+#[cfg(not(target_os = "trueos"))]
+use stdext::platform::sync::OnceLock;
+use stdext::platform::{fmt, mem};
 
 use stdext::arena::{Arena, scratch_arena};
 use stdext::arena_format;
@@ -54,7 +58,7 @@ impl fmt::Display for Error {
     }
 }
 
-pub type Result<T> = std::result::Result<T, Error>;
+pub type Result<T> = stdext::platform::result::Result<T, Error>;
 
 #[derive(Clone, Copy)]
 pub struct Encoding {
@@ -996,6 +1000,7 @@ const LIBICUI18N_PROC_NAMES: [*const c_char; 12] = [
     proc_name!("uregex_end64"),
 ];
 
+#[cfg(not(target_os = "trueos"))]
 static LIBRARY_FUNCTIONS: OnceLock<Option<LibraryFunctions>> = OnceLock::new();
 
 pub fn init() -> Result<()> {
@@ -1003,6 +1008,12 @@ pub fn init() -> Result<()> {
     Ok(())
 }
 
+// TRUEOS never supplied a dynamic ICU library: the former dlopen shim always
+// failed. Keep the existing UTF-8 and comparison fallbacks without loading ABI.
+#[cfg(target_os = "trueos")]
+fn init_if_needed() -> Result<&'static LibraryFunctions> { Err(ICU_MISSING_ERROR) }
+
+#[cfg(not(target_os = "trueos"))]
 fn init_if_needed() -> Result<&'static LibraryFunctions> {
     fn load() -> Option<LibraryFunctions> {
         unsafe {
@@ -1069,17 +1080,23 @@ fn init_if_needed() -> Result<&'static LibraryFunctions> {
     }
 }
 
+#[cfg(not(target_os = "trueos"))]
 fn assume_loaded() -> &'static LibraryFunctions {
     match LIBRARY_FUNCTIONS.get() {
         Some(Some(f)) => f,
-        _ => unsafe { std::hint::unreachable_unchecked() },
+        _ => unsafe { stdext::platform::hint::unreachable_unchecked() },
     }
+}
+
+#[cfg(target_os = "trueos")]
+fn assume_loaded() -> &'static LibraryFunctions {
+    panic!("ICU operations require an initialized library")
 }
 
 mod icu_ffi {
     #![allow(dead_code, non_camel_case_types)]
 
-    use std::ffi::{c_char, c_int, c_void};
+    use stdext::platform::ffi::{c_char, c_int, c_void};
 
     use super::Error;
 

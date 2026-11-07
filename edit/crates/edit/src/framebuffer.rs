@@ -3,10 +3,13 @@
 
 //! A shoddy framebuffer for terminal applications.
 
-use std::cell::Cell;
-use std::ops::{BitOr, BitXor};
-use std::ptr;
-use std::slice::ChunksExact;
+#[allow(unused_imports)]
+use stdext::platform::prelude::*;
+
+use stdext::platform::cell::Cell;
+use stdext::platform::ops::{BitOr, BitXor};
+use stdext::platform::ptr;
+use stdext::platform::slice::ChunksExact;
 
 use stdext::arena::Arena;
 use stdext::arena_write_fmt;
@@ -57,7 +60,7 @@ pub enum IndexedColor {
 
 impl<T: Into<u8>> From<T> for IndexedColor {
     fn from(value: T) -> Self {
-        unsafe { std::mem::transmute(value.into() & 0xF) }
+        unsafe { stdext::platform::mem::transmute(value.into() & 0xF) }
     }
 }
 
@@ -339,13 +342,13 @@ impl Framebuffer {
         if top_fract != 0 {
             fract_buf[2] = (0x88 - top_fract) as u8;
             self.replace_text(thumb_top - 1, track_clipped.left, track_clipped.right, unsafe {
-                std::str::from_utf8_unchecked(&fract_buf)
+                stdext::platform::str::from_utf8_unchecked(&fract_buf)
             });
         }
         if bottom_fract != 0 {
             fract_buf[2] = (0x88 - bottom_fract) as u8;
             self.replace_text(thumb_bottom, track_clipped.left, track_clipped.right, unsafe {
-                std::str::from_utf8_unchecked(&fract_buf)
+                stdext::platform::str::from_utf8_unchecked(&fract_buf)
             });
             let rect = Rect {
                 left: track_clipped.left,
@@ -684,7 +687,7 @@ impl LineBuffer {
 
             let buf = unsafe { l.as_mut_vec() };
             // Compiles down to `memset()`.
-            buf.extend(std::iter::repeat_n(b' ', width));
+            buf.extend(stdext::platform::iter::repeat_n(b' ', width));
         }
     }
 

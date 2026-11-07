@@ -7,7 +7,10 @@
 
 #![allow(clippy::excessive_precision)]
 
-use std::fmt::Debug;
+#[allow(unused_imports)]
+use stdext::platform::prelude::*;
+
+use stdext::platform::fmt::Debug;
 
 /// A sRGB color with straight (= not premultiplied) alpha.
 #[derive(Default, Clone, Copy, PartialEq, Eq)]
@@ -82,7 +85,7 @@ impl StraightRgba {
 }
 
 impl Debug for StraightRgba {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut stdext::platform::fmt::Formatter<'_>) -> stdext::platform::fmt::Result {
         write!(f, "#{:08x}", self.0) // Display as a hex color
     }
 }
@@ -164,7 +167,7 @@ fn srgb_to_linear(c: u32) -> f32 {
 
 fn linear_to_srgb(c: f32) -> u32 {
     (if c > 0.0031308 {
-        255.0 * 1.055 * c.powf(1.0 / 2.4) - 255.0 * 0.055
+        255.0 * 1.055 * stdext::platform::powf(c, 1.0 / 2.4) - 255.0 * 0.055
     } else {
         255.0 * 12.92 * c
     }) as u32

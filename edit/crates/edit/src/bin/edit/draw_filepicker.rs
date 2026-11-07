@@ -1,10 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-use std::cmp::Ordering;
+#[allow(unused_imports)]
+use stdext::platform::prelude::*;
+
+use stdext::platform::cmp::Ordering;
 #[cfg(not(target_os = "trueos"))]
-use std::fs;
-use std::path::PathBuf;
+use stdext::platform::fs;
+use stdext::platform::path::PathBuf;
 
 use edit::framebuffer::IndexedColor;
 use edit::helpers::*;

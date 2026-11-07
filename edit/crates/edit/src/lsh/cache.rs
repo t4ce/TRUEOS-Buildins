@@ -1,6 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+#[allow(unused_imports)]
+use stdext::platform::prelude::*;
+
 use lsh::runtime::Highlight;
 use stdext::arena::{Arena, scratch_arena};
 use stdext::collections::BVec;

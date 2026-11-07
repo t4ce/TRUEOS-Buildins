@@ -1,10 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-use std::ffi::OsStr;
-use std::path::{Path, PathBuf};
-use std::io;
-use std::{fs, fs::File};
+#[allow(unused_imports)]
+use stdext::platform::prelude::*;
+
+use stdext::platform::ffi::OsStr;
+use stdext::platform::path::{Path, PathBuf};
+use stdext::platform::io;
+use stdext::platform::{fs, fs::File};
 
 use edit::buffer::{RcTextBuffer, TextBuffer};
 use edit::helpers::{CoordType, Point};
@@ -186,14 +189,14 @@ impl DocumentManager {
             let doc = beg.add(idx);
             let last = beg.add(self.list.len() - 1);
             let amount = self.list.len() - idx - 1;
-            let mut temp = std::mem::MaybeUninit::<Document>::uninit();
+            let mut temp = stdext::platform::mem::MaybeUninit::<Document>::uninit();
 
             // Make a backup of the document
-            std::ptr::copy_nonoverlapping(doc, temp.as_mut_ptr(), 1);
+            stdext::platform::ptr::copy_nonoverlapping(doc, temp.as_mut_ptr(), 1);
             // Shift the rest to the front
-            std::ptr::copy(doc.add(1), doc, amount);
+            stdext::platform::ptr::copy(doc.add(1), doc, amount);
             // Move the backup to the end
-            std::ptr::copy_nonoverlapping(temp.as_ptr(), last, 1);
+            stdext::platform::ptr::copy_nonoverlapping(temp.as_ptr(), last, 1);
         }
 
         true
@@ -350,7 +353,7 @@ impl DocumentManager {
     #[cfg(feature = "ide")]
     fn add_project_path(&mut self, project: crate::ide::ProjectHandle, path: &Path) -> apperr::Result<&mut Document> {
         let existing = self.list.iter().position(|doc| doc.project.as_ref().is_some_and(|handle|
-            std::rc::Rc::ptr_eq(handle, &project)) && doc.path.as_deref() == Some(path));
+            stdext::platform::rc::Rc::ptr_eq(handle, &project)) && doc.path.as_deref() == Some(path));
         if let Some(index) = existing {
             let doc = self.list.remove(index);
             self.list.push(doc);

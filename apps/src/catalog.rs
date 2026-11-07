@@ -45,9 +45,6 @@ impl OnlineCatalog {
         }
     }
 }
-const ONLINE_LIST_MAX_BYTES: usize = 1024 * 1024;
-const ONLINE_APP_MAX_BYTES: usize = 512 * 1024 * 1024;
-const ONLINE_FETCH_TIMEOUT_MS: u32 = 45_000;
 const ONLINE_APP_HASH_SEPARATOR: &str = "§§";
 const SHA256_HEX_LEN: usize = 64;
 

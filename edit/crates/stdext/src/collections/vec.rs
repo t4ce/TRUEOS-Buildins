@@ -1,13 +1,16 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-use std::hint::assert_unchecked;
-use std::iter::FusedIterator;
-use std::marker::PhantomData;
-use std::mem::MaybeUninit;
-use std::ops::{Bound, Deref, DerefMut, Range, RangeBounds};
-use std::ptr::{self, NonNull};
-use std::{fmt, slice};
+#[allow(unused_imports)]
+use crate::platform::prelude::*;
+
+use crate::platform::hint::assert_unchecked;
+use crate::platform::iter::FusedIterator;
+use crate::platform::marker::PhantomData;
+use crate::platform::mem::MaybeUninit;
+use crate::platform::ops::{Bound, Deref, DerefMut, Range, RangeBounds};
+use crate::platform::ptr::{self, NonNull};
+use crate::platform::{fmt, slice};
 
 use crate::alloc::Allocator;
 #[cfg(debug_assertions)]
@@ -85,7 +88,7 @@ impl<'a, T> BVec<'a, T> {
     pub fn into_std_vec(self) -> Vec<T> {
         #[cfg(debug_assertions)]
         debug_assert!(
-            self.alloc.is_none_or(|a| std::ptr::eq(a, &GlobalAllocator)),
+            self.alloc.is_none_or(|a| crate::platform::ptr::eq(a, &GlobalAllocator)),
             "BVec can only be converted into Vec if it was allocated with GlobalAlloc"
         );
 
@@ -234,7 +237,7 @@ impl<'a, T> BVec<'a, T> {
 
         #[cfg(debug_assertions)]
         debug_assert!(
-            self.alloc.is_none_or(|a| std::ptr::eq(a, alloc)),
+            self.alloc.is_none_or(|a| crate::platform::ptr::eq(a, alloc)),
             "switching between allocators on a single BVec heavily suggests you're about to leak memory"
         );
 
@@ -510,7 +513,7 @@ where
     T: PartialOrd,
 {
     #[inline]
-    fn partial_cmp(&self, other: &BVec<T>) -> Option<std::cmp::Ordering> {
+    fn partial_cmp(&self, other: &BVec<T>) -> Option<crate::platform::cmp::Ordering> {
         self.deref().partial_cmp(other.deref())
     }
 }
@@ -520,7 +523,7 @@ where
     T: Ord,
 {
     #[inline]
-    fn cmp(&self, other: &BVec<T>) -> std::cmp::Ordering {
+    fn cmp(&self, other: &BVec<T>) -> crate::platform::cmp::Ordering {
         self.deref().cmp(other.deref())
     }
 }

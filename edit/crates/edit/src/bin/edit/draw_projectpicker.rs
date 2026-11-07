@@ -3,7 +3,10 @@
 
 //! Project selection uses the same modal/list controls as Edit's file picker.
 
-use std::path::Path;
+#[allow(unused_imports)]
+use stdext::platform::prelude::*;
+
+use stdext::platform::path::Path;
 
 use edit::framebuffer::IndexedColor;
 use edit::helpers::*;

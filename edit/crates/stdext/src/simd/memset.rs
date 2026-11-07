@@ -13,7 +13,10 @@
 //! treat all sizes as if they were `u64`. The only thing we need to take care
 //! of is the tail end of the array, which needs to write 0-7 additional bytes.
 
-use std::mem;
+#[allow(unused_imports)]
+use crate::platform::prelude::*;
+
+use crate::platform::mem;
 
 /// Fills a slice with the given value.
 #[inline(always)]
@@ -93,7 +96,7 @@ static mut MEMSET_DISPATCH: unsafe fn(beg: *mut u8, end: *mut u8, val: u64) = me
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 fn memset_dispatch(beg: *mut u8, end: *mut u8, val: u64) {
-    let func = if is_x86_feature_detected!("avx2") { memset_avx2 } else { memset_sse2 };
+    let func = if crate::platform::avx2_available() { memset_avx2 } else { memset_sse2 };
     unsafe { MEMSET_DISPATCH = func };
     unsafe { func(beg, end, val) }
 }
@@ -103,9 +106,9 @@ fn memset_dispatch(beg: *mut u8, end: *mut u8, val: u64) {
 unsafe fn memset_sse2(mut beg: *mut u8, end: *mut u8, val: u64) {
     unsafe {
         #[cfg(target_arch = "x86")]
-        use std::arch::x86::*;
+        use crate::platform::arch::x86::*;
         #[cfg(target_arch = "x86_64")]
-        use std::arch::x86_64::*;
+        use crate::platform::arch::x86_64::*;
 
         let mut remaining = end.offset_from_unsigned(beg);
 
@@ -152,10 +155,10 @@ unsafe fn memset_sse2(mut beg: *mut u8, end: *mut u8, val: u64) {
 fn memset_avx2(mut beg: *mut u8, end: *mut u8, val: u64) {
     unsafe {
         #[cfg(target_arch = "x86")]
-        use std::arch::x86::*;
+        use crate::platform::arch::x86::*;
         #[cfg(target_arch = "x86_64")]
-        use std::arch::x86_64::*;
-        use std::hint::black_box;
+        use crate::platform::arch::x86_64::*;
+        use crate::platform::hint::black_box;
 
         let mut remaining = end.offset_from_unsigned(beg);
 
@@ -217,7 +220,7 @@ fn memset_avx2(mut beg: *mut u8, end: *mut u8, val: u64) {
 
 #[cfg(target_arch = "loongarch64")]
 fn memset_dispatch(beg: *mut u8, end: *mut u8, val: u64) {
-    use std::arch::is_loongarch_feature_detected;
+    use crate::platform::arch::is_loongarch_feature_detected;
 
     let func = if is_loongarch_feature_detected!("lasx") {
         memset_lasx
@@ -234,7 +237,7 @@ fn memset_dispatch(beg: *mut u8, end: *mut u8, val: u64) {
 #[target_feature(enable = "lasx")]
 fn memset_lasx(mut beg: *mut u8, end: *mut u8, val: u64) {
     unsafe {
-        use std::arch::loongarch64::*;
+        use crate::platform::arch::loongarch64::*;
 
         let fill = lasx_xvreplgr2vr_d(val as i64);
 
@@ -294,7 +297,7 @@ fn memset_lasx(mut beg: *mut u8, end: *mut u8, val: u64) {
 #[target_feature(enable = "lsx")]
 unsafe fn memset_lsx(mut beg: *mut u8, end: *mut u8, val: u64) {
     unsafe {
-        use std::arch::loongarch64::*;
+        use crate::platform::arch::loongarch64::*;
 
         if end.offset_from_unsigned(beg) >= 16 {
             let fill = lsx_vreplgr2vr_d(val as i64);
@@ -340,7 +343,7 @@ unsafe fn memset_lsx(mut beg: *mut u8, end: *mut u8, val: u64) {
 #[cfg(target_arch = "aarch64")]
 unsafe fn memset_neon(mut beg: *mut u8, end: *mut u8, val: u64) {
     unsafe {
-        use std::arch::aarch64::*;
+        use crate::platform::arch::aarch64::*;
         let mut remaining = end.offset_from_unsigned(beg);
 
         if remaining >= 32 {
@@ -385,8 +388,8 @@ unsafe fn memset_neon(mut beg: *mut u8, end: *mut u8, val: u64) {
 
 #[cfg(test)]
 mod tests {
-    use std::fmt;
-    use std::ops::Not;
+    use crate::platform::fmt;
+    use crate::platform::ops::Not;
 
     use super::*;
 

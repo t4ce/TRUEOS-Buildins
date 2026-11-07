@@ -5,8 +5,11 @@
 //! This state, like Edit's Unix terminal state, belongs to the single editor loop.
 #![allow(static_mut_refs)]
 
-use std::fs::File;
-use std::{io, time};
+#[allow(unused_imports)]
+use stdext::platform::prelude::*;
+
+use stdext::platform::fs::File;
+use stdext::platform::{io, time};
 
 use stdext::arena::{Arena, scratch_arena};
 use stdext::arena_format;
@@ -100,7 +103,7 @@ fn check_terminal_resize() -> bool {
 }
 
 pub fn take_terminal_restore() -> bool {
-    unsafe { std::mem::replace(&mut STATE.restore_terminal, false) }
+    unsafe { stdext::platform::mem::replace(&mut STATE.restore_terminal, false) }
 }
 
 pub fn inject_window_size_into_stdin() {
@@ -143,7 +146,7 @@ pub fn read_stdin(arena: &Arena, timeout: time::Duration) -> Option<BString<'_>>
         let expired = timeout != time::Duration::MAX && started.elapsed() >= timeout;
         if count != 0 || unsafe { STATE.inject_resize } || expired {
             unsafe {
-                std::ptr::copy_nonoverlapping(
+                stdext::platform::ptr::copy_nonoverlapping(
                     STATE.utf8_buf.as_ptr(),
                     spare.as_mut_ptr().cast(),
                     prefix,
@@ -192,7 +195,7 @@ pub fn read_stdin(arena: &Arena, timeout: time::Duration) -> Option<BString<'_>>
 
     let mut result = BString::from_utf8_lossy(arena, buf);
     unsafe {
-        if std::mem::replace(&mut STATE.inject_resize, false)
+        if stdext::platform::mem::replace(&mut STATE.inject_resize, false)
             && STATE.columns != 0
             && STATE.rows != 0
         {

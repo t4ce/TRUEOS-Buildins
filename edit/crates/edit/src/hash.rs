@@ -3,7 +3,10 @@
 
 //! Provides fast, non-cryptographic hash functions.
 
-use std::hash::Hasher;
+#[allow(unused_imports)]
+use stdext::platform::prelude::*;
+
+use stdext::platform::hash::Hasher;
 
 /// A [`Hasher`] implementation for the wyhash algorithm.
 ///

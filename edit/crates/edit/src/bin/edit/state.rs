@@ -1,10 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-use std::borrow::Cow;
-use std::ffi::{OsStr, OsString};
-use std::mem;
-use std::path::{Path, PathBuf};
+#[allow(unused_imports)]
+use stdext::platform::prelude::*;
+
+use stdext::platform::borrow::Cow;
+use stdext::platform::ffi::{OsStr, OsString};
+use stdext::platform::mem;
+use stdext::platform::path::{Path, PathBuf};
 
 use edit::framebuffer::IndexedColor;
 use edit::helpers::*;
@@ -25,8 +28,8 @@ impl From<apperr::Error> for FormatApperr {
     }
 }
 
-impl std::fmt::Display for FormatApperr {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl stdext::platform::fmt::Display for FormatApperr {
+    fn fmt(&self, f: &mut stdext::platform::fmt::Formatter<'_>) -> stdext::platform::fmt::Result {
         match self.0 {
             apperr::Error::SettingsInvalid(what) => {
                 write!(f, "{}{}", loc(LocId::SettingsInvalid), what)

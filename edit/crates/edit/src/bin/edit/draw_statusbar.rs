@@ -1,6 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+#[allow(unused_imports)]
+use stdext::platform::prelude::*;
+
 use edit::framebuffer::{Attributes, IndexedColor};
 use edit::fuzzy::score_fuzzy;
 use edit::helpers::*;
@@ -136,7 +139,7 @@ pub fn draw_statusbar(ctx: &mut Context, state: &mut State) {
                 {
                     for width in 1u8..=8 {
                         let ch = [b'0' + width];
-                        let label = unsafe { std::str::from_utf8_unchecked(&ch) };
+                        let label = unsafe { stdext::platform::str::from_utf8_unchecked(&ch) };
 
                         if ctx.list_item(tb.tab_size() == width as CoordType, label)
                             != ListSelection::Unchanged
@@ -359,7 +362,7 @@ fn encoding_picker_update_list(state: &mut State) {
         }
     }
 
-    matches.sort_unstable_by_key(|b| std::cmp::Reverse(b.0));
+    matches.sort_unstable_by_key(|b| stdext::platform::cmp::Reverse(b.0));
     state.encoding_picker_results = Some(Vec::from_iter(matches.iter().map(|(_, enc)| *enc)));
 }
 

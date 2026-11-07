@@ -27,11 +27,15 @@ ide = ["dep:trueos-ide", "dep:serde_json"]
 [dependencies]
 lsh.workspace = true
 stdext.workspace = true
+
+[target.'cfg(not(target_os = "trueos"))'.dependencies]
 trueos-ide = { path = "../../../../TRUEOS-Blueprints/crates/trueos-ide", optional = true, features = ["api-reference"] }
 serde_json = { version = "1.0.142", optional = true }
 
 [target.'cfg(target_os = "trueos")'.dependencies]
 trueos = { path = "../../../../TRUEOS-Blueprints/api" }
+trueos-ide = { path = "../../../../TRUEOS-Blueprints/crates/trueos-ide", default-features = false, optional = true, features = ["api-reference"] }
+serde_json = { version = "1.0.142", default-features = false, features = ["alloc"], optional = true }
 
 [target.'cfg(all(unix, not(target_os = "trueos")))'.dependencies]
 libc = "=0.2.186"

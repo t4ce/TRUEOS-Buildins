@@ -1,6 +1,10 @@
+#![cfg_attr(target_os = "trueos", no_std)]
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 // trueos-blueprint: features = ["ide"]
+
+#[allow(unused_imports)]
+use stdext::platform::prelude::*;
 
 mod apperr;
 mod documents;
@@ -22,10 +26,10 @@ mod ide_store;
 mod launch_script;
 mod state;
 
-use std::borrow::Cow;
-use std::path::Path;
-use std::time::{Duration, Instant};
-use std::{env, process};
+use stdext::platform::borrow::Cow;
+use stdext::platform::path::Path;
+use stdext::platform::time::{Duration, Instant};
+use stdext::platform::env;
 
 use draw_editor::*;
 use draw_filepicker::*;
@@ -82,26 +86,31 @@ impl Drop for ScratchArenasDeinit {
     }
 }
 
-// NOTE: Before our main() gets called, Rust initializes its stdlib. This pulls in the entire
-// std::io::{stdin, stdout, stderr} machinery, and probably some more, which amounts to about 20KB.
-// It can technically be avoided nowadays with `#![no_main]`. Maybe a fun project for later? :)
-fn main() -> process::ExitCode {
+#[cfg(not(target_os = "trueos"))]
+fn main() -> std::process::ExitCode {
     if cfg!(debug_assertions) {
-        let hook = std::panic::take_hook();
-        std::panic::set_hook(Box::new(move |info| {
+        let hook = stdext::platform::panic::take_hook();
+        stdext::platform::panic::set_hook(Box::new(move |info| {
             drop(RestoreModes);
             drop(sys::Deinit);
             hook(info);
         }));
     }
 
+    if editor_main() { std::process::ExitCode::SUCCESS } else { std::process::ExitCode::FAILURE }
+}
+
+#[cfg(target_os = "trueos")]
+fn main() { let _ = editor_main(); }
+
+fn editor_main() -> bool {
     match run() {
-        Ok(()) => process::ExitCode::SUCCESS,
+        Ok(()) => true,
         Err(err) => {
             let message = format!("{}", FormatApperr::from(err));
             trueos_log(&format!("startup failed: {message}"));
             sys::write_stdout(&format!("{message}\n"));
-            process::ExitCode::FAILURE
+            false
         }
     }
 }
@@ -207,7 +216,7 @@ fn run() -> apperr::Result<()> {
 
             #[cfg(feature = "debug-latency")]
             {
-                time_beg = std::time::Instant::now();
+                time_beg = stdext::platform::time::Instant::now();
                 passes = 0usize;
             }
 
@@ -272,7 +281,7 @@ fn run() -> apperr::Result<()> {
                 use stdext::arena_write_fmt;
 
                 // Print the number of passes and latency in the top right corner.
-                let time_end = std::time::Instant::now();
+                let time_end = stdext::platform::time::Instant::now();
                 let status = time_end - time_beg;
 
                 let scratch_alt = scratch_arena(Some(&scratch));
@@ -392,10 +401,10 @@ fn handle_launch_script(state: &mut State) -> apperr::Result<()> {
     let bytes = match trueos::async_fs::block_on(trueos::async_fs::read_file(b"vFile:launch")) {
         Ok(bytes) => bytes,
         Err(trueos::async_fs::ERR_NOT_FOUND) => return Ok(()), // Ordinary argv-based launch.
-        Err(code) => return Err(std::io::Error::other(format!("edit launch script read failed ({code})")).into()),
+        Err(code) => return Err(stdext::platform::io::Error::other(format!("edit launch script read failed ({code})")).into()),
     };
-    let script = std::str::from_utf8(&bytes)
-        .map_err(|err| std::io::Error::new(std::io::ErrorKind::InvalidData, err))?;
+    let script = stdext::platform::str::from_utf8(&bytes)
+        .map_err(|err| stdext::platform::io::Error::new(stdext::platform::io::ErrorKind::InvalidData, err))?;
     #[cfg(feature = "ide")]
     if let Some(launch) = launch_script::ide_project(script)? {
         let mode = if launch.configured { ide::ProjectOpen::Configured(trueos_ide::ProjectBuildConfig { kind: launch.kind, compiler: launch.backend, entry: launch.entry.into() }) } else { ide::ProjectOpen::Open };
@@ -479,7 +488,7 @@ fn draw(ctx: &mut Context, state: &mut State) {
     if state.wants_codex {
         state.wants_codex = false;
         if let Err(error) = state.ide.as_mut()
-            .ok_or_else(|| std::io::Error::other("Open an IDE project before starting Codex"))
+            .ok_or_else(|| stdext::platform::io::Error::other("Open an IDE project before starting Codex"))
             .and_then(ide::IdeSession::start_codex)
         {
             error_log_add(ctx, state, error.into());
@@ -489,7 +498,7 @@ fn draw(ctx: &mut Context, state: &mut State) {
     if state.wants_compile {
         state.wants_compile = false;
         let result = state.documents.save_project_documents().and_then(|()|
-            state.ide.as_mut().ok_or_else(|| std::io::Error::other("No IDE project is open"))
+            state.ide.as_mut().ok_or_else(|| stdext::platform::io::Error::other("No IDE project is open"))
                 .and_then(|session| if session.is_html() { session.preview().map(|_| ()) } else { session.compile().map(|_| ()) }).map_err(apperr::Error::from));
         if let Err(err) = result {
             error_log_add(ctx, state, err);
@@ -902,11 +911,11 @@ fn sanitize_control_chars(text: &str) -> Cow<'_, str> {
 }
 
 #[cfg(target_os = "trueos")]
-static COLLAPSE_AVAILABLE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static COLLAPSE_AVAILABLE: stdext::platform::sync::atomic::AtomicBool = stdext::platform::sync::atomic::AtomicBool::new(false);
 
 #[cfg(target_os = "trueos")]
 fn setup_collapse_icon() {
     let rgba = include_bytes!(concat!(env!("OUT_DIR"), "/edit-collapse.rgba"));
     COLLAPSE_AVAILABLE.store(trueos::terminal_ui4::enable_collapse(128, 128, rgba).is_ok(),
-        std::sync::atomic::Ordering::Relaxed);
+        stdext::platform::sync::atomic::Ordering::Relaxed);
 }

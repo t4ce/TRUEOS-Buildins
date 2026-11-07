@@ -10,6 +10,9 @@
 ///
 /// Accepts the same grammar as `f64::from_str`.
 /// The result may differ from `f64::from_str` by a few ULP.
+#[allow(unused_imports)]
+use crate::platform::prelude::*;
+
 pub fn parse_f64_approx(input: &[u8]) -> Option<f64> {
     if input.is_empty() {
         return None;
@@ -123,7 +126,7 @@ pub fn parse_f64_approx(input: &[u8]) -> Option<f64> {
         const TABLE: [f64; 8] = [1e-3, 1e-2, 1e-1, 1e0, 1e1, 1e2, 1e3, 1e4];
         value *= match TABLE.get((exponent + 3) as usize) {
             Some(&v) => v,
-            None => 10f64.powi(exponent),
+            None => crate::platform::powi(10f64, exponent),
         };
     }
 

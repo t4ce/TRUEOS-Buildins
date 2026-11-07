@@ -3,7 +3,10 @@
 
 //! `memchr`, but with two needles.
 
-use std::ptr;
+#[allow(unused_imports)]
+use stdext::platform::prelude::*;
+
+use stdext::platform::ptr;
 
 /// `memchr`, but with two needles.
 ///
@@ -17,7 +20,7 @@ pub fn memchr2(needle1: u8, needle2: u8, haystack: &[u8], offset: usize) -> usiz
         let it = beg.add(offset.min(haystack.len()));
         let it = memchr2_raw(needle1, needle2, it, end);
         let offset = it.offset_from_unsigned(beg);
-        std::hint::assert_unchecked(offset <= haystack.len());
+        stdext::platform::hint::assert_unchecked(offset <= haystack.len());
         offset
     }
 }
@@ -65,7 +68,7 @@ static mut MEMCHR2_DISPATCH: unsafe fn(
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 unsafe fn memchr2_dispatch(needle1: u8, needle2: u8, beg: *const u8, end: *const u8) -> *const u8 {
-    let func = if is_x86_feature_detected!("avx2") { memchr2_avx2 } else { memchr2_fallback };
+    let func = if stdext::platform::avx2_available() { memchr2_avx2 } else { memchr2_fallback };
     unsafe { MEMCHR2_DISPATCH = func };
     unsafe { func(needle1, needle2, beg, end) }
 }
@@ -77,9 +80,9 @@ unsafe fn memchr2_dispatch(needle1: u8, needle2: u8, beg: *const u8, end: *const
 unsafe fn memchr2_avx2(needle1: u8, needle2: u8, mut beg: *const u8, end: *const u8) -> *const u8 {
     unsafe {
         #[cfg(target_arch = "x86")]
-        use std::arch::x86::*;
+        use stdext::platform::arch::x86::*;
         #[cfg(target_arch = "x86_64")]
-        use std::arch::x86_64::*;
+        use stdext::platform::arch::x86_64::*;
 
         let n1 = _mm256_set1_epi8(needle1 as i8);
         let n2 = _mm256_set1_epi8(needle2 as i8);
@@ -106,7 +109,7 @@ unsafe fn memchr2_avx2(needle1: u8, needle2: u8, mut beg: *const u8, end: *const
 
 #[cfg(target_arch = "loongarch64")]
 unsafe fn memchr2_dispatch(needle1: u8, needle2: u8, beg: *const u8, end: *const u8) -> *const u8 {
-    use std::arch::is_loongarch_feature_detected;
+    use stdext::platform::arch::is_loongarch_feature_detected;
 
     let func = if is_loongarch_feature_detected!("lasx") {
         memchr2_lasx
@@ -123,7 +126,7 @@ unsafe fn memchr2_dispatch(needle1: u8, needle2: u8, beg: *const u8, end: *const
 #[target_feature(enable = "lasx")]
 unsafe fn memchr2_lasx(needle1: u8, needle2: u8, mut beg: *const u8, end: *const u8) -> *const u8 {
     unsafe {
-        use std::arch::loongarch64::*;
+        use stdext::platform::arch::loongarch64::*;
 
         let n1 = lasx_xvreplgr2vr_b(needle1 as i32);
         let n2 = lasx_xvreplgr2vr_b(needle2 as i32);
@@ -158,7 +161,7 @@ unsafe fn memchr2_lasx(needle1: u8, needle2: u8, mut beg: *const u8, end: *const
 #[target_feature(enable = "lsx")]
 unsafe fn memchr2_lsx(needle1: u8, needle2: u8, mut beg: *const u8, end: *const u8) -> *const u8 {
     unsafe {
-        use std::arch::loongarch64::*;
+        use stdext::platform::arch::loongarch64::*;
 
         let n1 = lsx_vreplgr2vr_b(needle1 as i32);
         let n2 = lsx_vreplgr2vr_b(needle2 as i32);
@@ -190,7 +193,7 @@ unsafe fn memchr2_lsx(needle1: u8, needle2: u8, mut beg: *const u8, end: *const 
 #[cfg(target_arch = "aarch64")]
 unsafe fn memchr2_neon(needle1: u8, needle2: u8, mut beg: *const u8, end: *const u8) -> *const u8 {
     unsafe {
-        use std::arch::aarch64::*;
+        use stdext::platform::arch::aarch64::*;
 
         if end.offset_from_unsigned(beg) >= 16 {
             let n1 = vdupq_n_u8(needle1);
@@ -225,7 +228,7 @@ unsafe fn memchr2_neon(needle1: u8, needle2: u8, mut beg: *const u8, end: *const
 
 #[cfg(test)]
 mod tests {
-    use std::slice;
+    use stdext::platform::slice;
 
     use stdext::sys::{virtual_commit, virtual_reserve};
 

@@ -1,3 +1,4 @@
+#![cfg_attr(target_os = "trueos", no_std)]
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
@@ -50,5 +51,9 @@
 
 #![allow(irrefutable_let_patterns, clippy::upper_case_acronyms)]
 
+#[allow(unused_imports)]
+use stdext::platform::prelude::*;
+
+#[cfg(not(target_os = "trueos"))]
 pub mod compiler;
 pub mod runtime;

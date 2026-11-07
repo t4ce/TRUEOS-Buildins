@@ -1,6 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+#[allow(unused_imports)]
+use stdext::platform::prelude::*;
+
 use stdext::cold_path;
 use stdext::unicode::Utf8Chars;
 
@@ -243,7 +246,7 @@ impl<'doc> MeasurementConfig<'doc> {
             if props_last_char == ucd_tab_properties() {
                 // SAFETY: `self.tab_size` is clamped to >= 1 in `with_tab_size`.
                 // This assert ensures that Rust doesn't insert panicking null checks.
-                unsafe { std::hint::assert_unchecked(self.tab_size >= 1) };
+                unsafe { stdext::platform::hint::assert_unchecked(self.tab_size >= 1) };
                 width = self.tab_size - (column % self.tab_size);
             }
 
@@ -425,7 +428,7 @@ impl<'doc> MeasurementConfig<'doc> {
                     if props_last_char == ucd_tab_properties() {
                         // SAFETY: `self.tab_size` is clamped to >= 1 in `with_tab_size`.
                         // This assert ensures that Rust doesn't insert panicking null checks.
-                        unsafe { std::hint::assert_unchecked(self.tab_size >= 1) };
+                        unsafe { stdext::platform::hint::assert_unchecked(self.tab_size >= 1) };
                         width = self.tab_size - (column % self.tab_size);
                     }
 
@@ -470,9 +473,9 @@ impl<'doc> MeasurementConfig<'doc> {
     #[inline]
     fn calc_target_x(target: Point, pos_y: CoordType) -> CoordType {
         match pos_y.cmp(&target.y) {
-            std::cmp::Ordering::Less => CoordType::MAX,
-            std::cmp::Ordering::Equal => target.x,
-            std::cmp::Ordering::Greater => 0,
+            stdext::platform::cmp::Ordering::Less => CoordType::MAX,
+            stdext::platform::cmp::Ordering::Equal => target.x,
+            stdext::platform::cmp::Ordering::Greater => 0,
         }
     }
 }

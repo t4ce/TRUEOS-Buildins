@@ -137,6 +137,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "773648b94d0e5d620f64f280777445740e61fe701025087ec8b57f45c791888b"
 
 [[package]]
+name = "core3"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7cbcb5224cf18d0beaecf52c52a58b248213de007fa72bc212d916224e26ceb8"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
 name = "core_maths"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -593,7 +602,12 @@ dependencies = [
 name = "stdext"
 version = "0.0.0"
 dependencies = [
+ "infer",
  "libc",
+ "trueos",
+ "trueos-io",
+ "trueos-path",
+ "trueos-runtime",
 ]
 
 [[package]]
@@ -665,6 +679,14 @@ dependencies = [
  "serde_json",
  "sha2",
  "trueos-redb",
+ "typed-path",
+]
+
+[[package]]
+name = "trueos-io"
+version = "0.1.0"
+dependencies = [
+ "core3",
 ]
 
 [[package]]
@@ -675,11 +697,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "trueos-path"
+version = "0.1.0"
+dependencies = [
+ "typed-path",
+]
+
+[[package]]
 name = "trueos-redb"
 version = "0.1.0"
 dependencies = [
  "redb",
 ]
+
+[[package]]
+name = "trueos-runtime"
+version = "0.1.0"
+dependencies = [
+ "trueos-io",
+]
+
+[[package]]
+name = "typed-path"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9ce898823d8cd0f028662d2f349694b1af0a5cc9be83f1d213a00d3147445e1e"
 
 [[package]]
 name = "typenum"

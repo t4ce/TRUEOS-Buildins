@@ -1,13 +1,15 @@
+#![no_std]
+extern crate alloc;
+use alloc::{format, string::{String, ToString}, vec::Vec};
 mod catalog;
 mod pullbot;
 mod mouse;
-mod http_diagnostics;
-use std::io::{self, Write};
-use std::time::{Duration};
+mod fetch;
+use crossterm::io::{self, Write};
+use core::time::Duration;
 use crossterm::{execute, queue, cursor::{MoveTo, Hide, Show}, style::{Color, SetForegroundColor, SetBackgroundColor, ResetColor, Print}, terminal::{self, Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen, DisableLineWrap, EnableLineWrap}, event::{self, Event, KeyCode, KeyEventKind, KeyModifiers, EnableMouseCapture, DisableMouseCapture, MouseButton, MouseEventKind}};
 use trueos::{runtime, task::LocalSet};
 const CATALOG: &str = "https://trueos.eu/apps";
-const MAX_APP: usize = 512 * 1024 * 1024;
 // Match Shell3's three control rows; the content inherits the terminal background.
 const CONTROL_BACKGROUND: Color = Color::Rgb {
     r: trueos::terminal_style::CONTROL_BACKGROUND_RGB[0],
@@ -60,40 +62,14 @@ fn draw(apps: &[catalog::OnlineApp], query: &str, selected: usize, message: &str
         MoveTo(0,height.saturating_sub(1)), Print(message.chars().take(width).collect::<String>()))?;
     out.flush()
 }
-async fn fetch(client: &reqwest::Client, url: &str, limit: usize) -> Result<Vec<u8>, String> {
-    let endpoint = if url == CATALOG { "apps_catalog" } else if url == "https://trueos.eu/probes" { "probes_catalog" } else { "archive_or_other" };
-    let started = std::time::Instant::now();
-    pullbot::report(&format!("http phase=send state=started endpoint={endpoint}"));
-    let sent = client.get(url).send().await.map_err(|error| {
-        let sources = http_diagnostics::summarize(&error);
-        pullbot::report(&format!("http phase=send state=error endpoint={} elapsed_ms={} is_timeout={} is_connect={} is_request={} source_depth={} source_truncated={} io_kind={} tls_class={} source_classes={}",endpoint,started.elapsed().as_millis(),u8::from(error.is_timeout()),u8::from(error.is_connect()),u8::from(error.is_request()),sources.depth,u8::from(sources.truncated),sources.io_kind,sources.tls_class,sources.classes));
-        String::from("HTTP send failed; see fixed diagnostic categories")
-    })?;
-    pullbot::report(&format!("http phase=send state=complete endpoint={} elapsed_ms={} status_code={}",endpoint,started.elapsed().as_millis(),sent.status().as_u16()));
-    let mut response = sent.error_for_status().map_err(|e| e.to_string())?;
-    if response.content_length().is_some_and(|len| len > limit as u64) { return Err("Download exceeds size limit".into()); }
-    let mut bytes = Vec::with_capacity(response.content_length().unwrap_or(0) as usize);
-    let mut next_progress = 8 * 1024 * 1024;
-    while let Some(chunk) = response.chunk().await.map_err(|e| e.to_string())? {
-        if chunk.len() > limit.saturating_sub(bytes.len()) { return Err("Download exceeds size limit".into()); }
-        bytes.extend_from_slice(&chunk);
-        if bytes.len() >= next_progress {
-            pullbot::report(&format!("http phase=body state=progress endpoint={} elapsed_ms={} bytes={}", endpoint, started.elapsed().as_millis(), bytes.len()));
-            next_progress = bytes.len().saturating_add(8 * 1024 * 1024);
-        }
-    }
-    pullbot::report(&format!("http phase=body state=complete endpoint={} elapsed_ms={} bytes={}", endpoint, started.elapsed().as_millis(), bytes.len()));
-    Ok(bytes)
-}
 async fn run() -> Result<Option<String>, String> {
-    let client = reqwest::Client::builder().timeout(Duration::from_secs(90)).build().map_err(|e| e.to_string())?;
     let mut apps = Vec::new();
     let mut query = String::new();
     let mut selected = 0;
     draw(&apps, &query, selected, "Loading catalog…").map_err(|e|e.to_string())?;
     loop {
-        match fetch(&client, CATALOG, 1024 * 1024).await {
-            Ok(html) => { apps = catalog::parse(std::str::from_utf8(&html).map_err(|e| e.to_string())?); break; }
+        match fetch::bytes(CATALOG, fetch::CATALOG_LIMIT).await {
+            Ok(html) => { apps = catalog::parse(core::str::from_utf8(&html).map_err(|e| e.to_string())?); break; }
             Err(error) => {
                 draw(&apps, &query, selected, &format!("{error} · R retry / Esc quit")).map_err(|e|e.to_string())?;
                 loop {
@@ -163,7 +139,7 @@ async fn run() -> Result<Option<String>, String> {
                     let app = &apps[*id];
                     draw(&apps,&query,selected,&format!("Downloading {}…",app.name)).map_err(|e|e.to_string())?;
                     dirty = true;
-                    match download(&client, app).await {
+                    match download(app).await {
                         Ok(path) if save => {
                             message = match trueos::async_fs::write_file(b"vFile:appdb-install", path.as_bytes()).await {
                                 Ok(()) => format!("Added {} to AppDB; not started.", app.name),
@@ -179,23 +155,23 @@ async fn run() -> Result<Option<String>, String> {
         trueos::time::sleep(Duration::from_millis(25)).await;
     }
 }
-async fn download(client: &reqwest::Client, app: &catalog::OnlineApp) -> Result<String, String> {
-    let bytes = fetch(client, catalog::url(app), MAX_APP).await?;
-    let verify_started = std::time::Instant::now();
+async fn download(app: &catalog::OnlineApp) -> Result<String, String> {
+    let bytes = fetch::bytes(catalog::url(app), fetch::ARCHIVE_LIMIT).await?;
+    let verify_started = trueos::time::Instant::now();
     if !catalog::verify(app, &bytes) { return Err("Blueprint SHA-256 mismatch".into()); }
     pullbot::report(&format!("download phase=verify elapsed_ms={} bytes={}", verify_started.elapsed().as_millis(), bytes.len()));
-    let save_started = std::time::Instant::now();
+    let save_started = trueos::time::Instant::now();
     let dir = "common/dl/apps";
     trueos::async_fs::create_dir_all(dir.as_bytes()).await.map_err(|e|format!("Create download directory: {e}"))?;
     let path = format!("{dir}/{}", app.archive_name);
-    trueos::async_fs::write_file(path.as_bytes(), &bytes).await.map_err(|e|format!("Save download: {e}"))?;
+    trueos::async_fs::write_file_typed_checked(path.as_bytes(), &bytes, trueos::content_identity::ContentTypeId::TRUEOS_BLUEPRINT, false, None).await.map_err(|e|format!("Save download: {e}"))?;
     pullbot::report(&format!("download phase=save elapsed_ms={} bytes={}", save_started.elapsed().as_millis(), bytes.len()));
     Ok(path)
 }
 fn main() {
     // Consume the one-shot launch stream before any terminal/UI initialization.
     if let Ok(script) = trueos::async_fs::block_on(trueos::async_fs::read_file(b"vFile:launch")) {
-        match runtime::current_thread_net().build() {
+        match runtime::current_thread().build() {
             Ok(runtime) => {
                 LocalSet::new().block_on(&runtime, pullbot::drain(&script));
                 runtime.shutdown_background();
@@ -205,16 +181,20 @@ fn main() {
         let _ = trueos::vshell::shutdown_current_blueprint("apps pullbot drained");
         return;
     }
-    let terminal = match Terminal::enter() { Ok(t) => t, Err(e) => { eprintln!("apps: {e}"); return; } };
+    let terminal = match Terminal::enter() { Ok(t) => t, Err(e) => { error_output(&format!("{e}")); return; } };
     let lease = trueos::vshell::terminal_initial_lease().ok();
-    let runtime = match runtime::current_thread_net().build() { Ok(rt) => rt, Err(e) => { drop(terminal); eprintln!("apps: {e}"); return; } };
+    let runtime = match runtime::current_thread().build() { Ok(rt) => rt, Err(e) => { drop(terminal); error_output(&format!("{e}")); return; } };
     let result = LocalSet::new().block_on(&runtime, run());
     runtime.shutdown_background();
     drop(terminal);
     if let Some(lease) = lease { let _ = lease.release_to_shell(); }
     match result {
-        Ok(Some(path)) => if let Err(code) = trueos::vshell::launch_with_script(&path, "") { eprintln!("apps: launch failed ({code})"); },
+        Ok(Some(path)) => if let Err(code) = trueos::vshell::launch_with_script(&path, "") { error_output(&format!("launch failed ({code})")); },
         Ok(None) => {},
-        Err(error) => eprintln!("apps: {error}"),
+        Err(error) => error_output(&error),
     }
+}
+
+fn error_output(message: &str) {
+    trueos::vsys::log_errorf(format_args!("apps: {message}\n"));
 }

@@ -1,7 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-use std::ops::Range;
+#[allow(unused_imports)]
+use stdext::platform::prelude::*;
+
+use stdext::platform::ops::Range;
 
 use crate::document::ReadableDocument;
 

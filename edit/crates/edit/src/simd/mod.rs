@@ -3,6 +3,9 @@
 
 //! Provides various high-throughput utilities.
 
+#[allow(unused_imports)]
+use stdext::platform::prelude::*;
+
 pub mod lines_bwd;
 pub mod lines_fwd;
 mod memchr2;

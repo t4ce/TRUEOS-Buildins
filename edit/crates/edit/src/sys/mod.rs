@@ -3,17 +3,22 @@
 
 //! Platform abstractions.
 
-#[cfg(unix)]
+#[allow(unused_imports)]
+use stdext::platform::prelude::*;
+
+#[cfg(all(unix, not(target_os = "trueos")))]
 mod unix;
 
 #[cfg(not(target_os = "trueos"))]
-pub use std::fs::canonicalize;
+pub use stdext::platform::fs::canonicalize;
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "trueos")))]
 pub use unix::*;
 
 #[cfg(target_os = "trueos")]
-mod trueos_abi;
+mod native;
+#[cfg(target_os = "trueos")]
+pub use native::*;
 
 #[cfg(target_os = "trueos")]
 mod trueos_terminal;

@@ -18,6 +18,49 @@ spec.loader.exec_module(build)
 
 
 class BuildInputs(unittest.TestCase):
+    def test_native_entry_recognizes_target_active_attributes_and_rejects_other_cfgs(self):
+        for source in (
+            '#![no_std]\nfn main() {}\n',
+            '#![cfg_attr(target_os = "trueos", no_std)]\nfn main() {}\n',
+            '#![cfg_attr(\n target_os = "trueos",\n no_std,\n)]\nfn main() {}\n',
+        ):
+            self.assertTrue(build.native_no_std_entry(source), source)
+        for source in (
+            '// #![no_std]\nfn main() {}\n',
+            '#![cfg_attr(target_os = "linux", no_std)]\nfn main() {}\n',
+            '#![cfg_attr(test, no_std)]\nfn main() {}\n',
+        ):
+            self.assertFalse(build.native_no_std_entry(source), source)
+
+    def test_native_selection_filters_owned_apps_and_leaves_default_manifest_intact(self):
+        original = (build.ROOT / "buildins.json").read_bytes()
+        names, manifest = build.selected_manifest(True)
+        self.assertEqual(set(names), set(build.NATIVE_CORE_ALLOC_BUILTINS))
+        self.assertEqual(json.loads(manifest)["buildins"], names)
+        self.assertEqual((build.ROOT / "buildins.json").read_bytes(), original)
+        self.assertEqual(build.selected_manifest(), (json.loads(original)["buildins"], original))
+
+    def test_native_selection_rejects_std_regression_before_build(self):
+        with patch.object(build, "settings", return_value=(None, None, True, [], {})):
+            with self.assertRaisesRegex(ValueError, "native-only selection now requires std"):
+                build.selected_manifest(True)
+
+    def test_ready_checks_reject_cross_selection_cache_and_unselected_packages(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)
+            names, manifest = build.selected_manifest(True)
+            ready = {"profile": "release", "sources": "test", "native_only": True,
+                     "packages": dict.fromkeys(names, "unused"), "database": {}}
+            (output / "ready.json").write_text(json.dumps(ready))
+            (output / "buildins.json").write_bytes(manifest)
+            with patch.object(build, "source_digest", return_value="test"):
+                with self.assertRaisesRegex(ValueError, "do not match buildins.json"):
+                    build.check_ready(output, Path(directory), "release")
+                ready["packages"]["hull"] = "unused"
+                (output / "ready.json").write_text(json.dumps(ready))
+                with self.assertRaisesRegex(ValueError, "do not match buildins.json"):
+                    build.check_ready(output, Path(directory), "release", True)
+
     def test_native_target_keeps_object_abi_without_unix_or_musl_platform_cfgs(self):
         legacy = json.loads((build.ROOT / "tools/trueos-object.json").read_text())
         native = json.loads((build.ROOT / "tools/trueos-object-native.json").read_text())
@@ -28,7 +71,7 @@ class BuildInputs(unittest.TestCase):
 
     def test_only_audited_core_alloc_apps_select_the_native_target(self):
         names = json.loads((build.ROOT / "buildins.json").read_text())["buildins"]
-        admitted = {"backup", "commander", "img", "os", "paper", "termdir"}
+        admitted = {"backup", "commander", "edit", "img", "os", "paper", "termdir"}
         self.assertEqual(set(build.NATIVE_CORE_ALLOC_BUILTINS), admitted)
         for name in names:
             needs_std = build.settings(name)[2]

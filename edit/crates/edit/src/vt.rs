@@ -3,7 +3,10 @@
 
 //! Our VT parser.
 
-use std::time;
+#[allow(unused_imports)]
+use stdext::platform::prelude::*;
+
+use stdext::platform::time;
 
 use stdext::unicode::Utf8Chars;
 
@@ -85,7 +88,7 @@ impl Parser {
     /// We need this because of the ambiguity of whether a trailing
     /// escape character in an input is starting another escape sequence or
     /// is just the result of the user literally pressing the Escape key.
-    pub fn read_timeout(&mut self) -> std::time::Duration {
+    pub fn read_timeout(&mut self) -> stdext::platform::time::Duration {
         match self.state {
             // 100ms is a upper ceiling for a responsive feel.
             // Realistically though, this could be much lower.

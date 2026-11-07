@@ -196,7 +196,7 @@ impl TryFrom<u32> for HighlightKind {{
     #[inline]
     fn try_from(value: u32) -> Result<Self, Self::Error> {{
         if value <= Self::{} as u32 {{
-            Ok(unsafe {{ std::mem::transmute::<u8, Self>(value as u8) }})
+            Ok(unsafe {{ core::mem::transmute::<u8, Self>(value as u8) }})
         }} else {{
             Err(())
         }}

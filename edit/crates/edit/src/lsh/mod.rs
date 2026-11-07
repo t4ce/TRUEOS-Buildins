@@ -3,11 +3,14 @@
 
 //! Microsoft Edit's adapter to LSH.
 
+#[allow(unused_imports)]
+use stdext::platform::prelude::*;
+
 pub mod cache;
 mod definitions;
 mod highlighter;
 
-use std::path::Path;
+use stdext::platform::path::Path;
 
 pub use definitions::{FILE_ASSOCIATIONS, HighlightKind, LANGUAGES};
 pub use highlighter::*;

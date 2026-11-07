@@ -1,10 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-use std::fmt::{self};
-use std::ops::{Bound, Deref, DerefMut, RangeBounds};
-use std::slice;
-use std::str::Utf8Error;
+#[allow(unused_imports)]
+use crate::platform::prelude::*;
+
+use crate::platform::fmt::{self};
+use crate::platform::ops::{Bound, Deref, DerefMut, RangeBounds};
+use crate::platform::slice;
+use crate::platform::str::Utf8Error;
 
 use crate::alloc::Allocator;
 use crate::cold_path;
@@ -305,14 +308,14 @@ impl PartialEq<&str> for BString<'_> {
 
 impl PartialOrd for BString<'_> {
     #[inline]
-    fn partial_cmp(&self, other: &BString) -> Option<std::cmp::Ordering> {
+    fn partial_cmp(&self, other: &BString) -> Option<crate::platform::cmp::Ordering> {
         Some(self.cmp(other))
     }
 }
 
 impl Ord for BString<'_> {
     #[inline]
-    fn cmp(&self, other: &BString) -> std::cmp::Ordering {
+    fn cmp(&self, other: &BString) -> crate::platform::cmp::Ordering {
         self.as_str().cmp(other.as_str())
     }
 }

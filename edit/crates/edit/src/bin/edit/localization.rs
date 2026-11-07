@@ -1,6 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+#[allow(unused_imports)]
+use stdext::platform::prelude::*;
+
 use edit::sys;
 use stdext::AsciiStringHelpers as _;
 use stdext::arena::scratch_arena;
@@ -58,7 +61,7 @@ mod tests {
                 continue; // Disabled by EDIT_CFG_LANGUAGES
             };
 
-            assert!(select_language(std::iter::once(actual)) == expected);
+            assert!(select_language(stdext::platform::iter::once(actual)) == expected);
         }
     }
 }

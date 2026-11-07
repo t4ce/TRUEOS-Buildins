@@ -1,7 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-//! [`std::cell::RefCell`], but without runtime checks in release builds.
+//! [`stdext::platform::cell::RefCell`], but without runtime checks in release builds.
+
+#[allow(unused_imports)]
+use stdext::platform::prelude::*;
 
 #[cfg(debug_assertions)]
 pub use debug::*;
@@ -11,21 +14,21 @@ pub use release::*;
 #[allow(unused)]
 #[cfg(debug_assertions)]
 mod debug {
-    pub type SemiRefCell<T> = std::cell::RefCell<T>;
-    pub type Ref<'b, T> = std::cell::Ref<'b, T>;
-    pub type RefMut<'b, T> = std::cell::RefMut<'b, T>;
+    pub type SemiRefCell<T> = stdext::platform::cell::RefCell<T>;
+    pub type Ref<'b, T> = stdext::platform::cell::Ref<'b, T>;
+    pub type RefMut<'b, T> = stdext::platform::cell::RefMut<'b, T>;
 }
 
 #[cfg(not(debug_assertions))]
 mod release {
     #[derive(Default)]
     #[repr(transparent)]
-    pub struct SemiRefCell<T>(std::cell::UnsafeCell<T>);
+    pub struct SemiRefCell<T>(stdext::platform::cell::UnsafeCell<T>);
 
     impl<T> SemiRefCell<T> {
         #[inline(always)]
         pub const fn new(value: T) -> Self {
-            Self(std::cell::UnsafeCell::new(value))
+            Self(stdext::platform::cell::UnsafeCell::new(value))
         }
 
         #[inline(always)]
@@ -54,7 +57,7 @@ mod release {
         }
     }
 
-    impl<'b, T> std::ops::Deref for Ref<'b, T> {
+    impl<'b, T> stdext::platform::ops::Deref for Ref<'b, T> {
         type Target = T;
 
         #[inline(always)]
@@ -66,7 +69,7 @@ mod release {
     #[repr(transparent)]
     pub struct RefMut<'b, T>(&'b mut T);
 
-    impl<'b, T> std::ops::Deref for RefMut<'b, T> {
+    impl<'b, T> stdext::platform::ops::Deref for RefMut<'b, T> {
         type Target = T;
 
         #[inline(always)]
@@ -75,7 +78,7 @@ mod release {
         }
     }
 
-    impl<'b, T> std::ops::DerefMut for RefMut<'b, T> {
+    impl<'b, T> stdext::platform::ops::DerefMut for RefMut<'b, T> {
         #[inline(always)]
         fn deref_mut(&mut self) -> &mut Self::Target {
             self.0

@@ -1,6 +1,9 @@
 //! IDEdit owns its development server child; Hull owns the browser window.
-use std::io;
-use std::time::Duration;
+#[allow(unused_imports)]
+use stdext::platform::prelude::*;
+
+use stdext::platform::io;
+use stdext::platform::time::Duration;
 
 use trueos_ide::html_preview::{Config, PROGRAM, PROTOCOL, READY_PREFIX, Ready};
 

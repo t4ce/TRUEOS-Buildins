@@ -3,10 +3,13 @@
 
 #![allow(clippy::mut_from_ref)]
 
-use std::cell::Cell;
-use std::mem::MaybeUninit;
-use std::ptr::{self, NonNull};
-use std::{io, mem, slice};
+#[allow(unused_imports)]
+use crate::platform::prelude::*;
+
+use crate::platform::cell::Cell;
+use crate::platform::mem::MaybeUninit;
+use crate::platform::ptr::{self, NonNull};
+use crate::platform::{io, mem, slice};
 
 use crate::alloc::Allocator;
 use crate::sys;

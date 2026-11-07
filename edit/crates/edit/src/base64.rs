@@ -3,6 +3,9 @@
 
 //! Base64 facilities.
 
+#[allow(unused_imports)]
+use stdext::platform::prelude::*;
+
 use stdext::arena::Arena;
 use stdext::collections::BString;
 

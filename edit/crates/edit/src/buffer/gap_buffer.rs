@@ -1,9 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-use std::ops::Range;
-use std::ptr::{self, NonNull};
-use std::{io, slice};
+#[allow(unused_imports)]
+use stdext::platform::prelude::*;
+
+use stdext::platform::ops::Range;
+use stdext::platform::ptr::{self, NonNull};
+use stdext::platform::{io, slice};
 
 use stdext::sys::{virtual_commit, virtual_release, virtual_reserve};
 use stdext::{ReplaceRange as _, slice_copy_safe};

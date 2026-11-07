@@ -1,8 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-use std::alloc::{Layout, alloc, dealloc, handle_alloc_error, realloc};
-use std::ptr::NonNull;
+#[allow(unused_imports)]
+use crate::platform::prelude::*;
+
+use crate::platform::alloc::{Layout, alloc, dealloc, handle_alloc_error, realloc};
+use crate::platform::ptr::NonNull;
 
 pub trait Allocator {
     /// # Safety

@@ -1,10 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+#[allow(unused_imports)]
+use crate::platform::prelude::*;
+
 #[cfg(debug_assertions)]
-use std::marker::PhantomData;
-use std::ops::Deref;
-use std::{io, mem};
+use crate::platform::marker::PhantomData;
+use crate::platform::ops::Deref;
+use crate::platform::{io, mem};
 
 #[cfg(debug_assertions)]
 use super::debug;
@@ -128,10 +131,14 @@ mod single_threaded {
     }
 }
 
+// TRUEOS Edit owns these arenas on its single editor loop. Worker jobs must
+// use owned buffers or their own arena storage rather than these globals.
+
+#[cfg(not(target_os = "trueos"))]
 mod multi_threaded {
-    use std::cell::Cell;
-    use std::ptr;
-    use std::sync::atomic::{AtomicUsize, Ordering};
+    use crate::platform::cell::Cell;
+    use crate::platform::ptr;
+    use crate::platform::sync::atomic::{AtomicUsize, Ordering};
 
     use super::*;
 
@@ -185,7 +192,7 @@ mod multi_threaded {
     }
 }
 
-#[cfg(not(feature = "single-threaded"))]
+#[cfg(all(not(target_os = "trueos"), not(feature = "single-threaded")))]
 pub use multi_threaded::*;
-#[cfg(feature = "single-threaded")]
+#[cfg(any(target_os = "trueos", feature = "single-threaded"))]
 pub use single_threaded::*;

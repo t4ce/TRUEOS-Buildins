@@ -143,9 +143,14 @@
 //! }
 //! ```
 
-#[cfg(debug_assertions)]
-use std::collections::HashSet;
-use std::{io, iter, mem, ptr, time};
+#[allow(unused_imports)]
+use stdext::platform::prelude::*;
+
+#[cfg(all(debug_assertions, not(target_os = "trueos")))]
+use stdext::platform::collections::HashSet;
+#[cfg(all(debug_assertions, target_os = "trueos"))]
+use stdext::platform::collections::BTreeSet as HashSet;
+use stdext::platform::{io, iter, mem, ptr, time};
 
 use stdext::arena::{Arena, scratch_arena};
 use stdext::collections::{BString, BVec};
@@ -344,7 +349,7 @@ pub struct Tui {
     left_mouse_down_target: u64,
     /// Timestamp of the last mouse up event.
     /// Used for tracking double/triple clicks.
-    mouse_up_timestamp: std::time::Instant,
+    mouse_up_timestamp: stdext::platform::time::Instant,
     /// The current mouse state.
     mouse_state: InputMouseState,
     /// Whether the mouse is currently being dragged.
@@ -416,7 +421,7 @@ impl Tui {
             mouse_position: Point::MIN,
             mouse_down_position: Point::MIN,
             left_mouse_down_target: 0,
-            mouse_up_timestamp: std::time::Instant::now(),
+            mouse_up_timestamp: stdext::platform::time::Instant::now(),
             mouse_state: InputMouseState::None,
             mouse_is_drag: false,
             mouse_click_counter: 0,
@@ -548,7 +553,7 @@ impl Tui {
             self.mouse_is_drag = false;
         }
 
-        let now = std::time::Instant::now();
+        let now = stdext::platform::time::Instant::now();
         let mut input_text = None;
         let mut input_keyboard = None;
         let mut input_mouse_modifiers = kbmod::NONE;
@@ -667,7 +672,7 @@ impl Tui {
                         if self.first_click_target != target
                             || self.first_click_position != next_position
                             || (now - self.mouse_up_timestamp)
-                                > std::time::Duration::from_millis(500)
+                                > stdext::platform::time::Duration::from_millis(500)
                         {
                             // If the cursor moved / the focus changed in between, or if the user did a slow click,
                             // we reset the click counter. On mouse-up it'll transition to a regular click.

@@ -1,11 +1,14 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-use std::{hint, iter};
+#[allow(unused_imports)]
+use crate::platform::prelude::*;
+
+use crate::platform::{hint, iter};
 
 /// An iterator over UTF-8 encoded characters.
 ///
-/// This differs from [`std::str::Chars`] in that it works on unsanitized
+/// This differs from [`crate::platform::str::Chars`] in that it works on unsanitized
 /// byte slices and transparently replaces invalid UTF-8 sequences with U+FFFD.
 ///
 /// This follows ICU's bitmask approach for `U8_NEXT_OR_FFFD` relatively

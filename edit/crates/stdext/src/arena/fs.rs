@@ -1,11 +1,14 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-use std::fs::File;
-use std::io::{self, Read};
-use std::mem::MaybeUninit;
-use std::path::Path;
-use std::slice::from_raw_parts_mut;
+#[allow(unused_imports)]
+use crate::platform::prelude::*;
+
+use crate::platform::fs::File;
+use crate::platform::io::{self, Read};
+use crate::platform::mem::MaybeUninit;
+use crate::platform::path::Path;
+use crate::platform::slice::from_raw_parts_mut;
 
 use crate::arena::Arena;
 use crate::collections::{BString, BVec};
@@ -31,7 +34,7 @@ pub fn read_to_vec<P: AsRef<Path>>(arena: &'_ Arena, path: P) -> io::Result<BVec
                     buf_size = (buf_size * 2).min(MAX_SIZE);
                 }
                 Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
-                Err(e) => return Err(e),
+                Err(e) => return Err(e.into()),
             }
         }
 

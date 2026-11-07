@@ -3,10 +3,13 @@
 
 //! Abstractions over reading/writing arbitrary text containers.
 
-use std::ffi::OsString;
-use std::mem;
-use std::ops::Range;
-use std::path::PathBuf;
+#[allow(unused_imports)]
+use stdext::platform::prelude::*;
+
+use stdext::platform::ffi::OsString;
+use stdext::platform::mem;
+use stdext::platform::ops::Range;
+use stdext::platform::path::PathBuf;
 
 use stdext::ReplaceRange as _;
 
@@ -97,6 +100,9 @@ impl WriteableDocument for PathBuf {
     fn replace(&mut self, range: Range<usize>, replacement: &[u8]) {
         let mut vec = mem::take(self).into_os_string().into_encoded_bytes();
         vec.replace_range(range, replacement);
-        *self = unsafe { Self::from(OsString::from_encoded_bytes_unchecked(vec)) };
+        #[cfg(not(target_os = "trueos"))]
+        { *self = unsafe { Self::from(OsString::from_encoded_bytes_unchecked(vec)) }; }
+        #[cfg(target_os = "trueos")]
+        { *self = Self::from(String::from_utf8_lossy(&vec).into_owned()); }
     }
 }

@@ -8,7 +8,10 @@
 //! - `**` matches any characters, including an empty string.
 //!   For convenience, `/**/` also matches `/`.
 
-use std::path::is_separator;
+#[allow(unused_imports)]
+use crate::platform::prelude::*;
+
+use crate::platform::path::is_separator;
 
 #[inline]
 pub fn glob_match<P: AsRef<[u8]>, N: AsRef<[u8]>>(pattern: P, name: N) -> bool {

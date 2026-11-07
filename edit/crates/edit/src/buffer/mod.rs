@@ -20,18 +20,21 @@
 //! The solution to the former is to keep line caches, which further complicates the architecture.
 //! There's no solution for the latter. However, there's a chance that the performance will still be sufficient.
 
+#[allow(unused_imports)]
+use stdext::platform::prelude::*;
+
 mod gap_buffer;
 mod navigation;
 
-use std::borrow::Cow;
-use std::cell::UnsafeCell;
-use std::collections::VecDeque;
-use std::fs::File;
-use std::io;
-use std::mem::{self, MaybeUninit};
-use std::ops::Range;
-use std::rc::Rc;
-use std::str;
+use stdext::platform::borrow::Cow;
+use stdext::platform::cell::UnsafeCell;
+use stdext::platform::collections::VecDeque;
+use stdext::platform::fs::File;
+use stdext::platform::io;
+use stdext::platform::mem::{self, MaybeUninit};
+use stdext::platform::ops::Range;
+use stdext::platform::rc::Rc;
+use stdext::platform::str;
 
 pub use gap_buffer::GapBuffer;
 use stdext::arena::{Arena, scratch_arena};
@@ -64,12 +67,17 @@ pub enum IoError {
     Icu(icu::Error),
 }
 
-pub type IoResult<T> = std::result::Result<T, IoError>;
+pub type IoResult<T> = stdext::platform::result::Result<T, IoError>;
 
 impl From<io::Error> for IoError {
     fn from(err: io::Error) -> Self {
         Self::Io(err)
     }
+}
+
+#[cfg(target_os = "trueos")]
+impl From<io::StreamError> for IoError {
+    fn from(error: io::StreamError) -> Self { Self::Io(error.into()) }
 }
 
 impl From<icu::Error> for IoError {
@@ -590,7 +598,7 @@ impl TextBuffer {
     #[inline]
     fn tab_size_eval(&self, column: CoordType) -> CoordType {
         // SAFETY: `set_tab_size` clamps `self.tab_size` to 1-8.
-        unsafe { std::hint::assert_unchecked(self.tab_size >= 1 && self.tab_size <= 8) };
+        unsafe { stdext::platform::hint::assert_unchecked(self.tab_size >= 1 && self.tab_size <= 8) };
         self.tab_size - (column % self.tab_size)
     }
 
@@ -599,7 +607,7 @@ impl TextBuffer {
     #[inline]
     fn tab_size_prev_column(&self, column: CoordType) -> CoordType {
         // SAFETY: `set_tab_size` clamps `self.tab_size` to 1-8.
-        unsafe { std::hint::assert_unchecked(self.tab_size >= 1 && self.tab_size <= 8) };
+        unsafe { stdext::platform::hint::assert_unchecked(self.tab_size >= 1 && self.tab_size <= 8) };
         (column - 1).max(0) / self.tab_size * self.tab_size
     }
 
@@ -991,6 +999,8 @@ impl TextBuffer {
     /// Writes the text buffer contents to a file, handling BOM and encoding.
     pub fn write_file(&mut self, file: &mut File) -> IoResult<()> {
         self.write_stream(file)?;
+        #[cfg(target_os = "trueos")]
+        file.commit()?;
         self.mark_as_clean();
         Ok(())
     }
@@ -1862,7 +1872,7 @@ impl TextBuffer {
                     // any time soon, we can use a static string as the template (`MARGIN`) and slice it,
                     // because `line_number_width` can't possibly be larger than 19.
                     let off = 19 - line_number_width;
-                    unsafe { std::hint::assert_unchecked(off < MARGIN_TEMPLATE.len()) };
+                    unsafe { stdext::platform::hint::assert_unchecked(off < MARGIN_TEMPLATE.len()) };
                     line.push_str(&*scratch, &MARGIN_TEMPLATE[off..]);
                 } else if self.word_wrap_column <= 0 || cursor_beg.logical_pos.x == 0 {
                     // Regular line? Place "123 | " in the margin.
@@ -3162,7 +3172,7 @@ impl TextBuffer {
 }
 
 fn has_glyph_input(text: &[u8]) -> bool {
-    std::str::from_utf8(text).map_or(true, |text| text.chars().any(|c| !c.is_whitespace()))
+    stdext::platform::str::from_utf8(text).map_or(true, |text| text.chars().any(|c| !c.is_whitespace()))
 }
 
 pub enum Bom {
@@ -3229,7 +3239,7 @@ mod tests {
     fn selected_tabs_label_runs_in_groups_of_at_most_four() {
         for count in 1..=12 {
             let mut text = b"Hello".to_vec();
-            text.extend(std::iter::repeat_n(b'\t', count));
+            text.extend(stdext::platform::iter::repeat_n(b'\t', count));
             text.extend_from_slice(b"Hello");
             let output = selected_tab_frame(&text, 5, (5 + count) as isize, 0);
             let labels: Vec<_> = output.split("\x1b]777;edit-tabs;1;")

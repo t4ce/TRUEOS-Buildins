@@ -3,10 +3,13 @@
 
 //! Random assortment of helpers I didn't know where to put.
 
-use std::borrow::Cow;
-use std::mem::{self, MaybeUninit};
-use std::ops::{Bound, Range, RangeBounds};
-use std::{fmt, ptr, slice, str};
+#[allow(unused_imports)]
+use crate::platform::prelude::*;
+
+use crate::platform::borrow::Cow;
+use crate::platform::mem::{self, MaybeUninit};
+use crate::platform::ops::{Bound, Range, RangeBounds};
+use crate::platform::{fmt, ptr, slice, str};
 
 pub const KILO: usize = 1000;
 pub const MEGA: usize = 1000 * 1000;
@@ -40,7 +43,7 @@ impl fmt::Display for MetricFormatter<usize> {
 #[cold]
 pub const fn cold_path() {}
 
-/// [`std::cmp::minmax`] is unstable, as per usual.
+/// [`crate::platform::cmp::minmax`] is unstable, as per usual.
 pub fn minmax<T>(v1: T, v2: T) -> [T; 2]
 where
     T: Ord,
@@ -63,7 +66,7 @@ pub fn opt_ptr_eq<T>(a: Option<&T>, b: Option<&T>) -> bool {
 }
 
 /// Creates a `&str` from a pointer and a length.
-/// Exists, because `std::str::from_raw_parts` is unstable, par for the course.
+/// Exists, because `crate::platform::str::from_raw_parts` is unstable, par for the course.
 ///
 /// # Safety
 ///

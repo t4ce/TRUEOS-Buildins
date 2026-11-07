@@ -1,5 +1,8 @@
 //! TRUEOS terminal zoom. Values are native font scales, with 2 equal to 100%.
 
+#[allow(unused_imports)]
+use stdext::platform::prelude::*;
+
 use edit::helpers::{CoordType, Rect, Size};
 use edit::input::vk;
 use edit::oklab::StraightRgba;
@@ -34,7 +37,7 @@ impl FontSize {
     }
 
     pub fn take_page_focus(&mut self) -> bool {
-        std::mem::take(&mut self.return_to_page)
+        stdext::platform::mem::take(&mut self.return_to_page)
     }
 
     fn choose(&mut self, scale: u8) {

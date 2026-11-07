@@ -1,6 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+#[allow(unused_imports)]
+use stdext::platform::prelude::*;
+
 use edit::helpers::*;
 use edit::input::{kbmod, vk};
 use edit::tui::*;
@@ -102,9 +105,7 @@ fn draw_menu_file(ctx: &mut Context, state: &mut State) {
             state.wants_file_picker = StateFilePicker::SaveAs;
         }
     }
-    #[allow(irrefutable_let_patterns)]
-    if let path = Settings::borrow().path.as_path()
-        && !path.as_os_str().is_empty()
+    if let Some(path) = &Settings::borrow().path
         && ctx.menubar_menu_button(loc(LocId::FilePreferences), 'P', vk::NULL)
     {
         match state.documents.add_file_path(path) {
@@ -178,11 +179,11 @@ fn draw_menu_view(ctx: &mut Context, state: &mut State) {
     }
 
     #[cfg(target_os = "trueos")]
-    if crate::COLLAPSE_AVAILABLE.load(std::sync::atomic::Ordering::Relaxed)
+    if crate::COLLAPSE_AVAILABLE.load(stdext::platform::sync::atomic::Ordering::Relaxed)
         && ctx.menubar_menu_button("Compact", 'C', vk::NULL)
         && let Err(code) = trueos::terminal_ui4::collapse()
     {
-        error_log_add(ctx, state, std::io::Error::other(format!("compact: {code}")).into());
+        error_log_add(ctx, state, stdext::platform::io::Error::other(format!("compact: {code}")).into());
     }
 
     if let Some(doc) = state.documents.active() {

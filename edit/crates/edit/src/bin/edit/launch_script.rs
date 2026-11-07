@@ -2,7 +2,10 @@
 // Licensed under the MIT License.
 
 //! Edit's one-shot TRUEOS launch directives. Paths are literal, never shell input.
-use std::io;
+#[allow(unused_imports)]
+use stdext::platform::prelude::*;
+
+use stdext::platform::io;
 
 pub fn open_paths(script: &str) -> io::Result<Vec<&str>> {
     let mut paths = Vec::new();

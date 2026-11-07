@@ -1,14 +1,17 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+#[allow(unused_imports)]
+use crate::platform::prelude::*;
+
 #[cfg(target_os = "trueos")]
-use std::alloc::{Layout, alloc, dealloc};
+use crate::platform::alloc::{Layout, alloc, dealloc};
 #[cfg(not(target_os = "trueos"))]
-use std::ffi::c_int;
-use std::io;
-use std::ptr::NonNull;
+use crate::platform::ffi::c_int;
+use crate::platform::io;
+use crate::platform::ptr::NonNull;
 #[cfg(not(target_os = "trueos"))]
-use std::ptr::{self, null_mut};
+use crate::platform::ptr::{self, null_mut};
 
 #[cfg(all(target_os = "trueos", target_pointer_width = "32"))]
 const VIRTUAL_ALIGNMENT: usize = 32 * 1024;
@@ -46,7 +49,7 @@ pub unsafe fn virtual_reserve(size: usize) -> io::Result<NonNull<u8>> {
 pub unsafe fn virtual_reserve(size: usize) -> io::Result<NonNull<u8>> {
     let layout = Layout::from_size_align(size, VIRTUAL_ALIGNMENT)
         .map_err(|_| io::Error::from(io::ErrorKind::InvalidInput))?;
-    NonNull::new(unsafe { alloc(layout) }).ok_or_else(|| io::Error::from(io::ErrorKind::OutOfMemory))
+    NonNull::new(unsafe { alloc(layout) }).ok_or_else(|| io::Error::other("editor arena allocation failed"))
 }
 
 #[cfg(all(not(target_os = "trueos"), target_os = "netbsd"))]

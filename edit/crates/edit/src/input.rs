@@ -6,7 +6,10 @@
 //! In the future this allows us to take apart the application and
 //! support input schemes that aren't VT, such as UEFI, or GUI.
 
-use std::mem;
+#[allow(unused_imports)]
+use stdext::platform::prelude::*;
+
+use stdext::platform::mem;
 
 use crate::helpers::{CoordType, Point, Size};
 use crate::vt;
@@ -74,7 +77,7 @@ impl InputKeyMod {
     }
 }
 
-impl std::ops::BitOr<InputKeyMod> for InputKey {
+impl stdext::platform::ops::BitOr<InputKeyMod> for InputKey {
     type Output = Self;
 
     fn bitor(self, rhs: InputKeyMod) -> Self {
@@ -82,7 +85,7 @@ impl std::ops::BitOr<InputKeyMod> for InputKey {
     }
 }
 
-impl std::ops::BitOr<InputKey> for InputKeyMod {
+impl stdext::platform::ops::BitOr<InputKey> for InputKeyMod {
     type Output = InputKey;
 
     fn bitor(self, rhs: InputKey) -> InputKey {
@@ -90,7 +93,7 @@ impl std::ops::BitOr<InputKey> for InputKeyMod {
     }
 }
 
-impl std::ops::BitOrAssign for InputKeyMod {
+impl stdext::platform::ops::BitOrAssign for InputKeyMod {
     fn bitor_assign(&mut self, rhs: Self) {
         self.0 |= rhs.0;
     }

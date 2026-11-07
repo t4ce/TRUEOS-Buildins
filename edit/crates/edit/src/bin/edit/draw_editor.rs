@@ -1,6 +1,9 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+#[allow(unused_imports)]
+use stdext::platform::prelude::*;
+
 use edit::framebuffer::IndexedColor;
 use edit::helpers::*;
 use edit::icu;

@@ -1,6 +1,9 @@
 //! One-shot stream: `pull [--sh3 | --headless] NAME_OR_ID` or `install NAME_OR_ID`.
 //! Install downloads, verifies and imports into AppDB without launching the app.
 //! Empty lines and # comments are ignored; duplicates intentionally launch twice.
+use alloc::{format, string::{String, ToString}, vec::Vec};
+#[cfg(test)]
+use alloc::vec;
 #[derive(Debug, PartialEq, Eq)]
 pub struct Request {
     pub selector: String,
@@ -156,7 +159,7 @@ pub fn report(message: &str) {
     );
 }
 pub async fn drain(bytes: &[u8]) {
-    let script = match std::str::from_utf8(bytes) {
+    let script = match core::str::from_utf8(bytes) {
         Ok(script) => script,
         Err(_) => {
             report("startscript is not UTF-8");
@@ -168,27 +171,17 @@ pub async fn drain(bytes: &[u8]) {
         report("drained: 0 requests");
         return;
     }
-    let client = match reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(90))
-        .build()
-    {
-        Ok(client) => client,
-        Err(error) => {
-            report(&format!("client: {error}"));
-            return;
-        }
-    };
-    let catalog = match super::fetch(&client, super::CATALOG, 1024 * 1024).await {
-        Ok(bytes) => match std::str::from_utf8(&bytes) {
+    let catalog = match super::fetch::bytes(super::CATALOG, super::fetch::CATALOG_LIMIT).await {
+        Ok(bytes) => match core::str::from_utf8(&bytes) {
             Ok(html) => super::catalog::parse(html),
             Err(_) => {
-                eprintln!("apps: catalog is not UTF-8");
+                super::error_output("catalog is not UTF-8");
                 report("catalog is not UTF-8");
                 return;
             }
         },
         Err(error) => {
-            eprintln!("apps: catalog: {error}");
+            super::error_output(&format!("catalog: {error}"));
             report(&format!("catalog: {error}"));
             return;
         }
@@ -206,7 +199,7 @@ pub async fn drain(bytes: &[u8]) {
             } = request?;
             let app = super::catalog::resolve(&catalog, &selector)
                 .ok_or_else(|| format!("not in catalog: {selector}"))?;
-            let path = super::download(&client, app).await?;
+            let path = super::download(app).await?;
             if install_only {
                 trueos::async_fs::write_file(b"vFile:appdb-install", path.as_bytes()).await
                     .map_err(|error| format!("AppDB import failed: {error}"))?;
@@ -227,7 +220,7 @@ pub async fn drain(bytes: &[u8]) {
                         report(&format!("queued {}", app.archive_name));
                         return Ok::<(), String>(());
                     }
-                    Err(-16) => trueos::time::sleep(std::time::Duration::from_millis(25)).await,
+                    Err(-16) => trueos::time::sleep(core::time::Duration::from_millis(25)).await,
                     Err(code) => {
                         return Err(format!("{}: launch enqueue failed ({code})", app.name));
                     }
@@ -240,7 +233,7 @@ pub async fn drain(bytes: &[u8]) {
             Ok(()) => queued += 1,
             Err(error) => {
                 failed += 1;
-                eprintln!("apps: {error}");
+                super::error_output(&error);
                 report(&error);
             }
         }

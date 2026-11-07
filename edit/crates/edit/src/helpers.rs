@@ -3,10 +3,13 @@
 
 //! Random assortment of helpers I didn't know where to put.
 
-use std::cmp::Ordering;
-use std::io::{self, Read};
-use std::mem::MaybeUninit;
-use std::{fmt, slice};
+#[allow(unused_imports)]
+use stdext::platform::prelude::*;
+
+use stdext::platform::cmp::Ordering;
+use stdext::platform::io::{self, Read};
+use stdext::platform::mem::MaybeUninit;
+use stdext::platform::{fmt, slice};
 
 pub const KILO: usize = 1000;
 pub const MEGA: usize = 1000 * 1000;

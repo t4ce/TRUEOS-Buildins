@@ -6,8 +6,11 @@
 //! It's designed for parsing our small settings files,
 //! but its performance is rather competitive in general.
 
-use std::fmt;
-use std::hint::unreachable_unchecked;
+#[allow(unused_imports)]
+use stdext::platform::prelude::*;
+
+use stdext::platform::fmt;
+use stdext::platform::hint::unreachable_unchecked;
 
 use stdext::arena::Arena;
 use stdext::collections::{BString, BVec};
@@ -42,7 +45,7 @@ impl fmt::Display for ParseError {
     }
 }
 
-impl std::error::Error for ParseError {}
+impl stdext::platform::error::Error for ParseError {}
 
 #[derive(Debug, Clone)]
 pub enum Value<'a> {
