@@ -5,6 +5,10 @@ name = "ssh-host"
 version = "0.1.0"
 edition = "2024"
 [workspace]
+[lib]
+name = "trueos_ssh_client"
+path = "../src/lib.rs"
+
 [[bin]]
 name = "ssh"
 path = "../src/main.rs"

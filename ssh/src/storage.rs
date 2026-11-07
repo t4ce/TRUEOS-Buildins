@@ -30,6 +30,8 @@ impl core::fmt::Display for StoreError {
         }
     }
 }
+// App adapters run on one current-thread runtime; no Send-future promise.
+#[allow(async_fn_in_trait)]
 pub trait Store {
     async fn snapshot(&mut self, path: &str) -> core::result::Result<Option<Snapshot>, StoreError>;
     async fn ensure_parent(&mut self, path: &str) -> core::result::Result<(), StoreError>;

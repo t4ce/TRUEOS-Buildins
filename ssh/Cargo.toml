@@ -6,6 +6,10 @@ license = "MIT OR Apache-2.0"
 
 [workspace]
 
+[lib]
+name = "trueos_ssh_client"
+path = "src/lib.rs"
+
 [[bin]]
 name = "ssh"
 path = "src/main.rs"

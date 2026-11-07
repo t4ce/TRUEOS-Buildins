@@ -128,8 +128,9 @@ mod host {
             expected: Option<[u8; 32]>,
         ) -> core::result::Result<(), StoreError> {
             let _guard = PUBLICATION.lock().unwrap();
-            match (fs::read(path), expected) {
-                (Ok(old), Some(digest)) if <[u8; 32]>::from(Sha256::digest(&old)) == digest => {}
+            match (fs::read(path).map(Zeroizing::new), expected) {
+                (Ok(old), Some(digest))
+                    if <[u8; 32]>::from(Sha256::digest(old.as_slice())) == digest => {}
                 (Err(e), None) if e.kind() == std::io::ErrorKind::NotFound => {}
                 (Err(e), _) if e.kind() != std::io::ErrorKind::NotFound => return Err(error(e)),
                 _ => return Err(StoreError::Conflict),

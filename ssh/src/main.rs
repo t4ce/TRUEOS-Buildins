@@ -1,36 +1,14 @@
 //! Native resident SSH client, sharing the IO-less Sunset engine with the kernel.
 #![cfg_attr(target_os = "trueos", no_std)]
 extern crate alloc;
-mod escape;
-mod options;
-mod platform_store;
-mod queue;
-mod session;
-mod storage;
-mod terminal;
-mod wire;
 use alloc::{format, string::String, vec::Vec};
-use options::Options;
-use platform_store::NativeStore;
-use terminal::{PlatformConsole, Terminal};
-type Result<T> = core::result::Result<T, String>;
-
-#[cfg(target_os = "trueos")]
-fn stage_log(stage: &str) {
-    trueos::vsys::log_infof(format_args!("ssh: stage={stage}\n"));
-}
-#[cfg(not(target_os = "trueos"))]
-fn stage_log(_: &str) {}
-fn process_var(name: &str) -> Option<String> {
-    #[cfg(target_os = "trueos")]
-    {
-        trueos::env::var(name).ok()
-    }
-    #[cfg(not(target_os = "trueos"))]
-    {
-        std::env::var(name).ok()
-    }
-}
+use trueos_ssh_client::{
+    Result,
+    options::{self, Options},
+    platform_store::NativeStore,
+    session, stage_log,
+    terminal::{self, PlatformConsole, Terminal},
+};
 fn process_args() -> Vec<String> {
     #[cfg(target_os = "trueos")]
     {

@@ -7,6 +7,8 @@ use tokio::{net::TcpStream, time::Instant};
 #[cfg(target_os = "trueos")]
 use trueos_runtime::io::ErrorKind;
 
+// The native pump runs on its current-thread runtime.
+#[allow(async_fn_in_trait)]
 pub trait Wire {
     /// None is temporary unavailability; Some(0) is received EOF.
     fn read(&mut self, out: &mut [u8]) -> Result<Option<usize>>;
