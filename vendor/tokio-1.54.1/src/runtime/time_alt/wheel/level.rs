@@ -1,8 +1,11 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::util::linked_list::LinkedList;
 
 use super::{Entry, EntryHandle};
-use std::ptr::NonNull;
-use std::{array, fmt};
+use ::core::ptr::NonNull;
+use ::core::array;
+use ::core::fmt;
 
 /// Wheel for a single level in the timer. This wheel contains 64 slots.
 pub(crate) struct Level {
@@ -159,7 +162,7 @@ impl Level {
     pub(crate) fn take_slot(&mut self, slot: usize) -> LinkedList<Entry> {
         self.occupied &= !occupied_bit(slot);
 
-        std::mem::take(&mut self.slot[slot])
+        ::core::mem::take(&mut self.slot[slot])
     }
 }
 

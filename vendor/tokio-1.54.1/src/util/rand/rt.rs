@@ -1,6 +1,8 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use super::{FastRand, RngSeed};
 
-use std::sync::Mutex;
+use crate::platform::sync::Mutex;
 
 /// A deterministic generator for seeds (and other generators).
 ///

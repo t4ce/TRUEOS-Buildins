@@ -1,5 +1,7 @@
 //! Thread pool for blocking operations
 
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::loom::sync::{Arc, Condvar, Mutex};
 use crate::loom::thread;
 use crate::runtime::blocking::schedule::BlockingSchedule;
@@ -11,11 +13,15 @@ use crate::runtime::{AutoBox, Builder, Callback, Handle};
 use crate::util::metric_atomics::MetricAtomicUsize;
 use crate::util::trace::{blocking_task, SpawnMeta};
 
-use std::collections::{HashMap, VecDeque};
-use std::fmt;
-use std::io;
-use std::sync::atomic::Ordering;
-use std::time::Duration;
+use alloc::collections::VecDeque;
+#[cfg(feature="native")]
+use alloc::collections::BTreeMap as ThreadMap;
+#[cfg(not(feature="native"))]
+use std::collections::HashMap as ThreadMap;
+use ::core::fmt;
+use crate::platform::io;
+use ::core::sync::atomic::Ordering;
+use ::core::time::Duration;
 
 pub(crate) struct BlockingPool {
     spawner: Spawner,
@@ -128,7 +134,7 @@ struct LockedInner {
 /// previously-timed-out worker, plus the map of currently-running workers.
 pub(super) type ShutdownHandles = (
     Option<thread::JoinHandle<()>>,
-    HashMap<usize, thread::JoinHandle<()>>,
+    ThreadMap<usize, thread::JoinHandle<()>>,
 );
 
 /// Thread-management state used by every `InnerImpl` variant.
@@ -143,7 +149,7 @@ pub(super) struct ThreadManagementState {
     pub(super) last_exiting_thread: Option<thread::JoinHandle<()>>,
     /// This holds the `JoinHandles` for all running threads; on shutdown, the thread
     /// calling shutdown handles joining on these.
-    pub(super) worker_threads: HashMap<usize, thread::JoinHandle<()>>,
+    pub(super) worker_threads: ThreadMap<usize, thread::JoinHandle<()>>,
     /// This is a counter used to iterate `worker_threads` in a consistent order (for loom's
     /// benefit).
     pub(super) worker_thread_index: usize,
@@ -160,8 +166,8 @@ impl ThreadManagementState {
         self.shutdown = true;
         self.shutdown_tx = None;
 
-        let last_exited_thread = std::mem::take(&mut self.last_exiting_thread);
-        let workers = std::mem::take(&mut self.worker_threads);
+        let last_exited_thread = ::core::mem::take(&mut self.last_exiting_thread);
+        let workers = ::core::mem::take(&mut self.worker_threads);
         Some((last_exited_thread, workers))
     }
 
@@ -174,7 +180,7 @@ impl ThreadManagementState {
         worker_thread_id: usize,
     ) -> Option<thread::JoinHandle<()>> {
         let my_handle = self.worker_threads.remove(&worker_thread_id);
-        std::mem::replace(&mut self.last_exiting_thread, my_handle)
+        ::core::mem::replace(&mut self.last_exiting_thread, my_handle)
     }
 }
 
@@ -201,7 +207,7 @@ pub(crate) enum SpawnError {
 impl From<SpawnError> for io::Error {
     fn from(e: SpawnError) -> Self {
         match e {
-            SpawnError::ShuttingDown => io::Error::other("blocking pool shutting down"),
+            SpawnError::ShuttingDown => io::Error::new(io::ErrorKind::Other, "blocking pool shutting down"),
             SpawnError::NoThreads(e) => e,
         }
     }
@@ -279,7 +285,7 @@ impl BlockingPool {
             shutdown: false,
             shutdown_tx: Some(shutdown_tx),
             last_exiting_thread: None,
-            worker_threads: HashMap::new(),
+            worker_threads: ThreadMap::new(),
             worker_thread_index: 0,
         };
 
@@ -361,7 +367,7 @@ impl Spawner {
         F: FnOnce() -> R + Send + 'static,
         R: Send + 'static,
     {
-        let fn_size = std::mem::size_of::<F>();
+        let fn_size = ::core::mem::size_of::<F>();
         let (join_handle, spawn_result) = if AutoBox::<F>::SHOULD_BOX {
             self.spawn_blocking_inner(
                 Box::new(func),
@@ -400,7 +406,7 @@ impl Spawner {
             F: FnOnce() -> R + Send + 'static,
             R: Send + 'static,
         {
-            let fn_size = std::mem::size_of::<F>();
+            let fn_size = ::core::mem::size_of::<F>();
             let (join_handle, spawn_result) = if AutoBox::<F>::SHOULD_BOX {
                 self.spawn_blocking_inner(
                     Box::new(func),

@@ -1,17 +1,19 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::loom::sync::Arc;
 use crate::runtime::context;
 use crate::runtime::scheduler::{self, current_thread, Inject};
 use crate::task::Id;
 
 use backtrace::BacktraceFrame;
-use std::cell::Cell;
-use std::collections::VecDeque;
-use std::ffi::c_void;
-use std::fmt;
-use std::future::Future;
-use std::pin::Pin;
-use std::ptr::NonNull;
-use std::task::{self, Poll};
+use ::core::cell::Cell;
+use alloc::collections::VecDeque;
+use ::core::ffi::c_void;
+use ::core::fmt;
+use ::core::future::Future;
+use ::core::pin::Pin;
+use ::core::ptr::NonNull;
+use ::core::task::{self, Poll};
 
 mod symbol;
 mod trace_impl;
@@ -220,7 +222,7 @@ where
     // SAFETY: The raw pointer is removed from the thread local before `trace_leaf` is dropped, so
     // this transmute cannot lead to the violation of any lifetime requirements.
     let trace_leaf_dyn = unsafe {
-        std::mem::transmute::<
+        ::core::mem::transmute::<
             *mut (dyn FnMut(&TraceMeta) + '_),
             *mut (dyn FnMut(&TraceMeta) + 'static),
         >(trace_leaf_dyn)
@@ -334,7 +336,7 @@ impl fmt::Display for Trace {
 }
 
 fn defer<F: FnOnce() -> R, R>(f: F) -> impl Drop {
-    use std::mem::ManuallyDrop;
+    use ::core::mem::ManuallyDrop;
 
     struct Defer<F: FnOnce() -> R, R>(ManuallyDrop<F>);
 

@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 pub(crate) mod context;
 pub(super) use context::{LocalContext, TempLocalContext};
 

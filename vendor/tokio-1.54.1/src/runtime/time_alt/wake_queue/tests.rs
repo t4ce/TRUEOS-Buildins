@@ -1,6 +1,8 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use super::*;
 
-use std::task::Context;
+use ::core::task::Context;
 
 use futures_test::task::{new_count_waker, AwokenCount};
 

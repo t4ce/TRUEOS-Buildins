@@ -411,6 +411,8 @@
 //! [`prewarm-fd-table`]: https://github.com/tokio-rs/tokio/blob/master/examples/prewarm-fd-table.rs
 
 // At the top due to macros
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 #[cfg(test)]
 #[cfg(not(target_family = "wasm"))]
 #[macro_use]
@@ -449,8 +451,8 @@ cfg_time! {
     #[cfg(all(tokio_unstable, feature = "rt-multi-thread"))]
     pub(crate) mod time_alt;
 
-    use std::task::{Context, Poll};
-    use std::pin::Pin;
+    use ::core::task::{Context, Poll};
+    use ::core::pin::Pin;
 
     #[derive(Debug)]
     pub(crate) enum Timer {
@@ -652,11 +654,11 @@ cfg_rt! {
     /// branch on a constant that is known once `T` is known is pruned by the
     /// monomorphization collector, so only the harness that is actually used
     /// is generated.
-    pub(crate) struct AutoBox<T>(std::marker::PhantomData<T>);
+    pub(crate) struct AutoBox<T>(::core::marker::PhantomData<T>);
 
     impl<T> AutoBox<T> {
         /// `true` if a value of type `T` is larger than [`BOX_FUTURE_THRESHOLD`].
-        pub(crate) const SHOULD_BOX: bool = std::mem::size_of::<T>() > BOX_FUTURE_THRESHOLD;
+        pub(crate) const SHOULD_BOX: bool = ::core::mem::size_of::<T>() > BOX_FUTURE_THRESHOLD;
     }
 
     mod thread_id;
@@ -676,5 +678,5 @@ cfg_rt! {
     pub(crate) use metrics::{MetricsBatch, SchedulerMetrics, WorkerMetrics, HistogramBuilder};
 
     /// After thread starts / before thread stops
-    type Callback = std::sync::Arc<dyn Fn() + Send + Sync>;
+    type Callback = alloc::sync::Arc<dyn Fn() + Send + Sync>;
 }

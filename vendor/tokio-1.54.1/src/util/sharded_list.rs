@@ -1,5 +1,7 @@
-use std::ptr::NonNull;
-use std::sync::atomic::Ordering;
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
+use ::core::ptr::NonNull;
+use ::core::sync::atomic::Ordering;
 
 use crate::loom::sync::{Mutex, MutexGuard};
 use crate::util::metric_atomics::{MetricAtomicU64, MetricAtomicUsize};
@@ -46,7 +48,7 @@ impl<L: ShardedListItem> ShardedList<L> {
         assert!(sharded_size.is_power_of_two());
 
         let shard_mask = sharded_size - 1;
-        let lists = std::iter::repeat_with(|| Mutex::new(LinkedList::new()));
+        let lists = ::core::iter::repeat_with(|| Mutex::new(LinkedList::new()));
         Self {
             lists: lists.take(sharded_size).collect(),
             added: MetricAtomicU64::new(0),

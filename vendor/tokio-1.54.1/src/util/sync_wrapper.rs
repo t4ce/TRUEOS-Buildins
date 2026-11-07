@@ -3,7 +3,9 @@
 //!
 //! A similar primitive is provided in the `sync_wrapper` crate.
 
-use std::any::Any;
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
+use ::core::any::Any;
 
 pub(crate) struct SyncWrapper<T> {
     value: T,

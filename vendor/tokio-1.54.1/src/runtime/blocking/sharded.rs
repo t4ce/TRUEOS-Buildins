@@ -12,13 +12,15 @@
 //! to idle — never around queue operations or task execution — so spawners
 //! and workers contend mostly on `1/NUM_SHARDS` of a shard lock each.
 
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::loom::sync::atomic::{AtomicBool, AtomicUsize};
 use crate::loom::sync::{Condvar, Mutex};
 use crate::loom::thread;
 
-use std::collections::VecDeque;
-use std::sync::atomic::Ordering;
-use std::time::Duration;
+use alloc::collections::VecDeque;
+use ::core::sync::atomic::Ordering;
+use ::core::time::Duration;
 
 use super::pool::{ShutdownHandles, SpawnError, SpawnerMetrics, Task, ThreadManagementState};
 
@@ -72,7 +74,7 @@ struct ShardedCoord {
 impl ShardedImpl {
     pub(super) fn new(thread_mgmt_state: ThreadManagementState) -> ShardedImpl {
         ShardedImpl {
-            shards: std::array::from_fn(|_| {
+            shards: ::core::array::from_fn(|_| {
                 Mutex::new(Shard {
                     queue: VecDeque::new(),
                     sealed: false,
@@ -171,7 +173,7 @@ impl ShardedImpl {
                 shard.sealed = true;
                 self.non_empty_mask
                     .fetch_and(!(1 << index), Ordering::Relaxed);
-                std::mem::take(&mut shard.queue)
+                ::core::mem::take(&mut shard.queue)
             };
             for task in tasks {
                 metrics.dec_queue_depth();

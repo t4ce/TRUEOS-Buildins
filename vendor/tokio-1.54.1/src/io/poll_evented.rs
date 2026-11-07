@@ -1,13 +1,15 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::io::interest::Interest;
 use crate::runtime::io::Registration;
 use crate::runtime::scheduler;
 
 use mio::event::Source;
-use std::fmt;
-use std::io;
-use std::ops::Deref;
-use std::panic::{RefUnwindSafe, UnwindSafe};
-use std::task::ready;
+use ::core::fmt;
+use crate::platform::io;
+use ::core::ops::Deref;
+use crate::platform::panic::{RefUnwindSafe, UnwindSafe};
+use ::core::task::ready;
 
 cfg_io_driver! {
     /// Associates an I/O resource that implements the [`std::io::Read`] and/or
@@ -154,7 +156,7 @@ feature! {
     #![any(feature = "net", all(unix, feature = "process"))]
 
     use crate::io::ReadBuf;
-    use std::task::{Context, Poll};
+    use ::core::task::{Context, Poll};
 
     impl<E: Source> PollEvented<E> {
         // Safety: The caller must ensure that `E` can read into uninitialized memory
@@ -166,12 +168,12 @@ feature! {
         where
             &'a E: io::Read + 'a,
         {
-            use std::io::Read;
+            use crate::platform::io::Read;
 
             loop {
                 let evt = ready!(self.registration.poll_read_ready(cx))?;
 
-                let b = unsafe { &mut *(buf.unfilled_mut() as *mut [std::mem::MaybeUninit<u8>] as *mut [u8]) };
+                let b = unsafe { &mut *(buf.unfilled_mut() as *mut [::core::mem::MaybeUninit<u8>] as *mut [u8]) };
 
                 // used only when the cfgs below apply
                 #[allow(unused_variables)]
@@ -230,7 +232,7 @@ feature! {
         where
             &'a E: io::Write + 'a,
         {
-            use std::io::Write;
+            use crate::platform::io::Write;
 
             loop {
                 let evt = ready!(self.registration.poll_write_ready(cx))?;
@@ -285,8 +287,14 @@ feature! {
         where
             &'a E: io::Write + 'a,
         {
-            use std::io::Write;
-            self.registration.poll_write_io(cx, || self.io.as_ref().unwrap().write_vectored(bufs))
+            use crate::platform::io::Write;
+            #[cfg(not(feature="native"))]
+            {self.registration.poll_write_io(cx, || self.io.as_ref().unwrap().write_vectored(bufs))}
+            #[cfg(feature="native")]
+            {self.registration.poll_write_io(cx, || {
+                let buf=bufs.iter().find(|b|!b.is_empty()).map_or(&[][..],|b|&b[..]);
+                self.io.as_ref().unwrap().write(buf)
+            })}
         }
     }
 }

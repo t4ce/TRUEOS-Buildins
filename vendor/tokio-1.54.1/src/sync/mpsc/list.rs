@@ -1,12 +1,14 @@
 //! A concurrent, lock-free, FIFO list.
 
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::loom::sync::atomic::{AtomicPtr, AtomicUsize};
 use crate::loom::thread;
 use crate::sync::mpsc::block::{self, Block};
 
-use std::fmt;
-use std::ptr::NonNull;
-use std::sync::atomic::Ordering::{AcqRel, Acquire, Relaxed, Release};
+use ::core::fmt;
+use ::core::ptr::NonNull;
+use ::core::sync::atomic::Ordering::{AcqRel, Acquire, Relaxed, Release};
 
 /// List queue transmit handle.
 pub(crate) struct Tx<T> {
@@ -498,7 +500,7 @@ mod tests {
 
         // Advancing `rx` to the second block must not reclaim the first block yet,
         // because `rx.index` has not reached the wrapped `required_index` (1).
-        std::thread::scope(|s| {
+        crate::platform::thread::scope(|s| {
             s.spawn(|| unsafe {
                 let slow_tail = &*slow_tail.load(Relaxed);
                 let slow_block = slow_tail.load_next(Acquire).unwrap();

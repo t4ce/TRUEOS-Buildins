@@ -4,7 +4,9 @@
 //! Admission therefore identifies a pool thread, while a separate scoped
 //! activity marker describes what that thread is currently executing.
 
-use std::marker::PhantomData;
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
+use ::core::marker::PhantomData;
 
 const TOKIO_POOL_ROLE: u32 = 2;
 const ASYNC_SCHEDULER: u32 = 2;
@@ -66,8 +68,8 @@ impl Drop for ActivityGuard {
 
 #[cfg(test)]
 std::thread_local! {
-    static CHILD_ROLE: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
-    static ACTIVITY: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+    static CHILD_ROLE: ::core::cell::Cell<u32> = const { ::core::cell::Cell::new(0) };
+    static ACTIVITY: ::core::cell::Cell<u32> = const { ::core::cell::Cell::new(0) };
 }
 
 #[cfg(test)]
@@ -87,14 +89,14 @@ mod tests {
     #[test]
     fn spawn_hint_restores_on_error_and_unwind() {
         CHILD_ROLE.with(|current| current.set(1));
-        let spawn_error = || -> std::io::Result<()> {
+        let spawn_error = || -> crate::platform::io::Result<()> {
             let _role = ChildRoleGuard::tokio_pool();
             assert_eq!(CHILD_ROLE.with(|current| current.get()), TOKIO_POOL_ROLE);
-            Err(std::io::Error::from_raw_os_error(11))
+            Err(crate::platform::io::Error::from_raw_os_error(11))
         };
         assert!(spawn_error().is_err());
         assert_eq!(CHILD_ROLE.with(|current| current.get()), 1);
-        assert!(std::panic::catch_unwind(|| {
+        assert!(crate::platform::panic::task_boundary(|| {
             let _role = ChildRoleGuard::tokio_pool();
             panic!("spawn hook panicked");
         })
@@ -110,7 +112,7 @@ mod tests {
             {
                 let _scheduler = ActivityGuard::async_scheduler();
                 assert_eq!(ACTIVITY.with(|current| current.get()), ASYNC_SCHEDULER);
-                assert!(std::panic::catch_unwind(|| {
+                assert!(crate::platform::panic::task_boundary(|| {
                     let _block_in_place = ActivityGuard::blocking();
                     assert_eq!(ACTIVITY.with(|current| current.get()), BLOCKING);
                     panic!("blocking closure panicked");

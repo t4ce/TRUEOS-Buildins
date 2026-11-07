@@ -1,11 +1,13 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::io::util::read_until::read_until_internal;
 use crate::io::AsyncBufRead;
 
 use pin_project_lite::pin_project;
-use std::io;
-use std::mem;
-use std::pin::Pin;
-use std::task::{ready, Context, Poll};
+use crate::platform::io;
+use ::core::mem;
+use ::core::pin::Pin;
+use ::core::task::{ready, Context, Poll};
 
 pin_project! {
     /// Reads lines from an [`AsyncBufRead`].
@@ -63,7 +65,7 @@ where
     /// # }
     /// ```
     pub async fn next_line(&mut self) -> io::Result<Option<String>> {
-        use std::future::poll_fn;
+        use ::core::future::poll_fn;
 
         poll_fn(|cx| Pin::new(&mut *self).poll_next_line(cx)).await
     }
@@ -136,7 +138,12 @@ where
 
         match String::from_utf8(bytes) {
             Ok(line) => Poll::Ready(Ok(Some(line))),
-            Err(err) => Poll::Ready(Err(io::Error::new(io::ErrorKind::InvalidData, err))),
+            Err(err) => Poll::Ready(Err({
+                #[cfg(not(feature="native"))]
+                {io::Error::new(io::ErrorKind::InvalidData,err)}
+                #[cfg(feature="native")]
+                {let _=err;io::Error::new(io::ErrorKind::InvalidData,"stream did not contain valid UTF-8")}
+            })),
         }
     }
 }

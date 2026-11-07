@@ -1,4 +1,6 @@
-use std::fmt::Display;
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
+use core::fmt::Display;
 
 use super::{style, Attribute, Color, ContentStyle, StyledContent};
 
@@ -170,6 +172,8 @@ use calculated_docs;
 
 #[cfg(test)]
 mod tests {
+    #[allow(unused_imports)]
+    use crate::alloc_prelude::*;
     use super::super::{Attribute, Color, ContentStyle, Stylize};
 
     #[test]

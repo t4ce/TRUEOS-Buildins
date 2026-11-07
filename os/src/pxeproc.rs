@@ -1,5 +1,6 @@
 //! One-shot UI key scripts supplied through the ordinary Blueprint launch surface.
 
+use alloc::{format, string::String, vec::Vec};
 use crossterm::event::KeyCode;
 
 pub fn parse_keys(script: &str) -> Result<Vec<KeyCode>, String> {

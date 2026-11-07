@@ -1,5 +1,7 @@
 //! See [`std::os`](https://doc.rust-lang.org/std/os/index.html).
 
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 /// Platform-specific extensions to `std` for Windows.
 ///
 /// See [`std::os::windows`](https://doc.rust-lang.org/std/os/windows/index.html).

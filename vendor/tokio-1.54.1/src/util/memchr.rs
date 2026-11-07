@@ -3,6 +3,8 @@
 //! When nothing pulls in libc, then just use a trivial implementation. Note
 //! that we only depend on libc on unix.
 
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 #[cfg(not(all(unix, feature = "libc")))]
 fn memchr_inner(needle: u8, haystack: &[u8]) -> Option<usize> {
     haystack.iter().position(|val| needle == *val)
@@ -43,7 +45,7 @@ pub(crate) fn memchr(needle: u8, haystack: &[u8]) -> Option<usize> {
     // TODO(MSRV 1.81): When bumping MSRV, switch to `std::hint::assert_unchecked(haystack.get(..=index).is_some());`
     unsafe {
         if haystack.get(..=index).is_none() {
-            std::hint::unreachable_unchecked()
+            ::core::hint::unreachable_unchecked()
         }
     }
 

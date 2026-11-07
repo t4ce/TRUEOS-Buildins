@@ -1,6 +1,8 @@
 //! This module contains the `content style` that can be applied to an `styled content`.
 
-use std::fmt::Display;
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
+use core::fmt::Display;
 
 use crate::style::{Attributes, Color, StyledContent};
 

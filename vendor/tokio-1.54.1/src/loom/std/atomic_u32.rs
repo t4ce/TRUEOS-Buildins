@@ -1,11 +1,13 @@
-use std::cell::UnsafeCell;
-use std::fmt;
-use std::ops::Deref;
-use std::panic;
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
+use ::core::cell::UnsafeCell;
+use ::core::fmt;
+use ::core::ops::Deref;
+use crate::platform::panic;
 
 /// `AtomicU32` providing an additional `unsync_load` function.
 pub(crate) struct AtomicU32 {
-    inner: UnsafeCell<std::sync::atomic::AtomicU32>,
+    inner: UnsafeCell<::core::sync::atomic::AtomicU32>,
 }
 
 unsafe impl Send for AtomicU32 {}
@@ -15,7 +17,7 @@ impl panic::UnwindSafe for AtomicU32 {}
 
 impl AtomicU32 {
     pub(crate) const fn new(val: u32) -> AtomicU32 {
-        let inner = UnsafeCell::new(std::sync::atomic::AtomicU32::new(val));
+        let inner = UnsafeCell::new(::core::sync::atomic::AtomicU32::new(val));
         AtomicU32 { inner }
     }
 
@@ -26,12 +28,12 @@ impl AtomicU32 {
     /// All mutations must have happened before the unsynchronized load.
     /// Additionally, there must be no concurrent mutations.
     pub(crate) unsafe fn unsync_load(&self) -> u32 {
-        unsafe { core::ptr::read(self.inner.get() as *const u32) }
+        unsafe { ::core::ptr::read(self.inner.get() as *const u32) }
     }
 }
 
 impl Deref for AtomicU32 {
-    type Target = std::sync::atomic::AtomicU32;
+    type Target = ::core::sync::atomic::AtomicU32;
 
     fn deref(&self) -> &Self::Target {
         // safety: it is always safe to access `&self` fns on the inner value as

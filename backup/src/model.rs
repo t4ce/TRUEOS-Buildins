@@ -1,4 +1,5 @@
 //! Presentation state only: privileged claims and validation stay in the host.
+use alloc::{format, string::String, vec::Vec};
 #[derive(Clone, Debug)]
 pub struct Disk {
     pub id: u32,
@@ -220,7 +221,7 @@ mod tests {
     }
     #[test]
     fn empty_lists_never_emit_action() {
-        let mut app = App::new(std::iter::empty());
+        let mut app = App::new(core::iter::empty());
         app.go(Screen::Source);
         assert_eq!(app.activate(), None);
         app.go(Screen::Images);

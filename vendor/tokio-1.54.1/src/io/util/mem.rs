@@ -1,14 +1,13 @@
 //! In-process memory IO types.
 
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::io::{split, AsyncRead, AsyncWrite, ReadBuf, ReadHalf, WriteHalf};
 use crate::loom::sync::Mutex;
 
 use bytes::{Buf, BytesMut};
-use std::{
-    pin::Pin,
-    sync::Arc,
-    task::{self, ready, Poll, Waker},
-};
+use ::core::{pin::Pin, task::{self,ready,Poll,Waker}};
+use alloc::sync::Arc;
 
 /// A bidirectional pipe to read and write bytes in memory.
 ///
@@ -133,7 +132,7 @@ impl AsyncRead for DuplexStream {
         mut self: Pin<&mut Self>,
         cx: &mut task::Context<'_>,
         buf: &mut ReadBuf<'_>,
-    ) -> Poll<std::io::Result<()>> {
+    ) -> Poll<crate::platform::io::Result<()>> {
         let mut wakers = Wakers::default();
         let ret = Pin::new(&mut *self.read.lock()).poll_read_deferred(cx, buf, &mut wakers);
         wakers.wake();
@@ -147,7 +146,7 @@ impl AsyncWrite for DuplexStream {
         mut self: Pin<&mut Self>,
         cx: &mut task::Context<'_>,
         buf: &[u8],
-    ) -> Poll<std::io::Result<usize>> {
+    ) -> Poll<crate::platform::io::Result<usize>> {
         let mut wakers = Wakers::default();
         let ret = Pin::new(&mut *self.write.lock()).poll_write_deferred(cx, buf, &mut wakers);
         wakers.wake();
@@ -157,8 +156,8 @@ impl AsyncWrite for DuplexStream {
     fn poll_write_vectored(
         self: Pin<&mut Self>,
         cx: &mut task::Context<'_>,
-        bufs: &[std::io::IoSlice<'_>],
-    ) -> Poll<Result<usize, std::io::Error>> {
+        bufs: &[crate::platform::io::IoSlice<'_>],
+    ) -> Poll<Result<usize, crate::platform::io::Error>> {
         let mut wakers = Wakers::default();
         let ret =
             Pin::new(&mut *self.write.lock()).poll_write_vectored_deferred(cx, bufs, &mut wakers);
@@ -174,7 +173,7 @@ impl AsyncWrite for DuplexStream {
     fn poll_flush(
         mut self: Pin<&mut Self>,
         cx: &mut task::Context<'_>,
-    ) -> Poll<std::io::Result<()>> {
+    ) -> Poll<crate::platform::io::Result<()>> {
         Pin::new(&mut *self.write.lock()).poll_flush(cx)
     }
 
@@ -182,7 +181,7 @@ impl AsyncWrite for DuplexStream {
     fn poll_shutdown(
         mut self: Pin<&mut Self>,
         _: &mut task::Context<'_>,
-    ) -> Poll<std::io::Result<()>> {
+    ) -> Poll<crate::platform::io::Result<()>> {
         let read_waker = self.write.lock().close_write();
         if let Some(waker) = read_waker {
             waker.wake();
@@ -310,7 +309,7 @@ impl SimplexStream {
         cx: &mut task::Context<'_>,
         buf: &mut ReadBuf<'_>,
         wakers: &mut Wakers,
-    ) -> Poll<std::io::Result<()>> {
+    ) -> Poll<crate::platform::io::Result<()>> {
         if buf.remaining() == 0 {
             return Poll::Ready(Ok(()));
         }
@@ -338,9 +337,9 @@ impl SimplexStream {
         cx: &mut task::Context<'_>,
         buf: &[u8],
         wakers: &mut Wakers,
-    ) -> Poll<std::io::Result<usize>> {
+    ) -> Poll<crate::platform::io::Result<usize>> {
         if self.is_closed {
-            return Poll::Ready(Err(std::io::ErrorKind::BrokenPipe.into()));
+            return Poll::Ready(Err(crate::platform::io::ErrorKind::BrokenPipe.into()));
         }
         if buf.is_empty() {
             return Poll::Ready(Ok(0));
@@ -361,11 +360,11 @@ impl SimplexStream {
     fn poll_write_vectored_internal(
         mut self: Pin<&mut Self>,
         cx: &mut task::Context<'_>,
-        bufs: &[std::io::IoSlice<'_>],
+        bufs: &[crate::platform::io::IoSlice<'_>],
         wakers: &mut Wakers,
-    ) -> Poll<Result<usize, std::io::Error>> {
+    ) -> Poll<Result<usize, crate::platform::io::Error>> {
         if self.is_closed {
-            return Poll::Ready(Err(std::io::ErrorKind::BrokenPipe.into()));
+            return Poll::Ready(Err(crate::platform::io::ErrorKind::BrokenPipe.into()));
         }
         if bufs.iter().all(|buf| buf.is_empty()) {
             return Poll::Ready(Ok(0));
@@ -398,7 +397,7 @@ impl SimplexStream {
             cx: &mut task::Context<'_>,
             buf: &mut ReadBuf<'_>,
             wakers: &mut Wakers,
-        ) -> Poll<std::io::Result<()>> {
+        ) -> Poll<crate::platform::io::Result<()>> {
             ready!(crate::trace::trace_leaf(cx));
             let coop = ready!(crate::task::coop::poll_proceed(cx));
 
@@ -416,7 +415,7 @@ impl SimplexStream {
             cx: &mut task::Context<'_>,
             buf: &mut ReadBuf<'_>,
             wakers: &mut Wakers,
-        ) -> Poll<std::io::Result<()>> {
+        ) -> Poll<crate::platform::io::Result<()>> {
             ready!(crate::trace::trace_leaf(cx));
             self.poll_read_internal(cx, buf, wakers)
         }
@@ -428,7 +427,7 @@ impl SimplexStream {
             cx: &mut task::Context<'_>,
             buf: &[u8],
             wakers: &mut Wakers,
-        ) -> Poll<std::io::Result<usize>> {
+        ) -> Poll<crate::platform::io::Result<usize>> {
             ready!(crate::trace::trace_leaf(cx));
             let coop = ready!(crate::task::coop::poll_proceed(cx));
 
@@ -446,7 +445,7 @@ impl SimplexStream {
             cx: &mut task::Context<'_>,
             buf: &[u8],
             wakers: &mut Wakers,
-        ) -> Poll<std::io::Result<usize>> {
+        ) -> Poll<crate::platform::io::Result<usize>> {
             ready!(crate::trace::trace_leaf(cx));
             self.poll_write_internal(cx, buf, wakers)
         }
@@ -456,9 +455,9 @@ impl SimplexStream {
         fn poll_write_vectored_deferred(
             self: Pin<&mut Self>,
             cx: &mut task::Context<'_>,
-            bufs: &[std::io::IoSlice<'_>],
+            bufs: &[crate::platform::io::IoSlice<'_>],
             wakers: &mut Wakers,
-        ) -> Poll<Result<usize, std::io::Error>> {
+        ) -> Poll<Result<usize, crate::platform::io::Error>> {
             ready!(crate::trace::trace_leaf(cx));
             let coop = ready!(crate::task::coop::poll_proceed(cx));
 
@@ -474,9 +473,9 @@ impl SimplexStream {
         fn poll_write_vectored_deferred(
             self: Pin<&mut Self>,
             cx: &mut task::Context<'_>,
-            bufs: &[std::io::IoSlice<'_>],
+            bufs: &[crate::platform::io::IoSlice<'_>],
             wakers: &mut Wakers,
-        ) -> Poll<Result<usize, std::io::Error>> {
+        ) -> Poll<Result<usize, crate::platform::io::Error>> {
             ready!(crate::trace::trace_leaf(cx));
             self.poll_write_vectored_internal(cx, bufs, wakers)
         }
@@ -488,7 +487,7 @@ impl AsyncRead for SimplexStream {
         self: Pin<&mut Self>,
         cx: &mut task::Context<'_>,
         buf: &mut ReadBuf<'_>,
-    ) -> Poll<std::io::Result<()>> {
+    ) -> Poll<crate::platform::io::Result<()>> {
         let mut wakers = Wakers::default();
         let ret = self.poll_read_deferred(cx, buf, &mut wakers);
         wakers.wake();
@@ -501,7 +500,7 @@ impl AsyncWrite for SimplexStream {
         self: Pin<&mut Self>,
         cx: &mut task::Context<'_>,
         buf: &[u8],
-    ) -> Poll<std::io::Result<usize>> {
+    ) -> Poll<crate::platform::io::Result<usize>> {
         let mut wakers = Wakers::default();
         let ret = self.poll_write_deferred(cx, buf, &mut wakers);
         wakers.wake();
@@ -511,8 +510,8 @@ impl AsyncWrite for SimplexStream {
     fn poll_write_vectored(
         self: Pin<&mut Self>,
         cx: &mut task::Context<'_>,
-        bufs: &[std::io::IoSlice<'_>],
-    ) -> Poll<Result<usize, std::io::Error>> {
+        bufs: &[crate::platform::io::IoSlice<'_>],
+    ) -> Poll<Result<usize, crate::platform::io::Error>> {
         let mut wakers = Wakers::default();
         let ret = self.poll_write_vectored_deferred(cx, bufs, &mut wakers);
         wakers.wake();
@@ -523,14 +522,14 @@ impl AsyncWrite for SimplexStream {
         true
     }
 
-    fn poll_flush(self: Pin<&mut Self>, _: &mut task::Context<'_>) -> Poll<std::io::Result<()>> {
+    fn poll_flush(self: Pin<&mut Self>, _: &mut task::Context<'_>) -> Poll<crate::platform::io::Result<()>> {
         Poll::Ready(Ok(()))
     }
 
     fn poll_shutdown(
         mut self: Pin<&mut Self>,
         _: &mut task::Context<'_>,
-    ) -> Poll<std::io::Result<()>> {
+    ) -> Poll<crate::platform::io::Result<()>> {
         if let Some(waker) = self.close_write() {
             waker.wake();
         }

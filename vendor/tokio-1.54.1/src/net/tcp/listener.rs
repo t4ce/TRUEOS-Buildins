@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::io::{Interest, PollEvented};
 use crate::net::tcp::TcpStream;
 use crate::util::check_socket_for_blocking;
@@ -6,10 +8,12 @@ cfg_not_wasip1! {
     use crate::net::{to_socket_addrs, ToSocketAddrs};
 }
 
-use std::fmt;
-use std::io;
-use std::net::{self, SocketAddr};
-use std::task::{ready, Context, Poll};
+use ::core::fmt;
+use crate::platform::io;
+use ::core::net::SocketAddr;
+#[cfg(not(feature="native"))]
+use std::net;
+use ::core::task::{ready, Context, Poll};
 
 cfg_net! {
     /// A TCP socket server, listening for connections.
@@ -240,6 +244,7 @@ impl TcpListener {
     /// from a future driven by a tokio runtime, otherwise runtime can be set
     /// explicitly with [`Runtime::enter`](crate::runtime::Runtime::enter) function.
     #[track_caller]
+    #[cfg(not(feature="native"))]
     pub fn from_std(listener: net::TcpListener) -> io::Result<TcpListener> {
         check_socket_for_blocking(&listener)?;
 
@@ -270,6 +275,7 @@ impl TcpListener {
     /// [`tokio::net::TcpListener`]: TcpListener
     /// [`std::net::TcpListener`]: std::net::TcpListener
     /// [`set_nonblocking`]: fn@std::net::TcpListener::set_nonblocking
+    #[cfg(not(feature="native"))]
     pub fn into_std(self) -> io::Result<std::net::TcpListener> {
         #[cfg(unix)]
         {
@@ -386,6 +392,7 @@ impl TcpListener {
     }
 }
 
+#[cfg(not(feature="native"))]
 impl TryFrom<net::TcpListener> for TcpListener {
     type Error = io::Error;
 
@@ -404,7 +411,7 @@ impl fmt::Debug for TcpListener {
     }
 }
 
-#[cfg(unix)]
+#[cfg(all(not(feature="native"),unix))]
 mod sys {
     use super::TcpListener;
     use std::os::unix::prelude::*;

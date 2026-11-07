@@ -1,4 +1,6 @@
 // Signal handling
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 cfg_signal_internal_and_unix! {
     mod signal;
 }
@@ -18,9 +20,9 @@ use crate::runtime::io::{IoDriverMetrics, RegistrationSet, ScheduledIo};
 
 use crate::loom::sync::Arc;
 use mio::event::Source;
-use std::fmt;
-use std::io;
-use std::time::Duration;
+use ::core::fmt;
+use crate::platform::io;
+use ::core::time::Duration;
 
 /// I/O driver, backed by Mio.
 pub(crate) struct Driver {
@@ -378,7 +380,7 @@ impl Direction {
 #[cfg(all(test, unix, feature = "net", not(loom), not(miri)))]
 mod tests {
     use super::*;
-    use std::io::Write;
+    use crate::platform::io::Write;
 
     #[test]
     fn busy_turn_takes_busy_batch() {

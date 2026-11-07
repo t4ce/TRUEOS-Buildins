@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::loom::sync::atomic::Ordering::Relaxed;
 use crate::util::metric_atomics::MetricAtomicU64;
 

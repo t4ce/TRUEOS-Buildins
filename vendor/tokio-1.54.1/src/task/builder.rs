@@ -1,10 +1,14 @@
 #![allow(unreachable_pub)]
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::{
     runtime::{AutoBox, Handle},
     task::{JoinHandle, LocalSet},
     util::trace::SpawnMeta,
 };
-use std::{future::Future, io, mem};
+use ::core::future::Future;
+use crate::platform::io;
+use ::core::mem;
 
 /// Factory which is used to configure the properties of a new task.
 ///

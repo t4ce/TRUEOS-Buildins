@@ -1,16 +1,18 @@
 //! Unix pipe types.
 
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::io::interest::Interest;
 use crate::io::{AsyncRead, AsyncWrite, PollEvented, ReadBuf, Ready};
 
 use mio::unix::pipe as mio_pipe;
 use std::fs::File;
-use std::io::{self, Read, Write};
+use crate::platform::io::{self, Read, Write};
 use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::io::{AsFd, AsRawFd, BorrowedFd, FromRawFd, IntoRawFd, OwnedFd, RawFd};
 use std::path::Path;
-use std::pin::Pin;
-use std::task::{Context, Poll};
+use ::core::pin::Pin;
+use ::core::task::{Context, Poll};
 
 cfg_io_util! {
     use bytes::BufMut;
@@ -1410,11 +1412,11 @@ impl Receiver {
         /// [`WouldBlock`]: std::io::ErrorKind::WouldBlock
         pub fn try_read_buf<B: BufMut>(&self, buf: &mut B) -> io::Result<usize> {
             self.io.registration().try_io(Interest::READABLE, || {
-                use std::io::Read;
+                use crate::platform::io::Read;
 
                 let dst = buf.chunk_mut();
                 let dst =
-                    unsafe { &mut *(dst as *mut _ as *mut [std::mem::MaybeUninit<u8>] as *mut [u8]) };
+                    unsafe { &mut *(dst as *mut _ as *mut [::core::mem::MaybeUninit<u8>] as *mut [u8]) };
 
                 // Safety: `mio_pipe::Receiver` uses a `std::fs::File` underneath,
                 // which correctly handles reads into uninitialized memory.
@@ -1483,7 +1485,7 @@ impl AsFd for Receiver {
 fn is_pipe(fd: BorrowedFd<'_>) -> io::Result<bool> {
     // Safety: `libc::stat` is C-like struct used for syscalls and all-zero
     // byte pattern forms a valid value.
-    let mut stat: libc::stat = unsafe { std::mem::zeroed() };
+    let mut stat: libc::stat = unsafe { ::core::mem::zeroed() };
 
     // Safety: it's safe to call `fstat` with a valid, open file descriptor
     // and a valid pointer to a `stat` struct.

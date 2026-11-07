@@ -1,12 +1,14 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::io::AsyncWrite;
 
 use pin_project_lite::pin_project;
-use std::future::Future;
-use std::io;
-use std::marker::PhantomPinned;
-use std::mem;
-use std::pin::Pin;
-use std::task::{ready, Context, Poll};
+use ::core::future::Future;
+use crate::platform::io;
+use ::core::marker::PhantomPinned;
+use ::core::mem;
+use ::core::pin::Pin;
+use ::core::task::{ready, Context, Poll};
 
 pin_project! {
     #[derive(Debug)]

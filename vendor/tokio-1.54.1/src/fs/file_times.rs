@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use std::time::SystemTime;
 
 #[cfg(target_vendor = "apple")]

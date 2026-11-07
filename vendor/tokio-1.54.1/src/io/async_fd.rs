@@ -1,13 +1,15 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::io::{Interest, Ready};
 use crate::runtime::io::{ReadyEvent, Registration};
 use crate::runtime::scheduler;
 
 use mio::unix::SourceFd;
-use std::error::Error;
-use std::fmt;
-use std::io;
+use ::core::error::Error;
+use ::core::fmt;
+use crate::platform::io;
 use std::os::unix::io::{AsRawFd, RawFd};
-use std::task::{ready, Context, Poll};
+use ::core::task::{ready, Context, Poll};
 
 /// Associates an IO object backed by a Unix file descriptor with the tokio
 /// reactor, allowing for readiness to be polled. The file descriptor must be of
@@ -967,8 +969,8 @@ impl<T: AsRawFd> std::os::unix::io::AsFd for AsyncFd<T> {
     }
 }
 
-impl<T: std::fmt::Debug + AsRawFd> std::fmt::Debug for AsyncFd<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl<T: ::core::fmt::Debug + AsRawFd> ::core::fmt::Debug for AsyncFd<T> {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
         f.debug_struct("AsyncFd")
             .field("inner", &self.inner)
             .finish()
@@ -1411,16 +1413,16 @@ impl<'a, Inner: AsRawFd> AsyncFdReadyMutGuard<'a, Inner> {
     }
 }
 
-impl<'a, T: std::fmt::Debug + AsRawFd> std::fmt::Debug for AsyncFdReadyGuard<'a, T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl<'a, T: ::core::fmt::Debug + AsRawFd> ::core::fmt::Debug for AsyncFdReadyGuard<'a, T> {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
         f.debug_struct("ReadyGuard")
             .field("async_fd", &self.async_fd)
             .finish()
     }
 }
 
-impl<'a, T: std::fmt::Debug + AsRawFd> std::fmt::Debug for AsyncFdReadyMutGuard<'a, T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl<'a, T: ::core::fmt::Debug + AsRawFd> ::core::fmt::Debug for AsyncFdReadyMutGuard<'a, T> {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
         f.debug_struct("MutReadyGuard")
             .field("async_fd", &self.async_fd)
             .finish()

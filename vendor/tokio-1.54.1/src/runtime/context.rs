@@ -1,7 +1,9 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::loom::thread::AccessError;
 use crate::task::coop;
 
-use std::cell::Cell;
+use ::core::cell::Cell;
 
 #[cfg(any(feature = "rt", feature = "macros"))]
 use crate::util::rand::FastRand;
@@ -21,7 +23,7 @@ cfg_rt! {
 
     use crate::runtime::{scheduler, task::Id};
 
-    use std::task::Waker;
+    use ::core::task::Waker;
 
     cfg_taskdump! {
         use crate::runtime::task::trace;
@@ -199,7 +201,7 @@ cfg_rt! {
     /// Unsets the scheduler context until the guard drops, on unwind too.
     #[cfg(all(target_os = "emscripten", not(target_feature = "atomics")))]
     pub(crate) fn clear_scheduler() -> ClearSchedulerGuard {
-        CONTEXT.with(|c| ClearSchedulerGuard(c.scheduler.inner.replace(std::ptr::null())))
+        CONTEXT.with(|c| ClearSchedulerGuard(c.scheduler.inner.replace(::core::ptr::null())))
     }
 
     #[track_caller]

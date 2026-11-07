@@ -7,10 +7,12 @@
     allow(dead_code)
 )]
 
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::runtime::park::{ParkThread, UnparkThread};
 
-use std::io;
-use std::time::Duration;
+use crate::platform::io;
+use ::core::time::Duration;
 
 #[derive(Debug)]
 pub(crate) struct Driver {

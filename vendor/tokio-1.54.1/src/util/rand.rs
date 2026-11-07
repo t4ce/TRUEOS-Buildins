@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 cfg_rt! {
     mod rt;
     pub(crate) use rt::RngSeedGenerator;

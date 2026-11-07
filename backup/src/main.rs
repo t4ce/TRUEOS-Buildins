@@ -1,3 +1,6 @@
+#![no_std]
+extern crate alloc;
+use alloc::{format, string::String, vec::Vec};
 use crossterm::{
     cursor::{Hide, MoveTo, Show},
     event::{self, Event, KeyCode, KeyEventKind},
@@ -5,10 +8,8 @@ use crossterm::{
     style::{Color, Print, ResetColor, SetForegroundColor},
     terminal::{self, Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use std::{
-    io::{self, Write},
-    time::Duration,
-};
+use core::time::Duration;
+use crossterm::io::{self, Write};
 use trueos::{env, platform, runtime, task, vshell};
 mod model;
 use model::{App, Screen};
@@ -67,7 +68,11 @@ async fn run(lease: &vshell::TerminalLease, mut app: App) -> io::Result<String> 
     draw(&app)?;
     lease
         .acknowledge_ready()
-        .map_err(|e| io::Error::other(e.to_string()))?;
+        .map_err(|error| {
+            let _ = trueos::logl::log_record(trueos::logl::level::ERROR, "backup",
+                format_args!("terminal lease acknowledgement failed: {error}"));
+            io::Error::new(io::ErrorKind::Other, "backup terminal lease acknowledgement failed")
+        })?;
     loop {
         if event::poll(Duration::ZERO)? {
             match event::read()? {

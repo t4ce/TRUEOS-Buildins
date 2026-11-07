@@ -1,5 +1,7 @@
 //! This module provides platform related functions.
 
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 #[cfg(all(unix, not(target_os = "trueos")))]
 #[cfg(feature = "events")]
 pub use self::unix::supports_keyboard_enhancement;

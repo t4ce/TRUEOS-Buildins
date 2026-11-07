@@ -1,8 +1,10 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use super::ReadBuf;
-use std::io;
-use std::ops::DerefMut;
-use std::pin::Pin;
-use std::task::{Context, Poll};
+use crate::platform::io;
+use ::core::ops::DerefMut;
+use ::core::pin::Pin;
+use ::core::task::{Context, Poll};
 
 /// Reads bytes from a source.
 ///
@@ -100,7 +102,7 @@ impl AsyncRead for &[u8] {
         _cx: &mut Context<'_>,
         buf: &mut ReadBuf<'_>,
     ) -> Poll<io::Result<()>> {
-        let amt = std::cmp::min(self.len(), buf.remaining());
+        let amt = ::core::cmp::min(self.len(), buf.remaining());
         let (a, b) = self.split_at(amt);
         buf.put_slice(a);
         *self = b;
@@ -124,7 +126,7 @@ impl<T: AsRef<[u8]> + Unpin> AsyncRead for io::Cursor<T> {
         }
 
         let start = pos as usize;
-        let amt = std::cmp::min(slice.len() - start, buf.remaining());
+        let amt = ::core::cmp::min(slice.len() - start, buf.remaining());
         // Add won't overflow because of pos check above.
         let end = start + amt;
         buf.put_slice(&slice[start..end]);

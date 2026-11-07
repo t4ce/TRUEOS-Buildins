@@ -1,10 +1,12 @@
 //! Join two values implementing `AsyncRead` and `AsyncWrite` into a single one.
 
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::io::{AsyncBufRead, AsyncRead, AsyncWrite, ReadBuf};
 
-use std::io;
-use std::pin::Pin;
-use std::task::{Context, Poll};
+use crate::platform::io;
+use ::core::pin::Pin;
+use ::core::task::{Context, Poll};
 
 /// Join two values implementing `AsyncRead` and `AsyncWrite` into a
 /// single handle.

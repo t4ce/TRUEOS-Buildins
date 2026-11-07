@@ -2,13 +2,15 @@
 //!
 //! A combination of the various resource driver park handles.
 
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::loom::sync::atomic::AtomicUsize;
 use crate::loom::sync::{Arc, Condvar, Mutex};
 use crate::runtime::driver::{self, Driver};
 use crate::util::TryLock;
 
-use std::sync::atomic::Ordering::SeqCst;
-use std::time::{Duration, Instant};
+use ::core::sync::atomic::Ordering::SeqCst;
+use crate::platform::time::{Duration, Instant};
 
 #[cfg(loom)]
 use crate::runtime::park::CURRENT_THREAD_PARK_COUNT;

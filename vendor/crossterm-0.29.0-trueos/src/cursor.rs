@@ -42,7 +42,9 @@
 //!
 //! For manual execution control check out [crossterm::queue](../macro.queue.html).
 
-use std::fmt;
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
+use core::fmt;
 
 use crate::{csi, impl_display, Command};
 
@@ -65,7 +67,7 @@ impl Command for MoveTo {
     }
 
     #[cfg(windows)]
-    fn execute_winapi(&self) -> std::io::Result<()> {
+    fn execute_winapi(&self) -> crate::io::Result<()> {
         sys::move_to(self.0, self.1)
     }
 }
@@ -87,7 +89,7 @@ impl Command for MoveToNextLine {
     }
 
     #[cfg(windows)]
-    fn execute_winapi(&self) -> std::io::Result<()> {
+    fn execute_winapi(&self) -> crate::io::Result<()> {
         if self.0 != 0 {
             sys::move_to_next_line(self.0)?;
         }
@@ -112,7 +114,7 @@ impl Command for MoveToPreviousLine {
     }
 
     #[cfg(windows)]
-    fn execute_winapi(&self) -> std::io::Result<()> {
+    fn execute_winapi(&self) -> crate::io::Result<()> {
         if self.0 != 0 {
             sys::move_to_previous_line(self.0)?;
         }
@@ -135,7 +137,7 @@ impl Command for MoveToColumn {
     }
 
     #[cfg(windows)]
-    fn execute_winapi(&self) -> std::io::Result<()> {
+    fn execute_winapi(&self) -> crate::io::Result<()> {
         sys::move_to_column(self.0)
     }
 }
@@ -155,7 +157,7 @@ impl Command for MoveToRow {
     }
 
     #[cfg(windows)]
-    fn execute_winapi(&self) -> std::io::Result<()> {
+    fn execute_winapi(&self) -> crate::io::Result<()> {
         sys::move_to_row(self.0)
     }
 }
@@ -176,7 +178,7 @@ impl Command for MoveUp {
     }
 
     #[cfg(windows)]
-    fn execute_winapi(&self) -> std::io::Result<()> {
+    fn execute_winapi(&self) -> crate::io::Result<()> {
         sys::move_up(self.0)
     }
 }
@@ -197,7 +199,7 @@ impl Command for MoveRight {
     }
 
     #[cfg(windows)]
-    fn execute_winapi(&self) -> std::io::Result<()> {
+    fn execute_winapi(&self) -> crate::io::Result<()> {
         sys::move_right(self.0)
     }
 }
@@ -218,7 +220,7 @@ impl Command for MoveDown {
     }
 
     #[cfg(windows)]
-    fn execute_winapi(&self) -> std::io::Result<()> {
+    fn execute_winapi(&self) -> crate::io::Result<()> {
         sys::move_down(self.0)
     }
 }
@@ -239,7 +241,7 @@ impl Command for MoveLeft {
     }
 
     #[cfg(windows)]
-    fn execute_winapi(&self) -> std::io::Result<()> {
+    fn execute_winapi(&self) -> crate::io::Result<()> {
         sys::move_left(self.0)
     }
 }
@@ -261,7 +263,7 @@ impl Command for SavePosition {
     }
 
     #[cfg(windows)]
-    fn execute_winapi(&self) -> std::io::Result<()> {
+    fn execute_winapi(&self) -> crate::io::Result<()> {
         sys::save_position()
     }
 }
@@ -283,7 +285,7 @@ impl Command for RestorePosition {
     }
 
     #[cfg(windows)]
-    fn execute_winapi(&self) -> std::io::Result<()> {
+    fn execute_winapi(&self) -> crate::io::Result<()> {
         sys::restore_position()
     }
 }
@@ -302,7 +304,7 @@ impl Command for Hide {
     }
 
     #[cfg(windows)]
-    fn execute_winapi(&self) -> std::io::Result<()> {
+    fn execute_winapi(&self) -> crate::io::Result<()> {
         sys::show_cursor(false)
     }
 }
@@ -321,7 +323,7 @@ impl Command for Show {
     }
 
     #[cfg(windows)]
-    fn execute_winapi(&self) -> std::io::Result<()> {
+    fn execute_winapi(&self) -> crate::io::Result<()> {
         sys::show_cursor(true)
     }
 }
@@ -340,7 +342,7 @@ impl Command for EnableBlinking {
         f.write_str(csi!("?12h"))
     }
     #[cfg(windows)]
-    fn execute_winapi(&self) -> std::io::Result<()> {
+    fn execute_winapi(&self) -> crate::io::Result<()> {
         Ok(())
     }
 }
@@ -359,7 +361,7 @@ impl Command for DisableBlinking {
         f.write_str(csi!("?12l"))
     }
     #[cfg(windows)]
-    fn execute_winapi(&self) -> std::io::Result<()> {
+    fn execute_winapi(&self) -> crate::io::Result<()> {
         Ok(())
     }
 }
@@ -402,7 +404,7 @@ impl Command for SetCursorStyle {
     }
 
     #[cfg(windows)]
-    fn execute_winapi(&self) -> std::io::Result<()> {
+    fn execute_winapi(&self) -> crate::io::Result<()> {
         Ok(())
     }
 }
@@ -427,7 +429,9 @@ impl_display!(for SetCursorStyle);
 #[cfg(test)]
 #[cfg(feature = "events")]
 mod tests {
-    use std::io::{self, stdout};
+    #[allow(unused_imports)]
+    use crate::alloc_prelude::*;
+    use crate::io::{self, stdout};
 
     use crate::execute;
 

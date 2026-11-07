@@ -1,11 +1,13 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::io::util::DEFAULT_BUF_SIZE;
 use crate::io::{AsyncBufRead, AsyncRead, AsyncSeek, AsyncWrite, ReadBuf};
 
 use pin_project_lite::pin_project;
-use std::fmt;
-use std::io::{self, IoSlice, SeekFrom, Write};
-use std::pin::Pin;
-use std::task::{ready, Context, Poll};
+use ::core::fmt;
+use crate::platform::io::{self, IoSlice, SeekFrom, Write};
+use ::core::pin::Pin;
+use ::core::task::{ready, Context, Poll};
 
 pin_project! {
     /// Wraps a writer and buffers its output.

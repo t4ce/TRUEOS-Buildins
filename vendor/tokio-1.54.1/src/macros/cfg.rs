@@ -1,5 +1,7 @@
 #![allow(unused_macros)]
 
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 /// Allows specifying arbitrary combinations of features and config flags,
 /// which are also propagated to `docsrs` config.
 ///
@@ -51,7 +53,7 @@ macro_rules! cfg_windows {
 macro_rules! cfg_unix {
     ($($item:item)*) => {
         $(
-            #[cfg(any(all(doc, docsrs), unix))]
+            #[cfg(all(not(feature="native"),any(all(doc, docsrs), unix)))]
             #[cfg_attr(docsrs, doc(cfg(unix)))]
             $item
         )*
@@ -63,7 +65,7 @@ macro_rules! cfg_unix {
 macro_rules! cfg_unix_or_wasi {
     ($($item:item)*) => {
         $(
-            #[cfg(any(all(doc, docsrs), unix, target_os = "wasi"))]
+            #[cfg(all(not(feature="native"),any(all(doc, docsrs),unix,target_os="wasi")))]
             #[cfg_attr(docsrs, doc(cfg(any(unix, target_os = "wasi"))))]
             $item
         )*
@@ -374,7 +376,7 @@ macro_rules! cfg_net_or_uring {
 macro_rules! cfg_net_unix {
     ($($item:item)*) => {
         $(
-            #[cfg(all(unix, feature = "net"))]
+            #[cfg(all(not(feature="native"),unix,feature="net"))]
             #[cfg_attr(docsrs, doc(cfg(all(unix, feature = "net"))))]
             $item
         )*

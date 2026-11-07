@@ -114,6 +114,8 @@
 //! [crossbeam-unbounded]: https://docs.rs/crossbeam/*/crossbeam/channel/fn.unbounded.html
 //! [`send_timeout`]: crate::sync::mpsc::Sender::send_timeout
 
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 pub(super) mod block;
 
 mod bounded;

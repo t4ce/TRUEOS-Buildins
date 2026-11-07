@@ -1,5 +1,8 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use super::parser::Parser;
-use std::{io, time::Duration};
+use crate::io;
+use core::time::Duration;
 
 use crate::event::{source::EventSource, timeout::PollTimeout, Event, InputDiscardStatus, InternalEvent};
 #[cfg(feature = "event-stream")]
@@ -124,6 +127,8 @@ impl<T: TerminalTransport> EventSource for TerminalEventSource<T> {
 
 #[cfg(test)]
 mod tests {
+    #[allow(unused_imports)]
+    use crate::alloc_prelude::*;
     use super::*;
     use crate::event::KeyCode;
     use std::{collections::VecDeque, sync::{Arc, Mutex}};

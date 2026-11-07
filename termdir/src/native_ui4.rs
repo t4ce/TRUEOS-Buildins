@@ -23,7 +23,7 @@ pub(super) fn cell_size(width: u32, height: u32, zoom: usize) -> (u16, u16) {
 
 pub(super) fn run(_config: Config) -> io::Result<()> {
     Err(io::Error::new(
-        io::ErrorKind::Unsupported,
+        io::ErrorKind::Other,
         "termdir native text renderer was removed; use --backend=terminal",
     ))
 }

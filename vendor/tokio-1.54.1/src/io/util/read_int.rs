@@ -1,17 +1,19 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::io::{AsyncRead, ReadBuf};
 
 use bytes::Buf;
 use pin_project_lite::pin_project;
-use std::future::Future;
-use std::io;
-use std::io::ErrorKind::UnexpectedEof;
-use std::marker::PhantomPinned;
-use std::pin::Pin;
-use std::task::{Context, Poll};
+use ::core::future::Future;
+use crate::platform::io;
+use crate::platform::io::ErrorKind::UnexpectedEof;
+use ::core::marker::PhantomPinned;
+use ::core::pin::Pin;
+use ::core::task::{Context, Poll};
 
 macro_rules! reader {
     ($name:ident, $ty:ty, $reader:ident) => {
-        reader!($name, $ty, $reader, std::mem::size_of::<$ty>());
+        reader!($name, $ty, $reader, ::core::mem::size_of::<$ty>());
     };
     ($name:ident, $ty:ty, $reader:ident, $bytes:expr) => {
         pin_project! {

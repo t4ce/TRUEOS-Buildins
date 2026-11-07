@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use super::{CancellationQueueEntry, EntryHandle};
 use crate::loom::sync::{Arc, Mutex};
 use crate::util::linked_list::LinkedList;
@@ -72,7 +74,7 @@ pub(crate) struct Receiver {
 
 impl Receiver {
     pub(crate) fn recv_all(&mut self) -> impl Iterator<Item = EntryHandle> {
-        std::mem::take(&mut *self.inner.lock()).into_iter()
+        ::core::mem::take(&mut *self.inner.lock()).into_iter()
     }
 }
 

@@ -46,6 +46,9 @@ repository = "https://github.com/crossterm-rs/crossterm"
 all-features = true
 
 [features]
+# Selects the core/alloc TRUEOS vocabulary. This wins over other additive
+# features; std clients retain their existing I/O signatures without it.
+native-core = []
 bracketed-paste = []
 default = [
     "bracketed-paste",
@@ -143,6 +146,8 @@ required-features = ["events"]
 [dependencies.base64]
 version = "0.22"
 optional = true
+default-features = false
+features = ["alloc"]
 
 [dependencies.bitflags]
 version = "2.9"
@@ -151,6 +156,7 @@ version = "2.9"
 version = "2.0.0"
 features = ["is_variant"]
 optional = true
+default-features = false
 
 [dependencies.document-features]
 version = "0.2.11"
@@ -160,13 +166,20 @@ version = "0.3"
 optional = true
 default-features = false
 
-[dependencies.parking_lot]
+[target.'cfg(not(target_os = "trueos"))'.dependencies.parking_lot]
 version = "0.12"
+
+[target.'cfg(target_os = "trueos")'.dependencies.trueos-runtime]
+path = "../../../TRUEOS/crates/trueos-runtime"
+
+[target.'cfg(target_os = "trueos")'.dependencies.trueos-io]
+path = "../../../TRUEOS/crates/trueos-io"
 
 [dependencies.serde]
 version = "1.0"
-features = ["derive"]
+features = ["derive", "alloc"]
 optional = true
+default-features = false
 
 [dev-dependencies.async-std]
 version = "1.13"

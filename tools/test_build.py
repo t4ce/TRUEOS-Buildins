@@ -28,10 +28,11 @@ class BuildInputs(unittest.TestCase):
 
     def test_only_audited_core_alloc_apps_select_the_native_target(self):
         names = json.loads((build.ROOT / "buildins.json").read_text())["buildins"]
-        self.assertEqual(set(build.NATIVE_CORE_ALLOC_BUILTINS), {"img", "paper"})
+        admitted = {"backup", "commander", "img", "os", "paper", "termdir"}
+        self.assertEqual(set(build.NATIVE_CORE_ALLOC_BUILTINS), admitted)
         for name in names:
             needs_std = build.settings(name)[2]
-            expected = "trueos-object-native.json" if name in {"img", "paper"} else "trueos-object.json"
+            expected = "trueos-object-native.json" if name in admitted else "trueos-object.json"
             self.assertEqual(build.object_target(name, needs_std).name, expected, name)
         self.assertEqual(build.object_target("unreviewed-no-std-app", False).name, "trueos-object.json")
 
@@ -90,6 +91,42 @@ class BuildInputs(unittest.TestCase):
             self.assertIn("ide", features)
             self.assertIn("trueos/spirit", features)
             self.assertNotIn("trueos/ide", features)
+
+    def test_explicit_native_runtime_does_not_inject_std_runtime_or_network_features(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            app = root / "example"
+            (app / "src").mkdir(parents=True)
+            (app / "Cargo.toml").write_text(
+                '[package]\nname="example"\nversion="0.1.0"\n'
+                '[dependencies]\ntrueos={path="sdk",features=["native-runtime"]}\n')
+            (app / "src/main.rs").write_text(
+                '#![no_std]\nuse trueos::{runtime,task};\n'
+                '// Native networking features must be explicit, never std injection.\n'
+                '// tokio::net\nfn main() {}\n')
+            with patch.object(build, "ROOT", root):
+                _, _, needs_std, features, _ = build.settings("example")
+            self.assertFalse(needs_std)
+            self.assertIn("trueos/native-runtime", features)
+            self.assertIn("trueos/default-panic-handler", features)
+            self.assertNotIn("trueos/tokio-runtime", features)
+            self.assertNotIn("trueos/tokio-net-probe", features)
+            manifest = app / "Cargo.toml"
+            manifest.write_text(manifest.read_text().replace('["native-runtime"]', '["native-runtime","tokio-runtime"]'))
+            with patch.object(build, "ROOT", root), self.assertRaisesRegex(ValueError, "cannot be combined"):
+                build.settings("example")
+
+    def test_runtime_without_explicit_native_selection_keeps_std_policy(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            app = root / "example"
+            (app / "src").mkdir(parents=True)
+            (app / "Cargo.toml").write_text('[package]\nname="example"\nversion="0.1.0"\n')
+            (app / "src/main.rs").write_text('#![no_std]\nfn main() { runtime(); }\n')
+            with patch.object(build, "ROOT", root):
+                _, _, needs_std, features, _ = build.settings("example")
+            self.assertTrue(needs_std)
+            self.assertIn("trueos/tokio-runtime", features)
 
     def test_staging_keeps_unchanged_mtimes_and_tracks_edits_and_deletions(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -1,6 +1,8 @@
-use std::any::Any;
-use std::fmt;
-use std::io;
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
+use ::core::any::Any;
+use ::core::fmt;
+use crate::platform::io;
 
 use super::Id;
 use crate::util::SyncWrapper;
@@ -166,11 +168,11 @@ impl fmt::Debug for JoinError {
     }
 }
 
-impl std::error::Error for JoinError {}
+impl ::core::error::Error for JoinError {}
 
 impl From<JoinError> for io::Error {
     fn from(src: JoinError) -> io::Error {
-        io::Error::other(match src.repr {
+        io::Error::new(io::ErrorKind::Other, match src.repr {
             Repr::Cancelled => "task was cancelled",
             Repr::Panic(_) => "task panicked",
         })

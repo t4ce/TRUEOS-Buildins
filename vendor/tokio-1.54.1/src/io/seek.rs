@@ -1,11 +1,13 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::io::AsyncSeek;
 
 use pin_project_lite::pin_project;
-use std::future::Future;
-use std::io::{self, SeekFrom};
-use std::marker::PhantomPinned;
-use std::pin::Pin;
-use std::task::{ready, Context, Poll};
+use ::core::future::Future;
+use crate::platform::io::{self, SeekFrom};
+use ::core::marker::PhantomPinned;
+use ::core::pin::Pin;
+use ::core::task::{ready, Context, Poll};
 
 pin_project! {
     /// Future for the [`seek`](crate::io::AsyncSeekExt::seek) method.

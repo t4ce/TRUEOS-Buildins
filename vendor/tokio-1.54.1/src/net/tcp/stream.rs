@@ -1,10 +1,12 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 cfg_not_wasi! {
-    use std::time::Duration;
+    use ::core::time::Duration;
 }
 
 cfg_not_wasip1! {
     use crate::net::{to_socket_addrs, ToSocketAddrs};
-    use std::future::poll_fn;
+    use ::core::future::poll_fn;
 }
 
 use crate::io::{AsyncRead, AsyncWrite, Interest, PollEvented, ReadBuf, Ready};
@@ -12,11 +14,15 @@ use crate::net::tcp::split::{split, ReadHalf, WriteHalf};
 use crate::net::tcp::split_owned::{split_owned, OwnedReadHalf, OwnedWriteHalf};
 use crate::util::check_socket_for_blocking;
 
-use std::fmt;
-use std::io;
-use std::net::{Shutdown, SocketAddr};
-use std::pin::Pin;
-use std::task::{ready, Context, Poll};
+use ::core::fmt;
+use crate::platform::io;
+use ::core::net::SocketAddr;
+#[cfg(not(feature="native"))]
+use std::net::Shutdown;
+#[cfg(feature="native")]
+use mio::net::Shutdown;
+use ::core::pin::Pin;
+use ::core::task::{ready, Context, Poll};
 
 cfg_io_util! {
     use bytes::BufMut;
@@ -222,6 +228,7 @@ impl TcpStream {
     /// from a future driven by a tokio runtime, otherwise runtime can be set
     /// explicitly with [`Runtime::enter`](crate::runtime::Runtime::enter) function.
     #[track_caller]
+    #[cfg(not(feature="native"))]
     pub fn from_std(stream: std::net::TcpStream) -> io::Result<TcpStream> {
         check_socket_for_blocking(&stream)?;
 
@@ -268,6 +275,7 @@ impl TcpStream {
     /// [`tokio::net::TcpStream`]: TcpStream
     /// [`std::net::TcpStream`]: std::net::TcpStream
     /// [`set_nonblocking`]: fn@std::net::TcpStream::set_nonblocking
+    #[cfg(not(feature="native"))]
     pub fn into_std(self) -> io::Result<std::net::TcpStream> {
         #[cfg(unix)]
         {
@@ -389,7 +397,7 @@ impl TcpStream {
             let ev = ready!(self.io.registration().poll_read_ready(cx))?;
 
             let b = unsafe {
-                &mut *(buf.unfilled_mut() as *mut [std::mem::MaybeUninit<u8>] as *mut [u8])
+                &mut *(buf.unfilled_mut() as *mut [::core::mem::MaybeUninit<u8>] as *mut [u8])
             };
 
             match self.io.peek(b) {
@@ -636,7 +644,7 @@ impl TcpStream {
     /// }
     /// ```
     pub fn try_read(&self, buf: &mut [u8]) -> io::Result<usize> {
-        use std::io::Read;
+        use crate::platform::io::Read;
 
         self.io
             .registration()
@@ -714,7 +722,7 @@ impl TcpStream {
     /// }
     /// ```
     pub fn try_read_vectored(&self, bufs: &mut [io::IoSliceMut<'_>]) -> io::Result<usize> {
-        use std::io::Read;
+        use crate::platform::io::Read;
 
         self.io
             .registration()
@@ -781,11 +789,11 @@ impl TcpStream {
         /// ```
         pub fn try_read_buf<B: BufMut>(&self, buf: &mut B) -> io::Result<usize> {
             self.io.registration().try_io(Interest::READABLE, || {
-                use std::io::Read;
+                use crate::platform::io::Read;
 
                 let dst = buf.chunk_mut();
                 let dst =
-                    unsafe { &mut *(dst as *mut _ as *mut [std::mem::MaybeUninit<u8>] as *mut [u8]) };
+                    unsafe { &mut *(dst as *mut _ as *mut [::core::mem::MaybeUninit<u8>] as *mut [u8]) };
 
                 // Safety: We trust `TcpStream::read` to have filled up `n` bytes in the
                 // buffer.
@@ -933,7 +941,7 @@ impl TcpStream {
     /// }
     /// ```
     pub fn try_write(&self, buf: &[u8]) -> io::Result<usize> {
-        use std::io::Write;
+        use crate::platform::io::Write;
 
         self.io
             .registration()
@@ -995,7 +1003,7 @@ impl TcpStream {
     /// }
     /// ```
     pub fn try_write_vectored(&self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize> {
-        use std::io::Write;
+        use crate::platform::io::Write;
 
         self.io
             .registration()
@@ -1143,7 +1151,7 @@ impl TcpStream {
     /// See <https://github.com/tokio-rs/tokio/issues/4665> for more information.
     pub(super) fn shutdown_std(&self, how: Shutdown) -> io::Result<()> {
         match self.io.shutdown(how) {
-            Err(err) if err.kind() == std::io::ErrorKind::NotConnected => Ok(()),
+            Err(err) if err.kind() == crate::platform::io::ErrorKind::NotConnected => Ok(()),
             result => result,
         }
     }
@@ -1226,7 +1234,10 @@ impl TcpStream {
         )))
     )]
     pub fn quickack(&self) -> io::Result<bool> {
-        socket2::SockRef::from(self).tcp_quickack()
+        #[cfg(not(feature="native"))]
+        {socket2::SockRef::from(self).tcp_quickack()}
+        #[cfg(feature="native")]
+        {Err(io::Error::new(io::ErrorKind::Other,"native transport does not support TCP quickack"))}
     }
 
     /// Enable or disable `TCP_QUICKACK`.
@@ -1266,7 +1277,10 @@ impl TcpStream {
         )))
     )]
     pub fn set_quickack(&self, quickack: bool) -> io::Result<()> {
-        socket2::SockRef::from(self).set_tcp_quickack(quickack)
+        #[cfg(not(feature="native"))]
+        {socket2::SockRef::from(self).set_tcp_quickack(quickack)}
+        #[cfg(feature="native")]
+        {Err(io::Error::new(io::ErrorKind::Other,"native transport does not support TCP quickack"))}
     }
 
     cfg_not_wasi! {
@@ -1291,7 +1305,10 @@ impl TcpStream {
         /// # }
         /// ```
         pub fn linger(&self) -> io::Result<Option<Duration>> {
-            socket2::SockRef::from(self).linger()
+            #[cfg(not(feature="native"))]
+            {socket2::SockRef::from(self).linger()}
+            #[cfg(feature="native")]
+            {Err(io::Error::new(io::ErrorKind::Other,"native transport does not support linger"))}
         }
 
         /// Sets the linger duration of this socket by setting the `SO_LINGER` option.
@@ -1332,8 +1349,12 @@ impl TcpStream {
         /// # }
         /// ```
         #[deprecated = "`SO_LINGER` causes the socket to block the thread on drop"]
+        #[allow(unused_variables)]
         pub fn set_linger(&self, dur: Option<Duration>) -> io::Result<()> {
-            socket2::SockRef::from(self).set_linger(dur)
+            #[cfg(not(feature="native"))]
+            {socket2::SockRef::from(self).set_linger(dur)}
+            #[cfg(feature="native")]
+            {Err(io::Error::new(io::ErrorKind::Other,"native transport does not support linger"))}
         }
 
         /// Sets a linger duration of zero on this socket by setting the `SO_LINGER` option.
@@ -1366,7 +1387,10 @@ impl TcpStream {
         /// # }
         /// ```
         pub fn set_zero_linger(&self) -> io::Result<()> {
-            socket2::SockRef::from(self).set_linger(Some(Duration::ZERO))
+            #[cfg(not(feature="native"))]
+            {socket2::SockRef::from(self).set_linger(Some(Duration::ZERO))}
+            #[cfg(feature="native")]
+            {Err(io::Error::new(io::ErrorKind::Other,"native transport does not support linger"))}
         }
     }
 
@@ -1474,6 +1498,7 @@ impl TcpStream {
     }
 }
 
+#[cfg(not(feature="native"))]
 impl TryFrom<std::net::TcpStream> for TcpStream {
     type Error = io::Error;
 
@@ -1526,7 +1551,7 @@ impl AsyncWrite for TcpStream {
     }
 
     fn poll_shutdown(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<io::Result<()>> {
-        self.shutdown_std(std::net::Shutdown::Write)?;
+        self.shutdown_std(Shutdown::Write)?;
         Poll::Ready(Ok(()))
     }
 }
@@ -1544,7 +1569,7 @@ impl AsRef<Self> for TcpStream {
     }
 }
 
-#[cfg(unix)]
+#[cfg(all(not(feature="native"),unix))]
 mod sys {
     use super::TcpStream;
     use std::os::unix::prelude::*;

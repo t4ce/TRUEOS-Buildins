@@ -449,6 +449,8 @@
 //! because they require access to the Tokio timer. See the documentation of
 //! each `*_timeout` method for more information on its use.
 
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 cfg_sync! {
     /// Named future types.
     pub mod futures {

@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::loom::sync::Mutex;
 use crate::sync::watch;
 #[cfg(all(tokio_unstable, feature = "tracing"))]
@@ -72,7 +74,7 @@ impl Barrier {
 
         #[cfg(all(tokio_unstable, feature = "tracing"))]
         let resource_span = {
-            let location = std::panic::Location::caller();
+            let location = crate::platform::panic::Location::caller();
             let resource_span = tracing::trace_span!(
                 parent: None,
                 "runtime.resource",

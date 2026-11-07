@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::io::{AsyncRead, AsyncWrite, Interest, PollEvented, ReadBuf, Ready};
 use crate::net::unix::split::{split, ReadHalf, WriteHalf};
 use crate::net::unix::split_owned::{split_owned, OwnedReadHalf, OwnedWriteHalf};
@@ -5,9 +7,9 @@ use crate::net::unix::ucred::{self, UCred};
 use crate::net::unix::SocketAddr;
 use crate::util::check_socket_for_blocking;
 
-use std::fmt;
-use std::future::poll_fn;
-use std::io::{self, Read, Write};
+use ::core::fmt;
+use ::core::future::poll_fn;
+use crate::platform::io::{self, Read, Write};
 use std::net::Shutdown;
 #[cfg(target_os = "android")]
 use std::os::android::net::SocketAddrExt;
@@ -18,8 +20,8 @@ use std::os::unix::ffi::OsStrExt;
 use std::os::unix::io::{AsFd, AsRawFd, BorrowedFd, FromRawFd, IntoRawFd, RawFd};
 use std::os::unix::net::{self, SocketAddr as StdSocketAddr};
 use std::path::Path;
-use std::pin::Pin;
-use std::task::{Context, Poll};
+use ::core::pin::Pin;
+use ::core::task::{Context, Poll};
 
 cfg_io_util! {
     use bytes::BufMut;
@@ -507,11 +509,11 @@ impl UnixStream {
         /// ```
         pub fn try_read_buf<B: BufMut>(&self, buf: &mut B) -> io::Result<usize> {
             self.io.registration().try_io(Interest::READABLE, || {
-                use std::io::Read;
+                use crate::platform::io::Read;
 
                 let dst = buf.chunk_mut();
                 let dst =
-                    unsafe { &mut *(dst as *mut _ as *mut [std::mem::MaybeUninit<u8>] as *mut [u8]) };
+                    unsafe { &mut *(dst as *mut _ as *mut [::core::mem::MaybeUninit<u8>] as *mut [u8]) };
 
                 // Safety: We trust `UnixStream::read` to have filled up `n` bytes in the
                 // buffer.
@@ -999,7 +1001,7 @@ impl UnixStream {
     /// See <https://github.com/tokio-rs/tokio/issues/8520> for more information.
     pub(super) fn shutdown_std(&self, how: Shutdown) -> io::Result<()> {
         match self.io.shutdown(how) {
-            Err(err) if err.kind() == std::io::ErrorKind::NotConnected => Ok(()),
+            Err(err) if err.kind() == crate::platform::io::ErrorKind::NotConnected => Ok(()),
             result => result,
         }
     }

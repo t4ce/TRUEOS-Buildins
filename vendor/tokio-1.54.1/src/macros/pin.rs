@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 /// Pins a value on the stack.
 ///
 /// Calls to `async fn` return anonymous [`Future`] values that are `!Unpin`.

@@ -1,11 +1,13 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::sync::batch_semaphore::{Semaphore, TryAcquireError};
 use crate::sync::mutex::TryLockError;
 #[cfg(all(tokio_unstable, feature = "tracing"))]
 use crate::util::trace;
-use std::cell::UnsafeCell;
-use std::marker;
-use std::marker::PhantomData;
-use std::sync::Arc;
+use ::core::cell::UnsafeCell;
+use ::core::marker;
+use ::core::marker::PhantomData;
+use alloc::sync::Arc;
 
 pub(crate) mod owned_read_guard;
 pub(crate) mod owned_write_guard;
@@ -206,7 +208,7 @@ impl<T: ?Sized> RwLock<T> {
     {
         #[cfg(all(tokio_unstable, feature = "tracing"))]
         let resource_span = {
-            let location = std::panic::Location::caller();
+            let location = crate::platform::panic::Location::caller();
             let resource_span = tracing::trace_span!(
                 parent: None,
                 "runtime.resource",
@@ -279,7 +281,7 @@ impl<T: ?Sized> RwLock<T> {
 
         #[cfg(all(tokio_unstable, feature = "tracing"))]
         let resource_span = {
-            let location = std::panic::Location::caller();
+            let location = crate::platform::panic::Location::caller();
 
             let resource_span = tracing::trace_span!(
                 parent: None,
@@ -1115,11 +1117,11 @@ where
     }
 }
 
-impl<T: ?Sized> std::fmt::Debug for RwLock<T>
+impl<T: ?Sized> ::core::fmt::Debug for RwLock<T>
 where
-    T: std::fmt::Debug,
+    T: ::core::fmt::Debug,
 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
         let mut d = f.debug_struct("RwLock");
         match self.try_read() {
             Ok(inner) => d.field("data", &&*inner),

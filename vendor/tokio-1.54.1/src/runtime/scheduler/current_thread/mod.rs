@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::loom::sync::atomic::AtomicBool;
 use crate::loom::sync::Arc;
 use crate::runtime::driver::{self, Driver};
@@ -13,17 +15,18 @@ use crate::sync::notify::Notify;
 use crate::util::atomic_cell::AtomicCell;
 use crate::util::{waker_ref, RngSeedGenerator, Wake, WakerRef};
 
-use std::cell::RefCell;
-use std::collections::VecDeque;
-use std::future::{poll_fn, Future};
-use std::pin::Pin;
-use std::sync::atomic::Ordering::{AcqRel, Acquire, Release};
-use std::task::Poll::{Pending, Ready};
-use std::task::Waker;
-use std::thread::ThreadId;
-use std::time::Duration;
-use std::time::Instant;
-use std::{fmt, thread};
+use ::core::cell::RefCell;
+use alloc::collections::VecDeque;
+use ::core::future::{poll_fn, Future};
+use ::core::pin::Pin;
+use ::core::sync::atomic::Ordering::{AcqRel, Acquire, Release};
+use ::core::task::Poll::{Pending, Ready};
+use ::core::task::Waker;
+use crate::platform::thread::ThreadId;
+use ::core::time::Duration;
+use crate::platform::time::Instant;
+use ::core::fmt;
+use crate::platform::thread;
 
 /// Executes tasks on the current thread
 pub(crate) struct CurrentThread {
@@ -260,7 +263,7 @@ impl CurrentThread {
 
         let core = match self.take_core(handle) {
             Some(core) => core,
-            None if std::thread::panicking() => return,
+            None if crate::platform::thread::panicking() => return,
             None => panic!("Oh no! We never placed the Core back, this is a bug!"),
         };
 
@@ -683,7 +686,7 @@ cfg_unstable_metrics! {
 }
 
 use crate::runtime::metrics::ScheduleLatencyInstant;
-use std::num::NonZeroU64;
+use ::core::num::NonZeroU64;
 
 impl Handle {
     pub(crate) fn owned_id(&self) -> NonZeroU64 {
@@ -818,7 +821,7 @@ impl CoreGuard<'_> {
     fn block_on<F: Future>(self, mut future: Pin<&mut F>) -> F::Output {
         let ret = self.enter(|mut core, context| {
             let waker = Handle::waker_ref(&context.handle);
-            let mut cx = std::task::Context::from_waker(&waker);
+            let mut cx = ::core::task::Context::from_waker(&waker);
 
             core.metrics.start_processing_scheduled_tasks();
 

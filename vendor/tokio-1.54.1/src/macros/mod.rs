@@ -1,5 +1,7 @@
 #![cfg_attr(not(feature = "full"), allow(unused_macros))]
 
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 #[macro_use]
 mod cfg;
 

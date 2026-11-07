@@ -1,16 +1,18 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::io::AsyncWrite;
 
 use bytes::BufMut;
 use pin_project_lite::pin_project;
-use std::future::Future;
-use std::io;
-use std::marker::PhantomPinned;
-use std::pin::Pin;
-use std::task::{Context, Poll};
+use ::core::future::Future;
+use crate::platform::io;
+use ::core::marker::PhantomPinned;
+use ::core::pin::Pin;
+use ::core::task::{Context, Poll};
 
 macro_rules! writer {
     ($name:ident, $ty:ty, $writer:ident) => {
-        writer!($name, $ty, $writer, std::mem::size_of::<$ty>());
+        writer!($name, $ty, $writer, ::core::mem::size_of::<$ty>());
     };
     ($name:ident, $ty:ty, $writer:ident, $bytes:expr) => {
         pin_project! {

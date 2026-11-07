@@ -3,7 +3,9 @@
 //! This module defines the IsTty trait and the is_tty method to
 //! return true if the item represents a terminal.
 
-#[cfg(unix)]
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
+#[cfg(all(unix, not(all(target_os = "trueos", feature = "native-core"))))]
 use std::os::unix::io::AsRawFd;
 #[cfg(windows)]
 use std::os::windows::io::AsRawHandle;
@@ -26,7 +28,7 @@ pub trait IsTty {
 
 /// On UNIX, the `isatty()` function returns true if a file
 /// descriptor is a terminal.
-#[cfg(all(unix, feature = "libc"))]
+#[cfg(all(unix, feature = "libc", not(all(target_os = "trueos", feature = "native-core"))))]
 impl<S: AsRawFd> IsTty for S {
     fn is_tty(&self) -> bool {
         let fd = self.as_raw_fd();
@@ -34,7 +36,7 @@ impl<S: AsRawFd> IsTty for S {
     }
 }
 
-#[cfg(all(unix, not(feature = "libc")))]
+#[cfg(all(unix, not(feature = "libc"), not(all(target_os = "trueos", feature = "native-core"))))]
 impl<S: AsRawFd> IsTty for S {
     fn is_tty(&self) -> bool {
         let fd = self.as_raw_fd();
@@ -51,4 +53,13 @@ impl<S: AsRawHandle> IsTty for S {
         let ok = unsafe { GetConsoleMode(self.as_raw_handle() as *mut _, &mut mode) };
         ok == 1
     }
+}
+
+#[cfg(all(target_os = "trueos", feature = "native-core"))]
+impl IsTty for crate::io::Stdout {
+    fn is_tty(&self) -> bool { crate::trueos::surface().ok().flatten().is_some() }
+}
+#[cfg(all(target_os = "trueos", feature = "native-core"))]
+impl IsTty for crate::io::StdoutLock<'_> {
+    fn is_tty(&self) -> bool { crate::trueos::surface().ok().flatten().is_some() }
 }

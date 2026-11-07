@@ -1,11 +1,15 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use pin_project_lite::pin_project;
-use std::cell::RefCell;
-use std::error::Error;
-use std::future::Future;
-use std::marker::PhantomPinned;
-use std::pin::Pin;
-use std::task::{Context, Poll};
-use std::{fmt, mem, thread};
+use ::core::cell::RefCell;
+use ::core::error::Error;
+use ::core::future::Future;
+use ::core::marker::PhantomPinned;
+use ::core::pin::Pin;
+use ::core::task::{Context, Poll};
+use ::core::fmt;
+use ::core::mem;
+use crate::platform::thread;
 
 /// Declares a new task-local key of type [`tokio::task::LocalKey`].
 ///
@@ -47,6 +51,7 @@ macro_rules! task_local {
     }
 }
 
+#[cfg(not(feature="native"))]
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __task_local_inner {
@@ -54,10 +59,27 @@ macro_rules! __task_local_inner {
         $(#[$attr])*
         $vis static $name: $crate::task::LocalKey<$t> = {
             std::thread_local! {
-                static __KEY: std::cell::RefCell<Option<$t>> = const { std::cell::RefCell::new(None) };
+                static __KEY: ::core::cell::RefCell<Option<$t>> = const { ::core::cell::RefCell::new(None) };
             }
 
             $crate::task::LocalKey { inner: __KEY }
+        };
+    };
+}
+
+#[cfg(feature="native")]
+#[doc(hidden)]
+pub use trueos_runtime::thread::LocalKey as NativeExecutionLocalKey;
+
+#[cfg(feature="native")]
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __task_local_inner {
+    ($(#[$attr:meta])* $vis:vis $name:ident, $t:ty) => {
+        $(#[$attr])* $vis static $name:$crate::task::LocalKey<$t> = {
+            static __KEY:$crate::task::NativeExecutionLocalKey<::core::cell::RefCell<Option<$t>>> =
+                $crate::task::NativeExecutionLocalKey::new(||::core::cell::RefCell::new(None));
+            $crate::task::LocalKey{inner:&__KEY}
         };
     };
 }
@@ -98,7 +120,11 @@ macro_rules! __task_local_inner {
 #[cfg_attr(docsrs, doc(cfg(feature = "rt")))]
 pub struct LocalKey<T: 'static> {
     #[doc(hidden)]
+    #[cfg(not(feature="native"))]
     pub inner: thread::LocalKey<RefCell<Option<T>>>,
+    #[doc(hidden)]
+    #[cfg(feature="native")]
+    pub inner: &'static thread::LocalKey<RefCell<Option<T>>>,
 }
 
 impl<T: 'static> LocalKey<T> {
@@ -475,14 +501,14 @@ impl ScopeInnerErr {
     }
 }
 
-impl From<std::cell::BorrowMutError> for ScopeInnerErr {
-    fn from(_: std::cell::BorrowMutError) -> Self {
+impl From<::core::cell::BorrowMutError> for ScopeInnerErr {
+    fn from(_: ::core::cell::BorrowMutError) -> Self {
         Self::BorrowError
     }
 }
 
-impl From<std::thread::AccessError> for ScopeInnerErr {
-    fn from(_: std::thread::AccessError) -> Self {
+impl From<crate::platform::thread::AccessError> for ScopeInnerErr {
+    fn from(_: crate::platform::thread::AccessError) -> Self {
         Self::AccessError
     }
 }

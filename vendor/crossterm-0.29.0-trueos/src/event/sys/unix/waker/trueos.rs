@@ -1,4 +1,8 @@
-use std::{io, sync::{Arc, atomic::{AtomicBool, Ordering}}};
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
+use crate::io;
+use alloc::sync::Arc;
+use core::sync::atomic::{AtomicBool, Ordering};
 
 /// The native source has one queued wake token. Publishing it before changing
 /// the VM-local I/O generation closes both sides of the wait-registration race.
@@ -18,6 +22,8 @@ impl Waker {
 
 #[cfg(test)]
 mod tests {
+    #[allow(unused_imports)]
+    use crate::alloc_prelude::*;
     use super::*;
 
     #[test]

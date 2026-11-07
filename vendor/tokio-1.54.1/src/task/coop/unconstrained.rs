@@ -1,7 +1,9 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use pin_project_lite::pin_project;
-use std::future::Future;
-use std::pin::Pin;
-use std::task::{Context, Poll};
+use ::core::future::Future;
+use ::core::pin::Pin;
+use ::core::task::{Context, Poll};
 
 pin_project! {
     /// Future for the [`unconstrained`](unconstrained) method.

@@ -1,8 +1,10 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::io::{AsyncBufRead, AsyncWrite};
-use std::future::Future;
-use std::io;
-use std::pin::Pin;
-use std::task::{ready, Context, Poll};
+use ::core::future::Future;
+use crate::platform::io;
+use ::core::pin::Pin;
+use ::core::task::{ready, Context, Poll};
 
 cfg_io_util! {
     /// A future that asynchronously copies the entire contents of a reader into a
@@ -155,7 +157,7 @@ where
                 res => res?,
             };
             if i == 0 {
-                return Poll::Ready(Err(std::io::ErrorKind::WriteZero.into()));
+                return Poll::Ready(Err(crate::platform::io::ErrorKind::WriteZero.into()));
             }
             self.amt += i as u64;
             self.need_flush = true;
@@ -170,7 +172,7 @@ mod tests {
 
     #[test]
     fn assert_unpin() {
-        use std::marker::PhantomPinned;
+        use ::core::marker::PhantomPinned;
         crate::is_unpin::<CopyBuf<'_, PhantomPinned, PhantomPinned>>();
     }
 }

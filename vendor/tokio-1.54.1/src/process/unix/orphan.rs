@@ -1,8 +1,10 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::loom::sync::{Mutex, MutexGuard};
 use crate::runtime::signal::Handle as SignalHandle;
 use crate::signal::unix::{signal_with_handle, SignalKind};
 use crate::sync::watch;
-use std::io;
+use crate::platform::io;
 use std::process::ExitStatus;
 
 /// An interface for waiting on a process to exit.
@@ -135,11 +137,11 @@ pub(crate) mod test {
     use crate::runtime::io::Driver as IoDriver;
     use crate::runtime::signal::{Driver as SignalDriver, Handle as SignalHandle};
     use crate::sync::watch;
-    use std::cell::{Cell, RefCell};
-    use std::io;
+    use ::core::cell::{Cell, RefCell};
+    use crate::platform::io;
     use std::os::unix::process::ExitStatusExt;
     use std::process::ExitStatus;
-    use std::rc::Rc;
+    use alloc::rc::Rc;
 
     pub(crate) struct MockQueue<W> {
         pub(crate) all_enqueued: RefCell<Vec<W>>,

@@ -1,10 +1,13 @@
-use std::{io, time::Duration};
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
+use crate::io;
+use core::time::Duration;
 
 #[cfg(feature = "event-stream")]
 use super::sys::Waker;
 use super::InternalEvent;
 
-#[cfg(unix)]
+#[cfg(any(unix, target_os = "trueos"))]
 pub(crate) mod unix;
 /// An interface for trying to read an `InternalEvent` within an optional `Duration`.
 pub(crate) trait EventSource: Sync + Send {
@@ -19,7 +22,7 @@ pub(crate) trait EventSource: Sync + Send {
     fn try_read(&mut self, timeout: Option<Duration>) -> io::Result<Option<InternalEvent>>;
 
     /// Clear decoded input and quarantine unfinished control sequences.
-    #[cfg(unix)]
+    #[cfg(any(unix, target_os = "trueos"))]
     fn discard_buffered_input(&mut self) -> super::InputDiscardStatus;
 
     /// Returns a `Waker` allowing to wake/force the `try_read` method to return `Ok(None)`.

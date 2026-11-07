@@ -199,6 +199,8 @@
     allow(dead_code, unused_imports)
 )]
 
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 cfg_io_blocking! {
     pub(crate) mod blocking;
 }
@@ -221,7 +223,7 @@ pub use self::read_buf::ReadBuf;
 // Re-export some types from `std::io` so that users don't have to deal
 // with conflicts when `use`ing `tokio::io` and `std::io`.
 #[doc(no_inline)]
-pub use std::io::{Error, ErrorKind, Result, SeekFrom};
+pub use crate::platform::io::{Error, ErrorKind, Result, SeekFrom};
 
 cfg_io_driver_impl! {
     pub(crate) mod interest;

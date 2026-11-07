@@ -1,7 +1,9 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::runtime::task;
 
 #[cfg(test)]
-use std::cell::RefCell;
+use ::core::cell::RefCell;
 
 pub(crate) trait Overflow<T: 'static> {
     fn push(&self, task: task::Notified<T>);

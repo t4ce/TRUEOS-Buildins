@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use std::{
     any::TypeId,
     marker::PhantomData,

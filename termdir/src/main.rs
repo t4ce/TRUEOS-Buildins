@@ -1,3 +1,16 @@
+#![no_std]
+
+#[cfg(not(target_os = "trueos"))]
+extern crate std;
+#[macro_use]
+extern crate alloc;
+
+#[cfg(all(test, not(target_os = "trueos")))]
+mod host_test_platform;
+mod app_io;
+mod buffered_output;
+mod time;
+mod math;
 mod actions;
 mod backend;
 mod edit_action;
@@ -11,7 +24,7 @@ mod minimap;
 mod screen;
 mod terminal_output;
 
-fn archive_log(message: std::fmt::Arguments<'_>) {
+fn archive_log(message: core::fmt::Arguments<'_>) {
     // Host UI tests have no kernel log C ABI. Production records go through
     // log_os, never stdout (which belongs to the terminal renderer).
     #[cfg(not(test))]
@@ -20,20 +33,16 @@ fn archive_log(message: std::fmt::Arguments<'_>) {
     let _ = message;
 }
 
-use std::{
-    collections::VecDeque,
-    io::{self, BufWriter},
-    path::{Component, Path, PathBuf},
-    time::Duration,
-};
-use std::time::Instant;
+use alloc::{collections::VecDeque, string::{String, ToString}, vec::Vec};
+use crate::{app_io as io, buffered_output::BufWriter, time::{Duration, Instant}};
+use trueos_path::{Component, Path, PathBuf};
 #[cfg(target_os = "trueos")]
 use trueos::env;
 #[cfg(not(target_os = "trueos"))]
 use std::env;
 use terminal_output::stdout;
 
-use std::io::Write;
+use crossterm::io::Write;
 use backend::Backend;
 
 use actions::{
@@ -208,13 +217,14 @@ fn browse_path_from_script(script: &str) -> Option<PathBuf> {
 
 #[cfg(test)]
 mod launch_script_tests {
+    use alloc::{string::ToString, vec::Vec};
     use super::{
         BREADCRUMB_ROOT_LABEL, BREADCRUMB_SEPARATOR, Sha256Result, breadcrumb_layout,
         breadcrumb_path_at, browse_path_from_script, clip_text_head_cells,
         launch_directives_from_script, sha256_rule_title, sha256_title_for_selection,
         text_cell_width,
     };
-    use std::path::{Path, PathBuf};
+    use trueos_path::{Path, PathBuf};
 
     #[test]
     fn native_chrome_backend_is_explicit_and_invalid_values_fail() {
@@ -312,7 +322,7 @@ mod launch_script_tests {
 
         assert_eq!(title, format!("{digest} ・ selected-file.txt"));
         assert_eq!(clip_text_head_cells(&title, 20), digest[..20].to_string());
-        assert_eq!(clip_text_head_cells(&title, 80), title);
+        assert_eq!(clip_text_head_cells(&title, text_cell_width(&title)), title);
     }
 
     #[test]
@@ -404,7 +414,7 @@ impl TerminalGuard {
                 LeaveAlternateScreen
             );
             let _ = terminal::disable_raw_mode();
-            return Err(err);
+            return Err(err.into());
         }
 
         Ok(Self { active: true })
@@ -425,7 +435,7 @@ impl TerminalGuard {
         );
         let raw_result = terminal::disable_raw_mode();
         self.active = false;
-        screen_result.and(raw_result)
+        screen_result.and(raw_result).map_err(Into::into)
     }
 }
 
@@ -593,7 +603,7 @@ impl App {
     }
 
     fn size(&self) -> io::Result<(u16, u16)> {
-        self.native_extent.map(|(width, height)| Ok(native_ui4::cell_size(width, height, self.zoom_step))).unwrap_or_else(terminal::size)
+        self.native_extent.map(|(width, height)| Ok(native_ui4::cell_size(width, height, self.zoom_step))).unwrap_or_else(terminal::size).map_err(Into::into)
     }
 
     fn set_selected(&mut self, selected: Option<usize>) -> bool {
@@ -1533,7 +1543,7 @@ fn handle_clip_gesture(app: &mut App, mouse: MouseEvent, layout: Layout) -> io::
             };
             if app.clip_drag.as_ref() != Some(&next) {
                 if app.clip_drag.is_none() {
-                    let label = link.path.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_else(|| link.path.display().to_string());
+                    let label = link.path.file_name().map(|name| name.to_string()).unwrap_or_else(|| link.path.as_str().to_string());
                     app.drag_preview = drag_preview::Preview::begin(&clip_text(&label, 48), &[link.path.clone()]);
                 }
                 let repaint = app.drag_preview.is_none() || app.clip_drag.as_ref().is_none_or(|previous| {
@@ -1573,7 +1583,7 @@ fn handle_clip_gesture(app: &mut App, mouse: MouseEvent, layout: Layout) -> io::
                         drag.index.min(app.links.len().saturating_sub(1)),
                         app.links.len(),
                     );
-                    app.log(format!("UNLINK · {}", removed.path.display()));
+                    app.log(format!("UNLINK · {}", removed.path.as_str()));
                 } else {
                     app.mark_dirty();
                 }
@@ -1706,7 +1716,7 @@ fn open_link(app: &mut App, index: usize) -> io::Result<()> {
         match app.graph.mount_path(&link.path) {
             Ok(()) => {
                 app.set_selected(None);
-                Ok(format!("LINK · enter {}", link.path.display()))
+                Ok(format!("LINK · enter {}", link.path.as_str()))
             }
             Err(err) => Err(err),
         }
@@ -1715,7 +1725,7 @@ fn open_link(app: &mut App, index: usize) -> io::Result<()> {
             Ok(()) => {
                 let selected = app.graph.find_node_by_path(&link.path);
                 app.set_selected(selected);
-                Ok(format!("LINK · {}", link.path.display()))
+                Ok(format!("LINK · {}", link.path.as_str()))
             }
             Err(err) => Err(err),
         }
@@ -1820,7 +1830,7 @@ fn invoke_menu(app: &mut App, index: usize) -> io::Result<()> {
             app.mark_dirty();
         }
         Dispatch::Sha256(result) => {
-            let status = format!("SHA256 · {} · {}", result.digest, result.path.display());
+            let status = format!("SHA256 · {} · {}", result.digest, result.path.as_str());
             if app.selected == Some(result.source) {
                 app.set_selected_sha256(result);
             }
@@ -2227,13 +2237,6 @@ fn path_components(path: &Path) -> Vec<(String, PathBuf)> {
     let mut out = Vec::new();
     for component in path.components() {
         match component {
-            Component::Prefix(prefix) => {
-                current.push(prefix.as_os_str());
-                out.push((
-                    prefix.as_os_str().to_string_lossy().into_owned(),
-                    current.clone(),
-                ));
-            }
             Component::RootDir => {
                 current.push(Path::new("/"));
                 out.push((BREADCRUMB_ROOT_LABEL.to_string(), current.clone()));
@@ -2245,7 +2248,7 @@ fn path_components(path: &Path) -> Vec<(String, PathBuf)> {
             }
             Component::Normal(name) => {
                 current.push(name);
-                out.push((name.to_string_lossy().into_owned(), current.clone()));
+                out.push((name.to_string(), current.clone()));
             }
         }
     }
@@ -2367,8 +2370,8 @@ fn draw_clip_drag_box(frame: &mut Frame, app: &App, drag: &ClipDragState, layout
     let name = link
         .path
         .file_name()
-        .map(|name| name.to_string_lossy().into_owned())
-        .unwrap_or_else(|| link.path.display().to_string());
+        .map(|name| name.to_string())
+        .unwrap_or_else(|| link.path.as_str().to_string());
     draw_named_drag_box(frame, drag.x, drag.y, &name, link.is_dir, layout);
 }
 

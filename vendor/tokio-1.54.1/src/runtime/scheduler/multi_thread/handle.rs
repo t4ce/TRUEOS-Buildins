@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::future::Future;
 use crate::loom::sync::Arc;
 use crate::runtime::scheduler::multi_thread::worker;
@@ -9,8 +11,8 @@ use crate::runtime::{
 };
 use crate::util::RngSeedGenerator;
 
-use std::fmt;
-use std::num::NonZeroU64;
+use ::core::fmt;
+use ::core::num::NonZeroU64;
 
 mod metrics;
 

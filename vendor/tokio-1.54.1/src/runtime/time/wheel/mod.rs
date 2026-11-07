@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::runtime::time::{TimerHandle, TimerShared};
 use crate::time::error::InsertError;
 use crate::util::linked_list::LinkedList;
@@ -6,7 +8,7 @@ mod level;
 pub(crate) use self::level::Expiration;
 use self::level::Level;
 
-use std::ptr::NonNull;
+use ::core::ptr::NonNull;
 
 use super::entry::STATE_DEREGISTERED;
 
@@ -300,7 +302,7 @@ fn level_for(elapsed: u64, when: u64) -> usize {
 
 #[cfg(all(test, not(loom)))]
 mod test {
-    use std::pin::Pin;
+    use ::core::pin::Pin;
 
     use super::*;
 

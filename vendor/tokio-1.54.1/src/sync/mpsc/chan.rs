@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::loom::cell::UnsafeCell;
 use crate::loom::future::AtomicWaker;
 use crate::loom::sync::atomic::AtomicUsize;
@@ -8,12 +10,12 @@ use crate::sync::mpsc::{bounded, list, unbounded};
 use crate::sync::notify::Notify;
 use crate::util::cacheline::CachePadded;
 
-use std::fmt;
-use std::panic;
-use std::process;
-use std::sync::atomic::Ordering::{AcqRel, Acquire, Relaxed, Release};
-use std::task::Poll::{Pending, Ready};
-use std::task::{ready, Context, Poll};
+use ::core::fmt;
+use crate::platform::panic;
+
+use ::core::sync::atomic::Ordering::{AcqRel, Acquire, Relaxed, Release};
+use ::core::task::Poll::{Pending, Ready};
+use ::core::task::{ready, Context, Poll};
 
 /// Channel sender.
 pub(crate) struct Tx<T, S> {
@@ -620,7 +622,7 @@ impl Semaphore for unbounded::Semaphore {
 
         if prev >> 1 == 0 {
             // Something went wrong
-            process::abort();
+            crate::platform::abort();
         }
     }
 
@@ -629,7 +631,7 @@ impl Semaphore for unbounded::Semaphore {
 
         if (prev >> 1) < n {
             // Something went wrong
-            process::abort();
+            crate::platform::abort();
         }
     }
 

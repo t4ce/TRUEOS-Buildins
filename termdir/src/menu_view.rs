@@ -1,3 +1,4 @@
+use alloc::{string::{String, ToString}, vec::Vec};
 use crate::{
     actions::{
         MENU_ENTRIES, MenuCommand, MenuContext, MenuLink, MenuSection, MenuState, MountLink,
@@ -287,6 +288,7 @@ fn append_wrapped_stats_value(lines: &mut Vec<(String, String)>, key: &str, valu
 
 #[cfg(test)]
 mod typed_stats_tests {
+    use alloc::{string::String, vec::Vec};
     use super::{ContentTypeDisplay, content_type_lines};
 
     #[test]
@@ -305,7 +307,8 @@ mod typed_stats_tests {
                 ("name", "TTF_LONG_N"),
                 ("", "AME"),
                 ("mime", "applicatio"),
-                ("", "n/font-sfnt"),
+                ("", "n/font-sfn"),
+                ("", "t"),
                 ("state", "registered")
             ]
             .into_iter()

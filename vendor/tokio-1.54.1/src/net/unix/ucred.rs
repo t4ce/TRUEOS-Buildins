@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::net::unix;
 
 /// Credentials of a process.
@@ -93,7 +95,8 @@ pub(crate) mod impl_linux {
     use crate::net::unix::{self, UnixStream};
 
     use libc::{c_void, getsockopt, socklen_t, SOL_SOCKET, SO_PEERCRED};
-    use std::{io, mem};
+    use crate::platform::io;
+    use ::core::mem;
 
     #[cfg(target_os = "openbsd")]
     use libc::sockpeercred as ucred;
@@ -152,8 +155,8 @@ pub(crate) mod impl_netbsd {
     use crate::net::unix::{self, UnixStream};
 
     use libc::{c_void, getsockopt, socklen_t, unpcbid, LOCAL_PEEREID};
-    use std::io;
-    use std::mem::size_of;
+    use crate::platform::io;
+    use ::core::mem::size_of;
     use std::os::unix::io::AsRawFd;
 
     pub(crate) fn get_peer_cred(sock: &UnixStream) -> io::Result<super::UCred> {
@@ -198,8 +201,8 @@ pub(crate) mod impl_dragonfly {
     use crate::net::unix::{self, UnixStream};
 
     use libc::getpeereid;
-    use std::io;
-    use std::mem::MaybeUninit;
+    use crate::platform::io;
+    use ::core::mem::MaybeUninit;
     use std::os::unix::io::AsRawFd;
 
     pub(crate) fn get_peer_cred(sock: &UnixStream) -> io::Result<super::UCred> {
@@ -229,8 +232,8 @@ pub(crate) mod impl_freebsd {
     use crate::net::unix::{self, UnixStream};
 
     use libc::{c_void, getsockopt, socklen_t, xucred, LOCAL_PEERCRED, XUCRED_VERSION};
-    use std::io;
-    use std::mem::{size_of, MaybeUninit};
+    use crate::platform::io;
+    use ::core::mem::{size_of, MaybeUninit};
     use std::os::unix::io::AsRawFd;
 
     pub(crate) fn get_peer_cred(sock: &UnixStream) -> io::Result<super::UCred> {
@@ -303,9 +306,9 @@ pub(crate) mod impl_macos {
     use crate::net::unix::{self, UnixStream};
 
     use libc::{c_void, getpeereid, getsockopt, pid_t, LOCAL_PEEREPID, SOL_LOCAL};
-    use std::io;
-    use std::mem::size_of;
-    use std::mem::MaybeUninit;
+    use crate::platform::io;
+    use ::core::mem::size_of;
+    use ::core::mem::MaybeUninit;
     use std::os::unix::io::AsRawFd;
 
     pub(crate) fn get_peer_cred(sock: &UnixStream) -> io::Result<super::UCred> {
@@ -348,9 +351,9 @@ pub(crate) mod impl_macos {
 #[cfg(any(target_os = "solaris", target_os = "illumos"))]
 pub(crate) mod impl_solaris {
     use crate::net::unix::{self, UnixStream};
-    use std::io;
+    use crate::platform::io;
     use std::os::unix::io::AsRawFd;
-    use std::ptr;
+    use ::core::ptr;
 
     pub(crate) fn get_peer_cred(sock: &UnixStream) -> io::Result<super::UCred> {
         unsafe {
@@ -381,15 +384,15 @@ pub(crate) mod impl_solaris {
 #[cfg(target_os = "aix")]
 pub(crate) mod impl_aix {
     use crate::net::unix::UnixStream;
-    use std::io;
+    use crate::platform::io;
     use std::os::unix::io::AsRawFd;
 
     pub(crate) fn get_peer_cred(sock: &UnixStream) -> io::Result<super::UCred> {
         unsafe {
             let raw_fd = sock.as_raw_fd();
 
-            let mut uid = std::mem::MaybeUninit::uninit();
-            let mut gid = std::mem::MaybeUninit::uninit();
+            let mut uid = ::core::mem::MaybeUninit::uninit();
+            let mut gid = ::core::mem::MaybeUninit::uninit();
 
             let ret = libc::getpeereid(raw_fd, uid.as_mut_ptr(), gid.as_mut_ptr());
 
@@ -415,7 +418,7 @@ pub(crate) mod impl_aix {
 ))]
 pub(crate) mod impl_noproc {
     use crate::net::unix::UnixStream;
-    use std::io;
+    use crate::platform::io;
 
     pub(crate) fn get_peer_cred(_sock: &UnixStream) -> io::Result<super::UCred> {
         Ok(super::UCred {
@@ -431,8 +434,8 @@ pub(crate) mod impl_nto {
     use crate::net::unix::{self, UnixStream};
 
     use libc::getpeereid;
-    use std::io;
-    use std::mem::MaybeUninit;
+    use crate::platform::io;
+    use ::core::mem::MaybeUninit;
     use std::os::unix::io::AsRawFd;
 
     pub(crate) fn get_peer_cred(sock: &UnixStream) -> io::Result<super::UCred> {

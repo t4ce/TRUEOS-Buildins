@@ -1,4 +1,6 @@
-use std::io;
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
+use crate::io;
 
 use crate::event::{
     Event, KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers, KeyboardEnhancementFlags,
@@ -217,7 +219,7 @@ pub(crate) fn parse_csi(buffer: &[u8]) -> io::Result<Option<InternalEvent>> {
 
 pub(crate) fn next_parsed<T>(iter: &mut dyn Iterator<Item = &str>) -> io::Result<T>
 where
-    T: std::str::FromStr,
+    T: core::str::FromStr,
 {
     iter.next()
         .ok_or_else(could_not_parse_event_error)?
@@ -247,7 +249,7 @@ pub(crate) fn parse_csi_cursor_position(buffer: &[u8]) -> io::Result<Option<Inte
     assert!(buffer.starts_with(b"\x1B[")); // ESC [
     assert!(buffer.ends_with(b"R"));
 
-    let s = std::str::from_utf8(&buffer[2..buffer.len() - 1])
+    let s = core::str::from_utf8(&buffer[2..buffer.len() - 1])
         .map_err(|_| could_not_parse_event_error())?;
 
     let mut split = s.split(';');
@@ -350,7 +352,7 @@ fn parse_key_event_kind(kind: u8) -> KeyEventKind {
 pub(crate) fn parse_csi_modifier_key_code(buffer: &[u8]) -> io::Result<Option<InternalEvent>> {
     assert!(buffer.starts_with(b"\x1B[")); // ESC [
                                            //
-    let s = std::str::from_utf8(&buffer[2..buffer.len() - 1])
+    let s = core::str::from_utf8(&buffer[2..buffer.len() - 1])
         .map_err(|_| could_not_parse_event_error())?;
     let mut split = s.split(';');
 
@@ -504,7 +506,7 @@ pub(crate) fn parse_csi_u_encoded_key_code(buffer: &[u8]) -> io::Result<Option<I
     // the `CSI u` (a.k.a. "Fix Keyboard Input on Terminals - Please", https://www.leonerd.org.uk/hacks/fixterms/)
     // or Kitty Keyboard Protocol (https://sw.kovidgoyal.net/kitty/keyboard-protocol/) specifications.
     // This CSI sequence is a tuple of semicolon-separated numbers.
-    let s = std::str::from_utf8(&buffer[2..buffer.len() - 1])
+    let s = core::str::from_utf8(&buffer[2..buffer.len() - 1])
         .map_err(|_| could_not_parse_event_error())?;
     let mut split = s.split(';');
 
@@ -622,7 +624,7 @@ pub(crate) fn parse_csi_special_key_code(buffer: &[u8]) -> io::Result<Option<Int
     assert!(buffer.starts_with(b"\x1B[")); // ESC [
     assert!(buffer.ends_with(b"~"));
 
-    let s = std::str::from_utf8(&buffer[2..buffer.len() - 1])
+    let s = core::str::from_utf8(&buffer[2..buffer.len() - 1])
         .map_err(|_| could_not_parse_event_error())?;
     let mut split = s.split(';');
 
@@ -669,7 +671,7 @@ pub(crate) fn parse_csi_rxvt_mouse(buffer: &[u8]) -> io::Result<Option<InternalE
     assert!(buffer.starts_with(b"\x1B[")); // ESC [
     assert!(buffer.ends_with(b"M"));
 
-    let s = std::str::from_utf8(&buffer[2..buffer.len() - 1])
+    let s = core::str::from_utf8(&buffer[2..buffer.len() - 1])
         .map_err(|_| could_not_parse_event_error())?;
     let mut split = s.split(';');
 
@@ -726,7 +728,7 @@ pub(crate) fn parse_csi_sgr_mouse(buffer: &[u8]) -> io::Result<Option<InternalEv
         return Ok(None);
     }
 
-    let s = std::str::from_utf8(&buffer[3..buffer.len() - 1])
+    let s = core::str::from_utf8(&buffer[3..buffer.len() - 1])
         .map_err(|_| could_not_parse_event_error())?;
     let mut split = s.split(';');
 
@@ -825,7 +827,7 @@ pub(crate) fn parse_csi_bracketed_paste(buffer: &[u8]) -> io::Result<Option<Inte
 }
 
 pub(crate) fn parse_utf8_char(buffer: &[u8]) -> io::Result<Option<char>> {
-    match std::str::from_utf8(buffer) {
+    match core::str::from_utf8(buffer) {
         Ok(s) => {
             let ch = s.chars().next().ok_or_else(could_not_parse_event_error)?;
 
@@ -865,6 +867,8 @@ pub(crate) fn parse_utf8_char(buffer: &[u8]) -> io::Result<Option<char>> {
 
 #[cfg(test)]
 mod tests {
+    #[allow(unused_imports)]
+    use crate::alloc_prelude::*;
     use crate::event::{KeyEventState, KeyModifiers, MouseButton, MouseEvent};
 
     use super::*;

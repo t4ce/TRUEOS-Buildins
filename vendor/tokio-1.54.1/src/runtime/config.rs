@@ -2,6 +2,8 @@
     any(not(all(tokio_unstable, feature = "full")), target_family = "wasm"),
     allow(dead_code)
 )]
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::runtime::{Callback, TaskCallback};
 use crate::util::RngSeedGenerator;
 

@@ -1,4 +1,6 @@
 //! Runs `!Send` futures on the current thread.
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::loom::cell::UnsafeCell;
 use crate::loom::sync::{Arc, Mutex};
 use crate::runtime;
@@ -10,15 +12,15 @@ use crate::sync::AtomicWaker;
 use crate::util::trace::SpawnMeta;
 use crate::util::RcCell;
 
-use std::cell::Cell;
-use std::collections::VecDeque;
-use std::fmt;
-use std::future::Future;
-use std::marker::PhantomData;
-use std::mem;
-use std::pin::Pin;
-use std::rc::Rc;
-use std::task::Poll;
+use ::core::cell::Cell;
+use alloc::collections::VecDeque;
+use ::core::fmt;
+use ::core::future::Future;
+use ::core::marker::PhantomData;
+use ::core::mem;
+use ::core::pin::Pin;
+use alloc::rc::Rc;
+use ::core::task::Poll;
 
 use pin_project_lite::pin_project;
 
@@ -396,7 +398,7 @@ cfg_rt! {
         F: Future + 'static,
         F::Output: 'static,
     {
-        let fut_size = std::mem::size_of::<F>();
+        let fut_size = ::core::mem::size_of::<F>();
         if AutoBox::<F>::SHOULD_BOX {
             spawn_local_inner(Box::pin(future), SpawnMeta::new_unnamed(fut_size))
         } else {
@@ -940,7 +942,7 @@ impl fmt::Debug for LocalSet {
 impl Future for LocalSet {
     type Output = ();
 
-    fn poll(self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<Self::Output> {
+    fn poll(self: Pin<&mut Self>, cx: &mut ::core::task::Context<'_>) -> Poll<Self::Output> {
         let _no_blocking = crate::runtime::context::disallow_block_in_place();
 
         // Register the waker before starting to work
@@ -1056,7 +1058,7 @@ impl Context {
 impl<T: Future> Future for RunUntil<'_, T> {
     type Output = T::Output;
 
-    fn poll(self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<Self::Output> {
+    fn poll(self: Pin<&mut Self>, cx: &mut ::core::task::Context<'_>) -> Poll<Self::Output> {
         let me = self.project();
 
         me.local_set.with(|| {
@@ -1130,7 +1132,7 @@ impl Shared {
     }
 
     fn ptr_eq(&self, other: &Shared) -> bool {
-        std::ptr::eq(self, other)
+        ::core::ptr::eq(self, other)
     }
 }
 
@@ -1218,7 +1220,7 @@ impl LocalState {
         self.assert_called_from_owner_thread();
 
         self.local_queue
-            .with_mut(|ptr| std::mem::take(unsafe { &mut (*ptr) }))
+            .with_mut(|ptr| ::core::mem::take(unsafe { &mut (*ptr) }))
     }
 
     unsafe fn task_remove(&self, task: &Task<Arc<Shared>>) -> Option<Task<Arc<Shared>>> {
@@ -1328,7 +1330,7 @@ mod tests {
             }));
 
             // poll the run until future once
-            std::future::poll_fn(|cx| {
+            ::core::future::poll_fn(|cx| {
                 let _ = run_until.as_mut().poll(cx);
                 Poll::Ready(())
             })

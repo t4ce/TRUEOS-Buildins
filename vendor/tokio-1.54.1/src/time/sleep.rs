@@ -1,12 +1,14 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::runtime::{scheduler, Timer};
 use crate::time::{error::Error, safe_delay, Duration, Instant};
 use crate::util::trace;
 
 use pin_project_lite::pin_project;
-use std::future::Future;
-use std::panic::Location;
-use std::pin::Pin;
-use std::task::{self, ready, Poll};
+use ::core::future::Future;
+use crate::platform::panic::Location;
+use ::core::pin::Pin;
+use ::core::task::{self, ready, Poll};
 
 /// Waits until `deadline` is reached.
 ///

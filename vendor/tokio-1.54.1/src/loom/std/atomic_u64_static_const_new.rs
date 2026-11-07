@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use super::AtomicU64;
 use crate::loom::sync::Mutex;
 

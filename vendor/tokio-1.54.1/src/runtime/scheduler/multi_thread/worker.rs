@@ -56,6 +56,8 @@
 //! the inject queue indefinitely. This would be a ref-count cycle and a memory
 //! leak.
 
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::loom::sync::{Arc, Mutex};
 use crate::runtime;
 use crate::runtime::scheduler::multi_thread::{
@@ -72,11 +74,11 @@ use crate::util::atomic_cell::AtomicCell;
 use crate::util::cacheline::CachePadded;
 use crate::util::rand::{FastRand, RngSeedGenerator};
 
-use std::cell::RefCell;
-use std::ops::ControlFlow;
-use std::task::Waker;
-use std::thread;
-use std::time::{Duration, Instant};
+use ::core::cell::RefCell;
+use ::core::ops::ControlFlow;
+use ::core::task::Waker;
+use crate::platform::thread;
+use crate::platform::time::{Duration, Instant};
 
 mod metrics;
 
@@ -526,9 +528,10 @@ fn run(worker: Arc<Worker>) {
 
     impl Drop for AbortOnPanic {
         fn drop(&mut self) {
-            if std::thread::panicking() {
+            if crate::platform::thread::panicking() {
+                #[cfg(not(feature="native"))]
                 eprintln!("worker thread panicking; aborting process");
-                std::process::abort();
+                crate::platform::abort();
             }
         }
     }
@@ -584,7 +587,7 @@ impl Context {
         core.stats.start_processing_scheduled_tasks();
 
         #[cfg(target_os = "trueos")]
-        let mut last_carrier_turn = std::time::Instant::now();
+        let mut last_carrier_turn = crate::platform::time::Instant::now();
 
         while !core.is_shutdown {
             // A task-level async yield can immediately poll another task on
@@ -593,9 +596,9 @@ impl Context {
             // mutex or core RefCell borrow is held at this boundary. Long
             // individual task polls still need their own cooperative points.
             #[cfg(target_os = "trueos")]
-            if last_carrier_turn.elapsed() >= std::time::Duration::from_millis(10) {
-                std::thread::yield_now();
-                last_carrier_turn = std::time::Instant::now();
+            if last_carrier_turn.elapsed() >= ::core::time::Duration::from_millis(10) {
+                crate::platform::thread::yield_now();
+                last_carrier_turn = crate::platform::time::Instant::now();
             }
 
             self.assert_lifo_enabled_is_correct(&core);
@@ -1463,7 +1466,7 @@ impl Handle {
         // It's ok to lost the race, as another worker is
         // draining the inject_timers.
         match self.shared.synced.try_lock() {
-            Some(mut synced) => std::mem::take(&mut synced.inject_timers),
+            Some(mut synced) => ::core::mem::take(&mut synced.inject_timers),
             None => Vec::new(),
         }
     }
@@ -1552,7 +1555,7 @@ impl Handle {
     }
 
     fn ptr_eq(&self, other: &Handle) -> bool {
-        std::ptr::eq(self, other)
+        ::core::ptr::eq(self, other)
     }
 }
 

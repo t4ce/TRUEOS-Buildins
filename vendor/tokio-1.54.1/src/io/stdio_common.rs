@@ -1,7 +1,9 @@
 //! Contains utilities for stdout and stderr.
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::io::AsyncWrite;
-use std::pin::Pin;
-use std::task::{Context, Poll};
+use ::core::pin::Pin;
+use ::core::task::{Context, Poll};
 /// # Windows
 /// [`AsyncWrite`] adapter that finds last char boundary in given buffer and does not write the rest,
 /// if buffer contents seems to be `utf8`. Otherwise it only trims buffer down to `DEFAULT_MAX_BUF_SIZE`.
@@ -33,7 +35,7 @@ where
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         mut buf: &[u8],
-    ) -> Poll<Result<usize, std::io::Error>> {
+    ) -> Poll<Result<usize, crate::platform::io::Error>> {
         // just a closure to avoid repetitive code
         let mut call_inner = move |buf| Pin::new(&mut self.inner).poll_write(cx, buf);
 
@@ -65,7 +67,7 @@ where
         // if they are (possibly incomplete) utf8, then we can be quite sure
         // that input buffer was utf8.
 
-        let have_to_fix_up = match std::str::from_utf8(&buf[..MAX_BYTES_PER_CHAR * MAGIC_CONST]) {
+        let have_to_fix_up = match ::core::str::from_utf8(&buf[..MAX_BYTES_PER_CHAR * MAGIC_CONST]) {
             Ok(_) => true,
             Err(err) => {
                 let incomplete_bytes = MAX_BYTES_PER_CHAR * MAGIC_CONST - err.valid_up_to();
@@ -94,14 +96,14 @@ where
     fn poll_flush(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> Poll<Result<(), std::io::Error>> {
+    ) -> Poll<Result<(), crate::platform::io::Error>> {
         Pin::new(&mut self.inner).poll_flush(cx)
     }
 
     fn poll_shutdown(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> Poll<Result<(), std::io::Error>> {
+    ) -> Poll<Result<(), crate::platform::io::Error>> {
         Pin::new(&mut self.inner).poll_shutdown(cx)
     }
 }
@@ -112,10 +114,10 @@ where
 mod tests {
     use crate::io::blocking::DEFAULT_MAX_BUF_SIZE;
     use crate::io::AsyncWriteExt;
-    use std::io;
-    use std::pin::Pin;
-    use std::task::Context;
-    use std::task::Poll;
+    use crate::platform::io;
+    use ::core::pin::Pin;
+    use ::core::task::Context;
+    use ::core::task::Poll;
 
     struct TextMockWriter;
 
@@ -126,7 +128,7 @@ mod tests {
             buf: &[u8],
         ) -> Poll<Result<usize, io::Error>> {
             assert!(buf.len() <= DEFAULT_MAX_BUF_SIZE);
-            assert!(std::str::from_utf8(buf).is_ok());
+            assert!(::core::str::from_utf8(buf).is_ok());
             Poll::Ready(Ok(buf.len()))
         }
 
@@ -199,7 +201,7 @@ mod tests {
         // was not shrunk too much.
         let checked_count = super::MAGIC_CONST * super::MAX_BYTES_PER_CHAR;
         let mut data: Vec<u8> = str::repeat("a", checked_count).into();
-        data.extend(std::iter::repeat_n(
+        data.extend(::core::iter::repeat_n(
             0b1010_1010,
             DEFAULT_MAX_BUF_SIZE - checked_count + 1,
         ));

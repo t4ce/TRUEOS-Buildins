@@ -1,5 +1,7 @@
-use std::num::NonZeroU64;
-use std::time::Instant;
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
+use ::core::num::NonZeroU64;
+use crate::platform::time::Instant;
 
 /// `ScheduleLatencyInstant` tracks the time a task was scheduled.
 ///

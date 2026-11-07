@@ -1,8 +1,10 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::runtime::driver::op::{CancelData, Cancellable, Completable, CqeResult, Op};
 use crate::util::as_ref::OwnedBuf;
 
 use io_uring::{opcode, types};
-use std::io::{self, Error};
+use crate::platform::io::{self, Error};
 use std::os::fd::{AsRawFd, OwnedFd};
 
 #[derive(Debug)]

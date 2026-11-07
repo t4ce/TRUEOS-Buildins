@@ -1,11 +1,13 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::io::blocking::Blocking;
 use crate::io::stdio_common::SplitByUtf8BoundaryIfWindows;
 use crate::io::AsyncWrite;
 
-use std::io;
-use std::pin::Pin;
-use std::task::Context;
-use std::task::Poll;
+use crate::platform::io;
+use ::core::pin::Pin;
+use ::core::task::Context;
+use ::core::task::Poll;
 
 cfg_io_std! {
     /// A handle to the standard error stream of a process.
@@ -36,7 +38,7 @@ cfg_io_std! {
     /// ```
     #[derive(Debug)]
     pub struct Stderr {
-        std: SplitByUtf8BoundaryIfWindows<Blocking<std::io::Stderr>>,
+        std: SplitByUtf8BoundaryIfWindows<Blocking<crate::platform::io::Stderr>>,
     }
 
     /// Constructs a new handle to the standard error of the current process.
@@ -99,7 +101,7 @@ mod sys {
 
     impl AsRawFd for Stderr {
         fn as_raw_fd(&self) -> RawFd {
-            std::io::stderr().as_raw_fd()
+            crate::platform::io::stderr().as_raw_fd()
         }
     }
 
@@ -115,7 +117,7 @@ cfg_windows! {
 
     impl AsRawHandle for Stderr {
         fn as_raw_handle(&self) -> RawHandle {
-            std::io::stderr().as_raw_handle()
+            crate::platform::io::stderr().as_raw_handle()
         }
     }
 

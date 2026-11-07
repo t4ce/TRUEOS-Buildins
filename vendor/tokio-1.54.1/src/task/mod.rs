@@ -274,6 +274,8 @@
 //! [`task::yield_now`]: crate::task::yield_now()
 //! [`thread::yield_now`]: std::thread::yield_now
 
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 cfg_rt! {
     pub use crate::runtime::task::{JoinError, JoinHandle};
 
@@ -333,3 +335,7 @@ cfg_rt! {
 cfg_not_rt! {
     pub(crate) mod coop;
 }
+
+#[cfg(all(feature="native",feature="rt"))]
+#[doc(hidden)]
+pub use task_local::NativeExecutionLocalKey;

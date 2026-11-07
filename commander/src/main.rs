@@ -1,4 +1,7 @@
-use std::io::{self, Write};
+#![no_std]
+extern crate alloc;
+use alloc::{format, string::String};
+use crossterm::io::{self, Write};
 
 use crossterm::{
     cursor::{Hide, MoveTo, Show},

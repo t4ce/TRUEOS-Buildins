@@ -1,17 +1,19 @@
 //! Use POSIX AIO futures with Tokio.
 
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::io::interest::Interest;
 use crate::runtime::io::{ReadyEvent, Registration};
 use crate::runtime::scheduler;
 use mio::event::Source;
 use mio::Registry;
 use mio::Token;
-use std::fmt;
-use std::io;
-use std::ops::{Deref, DerefMut};
+use ::core::fmt;
+use crate::platform::io;
+use ::core::ops::{Deref, DerefMut};
 use std::os::fd::{AsFd, BorrowedFd};
 use std::os::unix::io::{AsRawFd, RawFd};
-use std::task::{ready, Context, Poll};
+use ::core::task::{ready, Context, Poll};
 
 /// Like [`mio::event::Source`], but for POSIX AIO only.
 ///

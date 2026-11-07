@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use super::super::{Driver, Handle};
 use super::RegisterResult;
 use crate::runtime::driver::op::Lifecycle;

@@ -1,8 +1,10 @@
 #![allow(clippy::trivially_copy_pass_by_ref)]
 
-use std::fmt;
-use std::ops;
-use std::time::Duration;
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
+use ::core::fmt;
+use ::core::ops;
+use ::core::time::Duration;
 
 /// A measurement of a monotonically nondecreasing clock.
 /// Opaque and useful only with `Duration`.
@@ -32,7 +34,7 @@ use std::time::Duration;
 /// take advantage of `time::pause()` and `time::advance()`.
 #[derive(Clone, Copy, Eq, PartialEq, PartialOrd, Ord, Hash)]
 pub struct Instant {
-    std: std::time::Instant,
+    std: crate::platform::time::Instant,
 }
 
 impl Instant {
@@ -50,14 +52,27 @@ impl Instant {
     }
 
     /// Create a `tokio::time::Instant` from a `std::time::Instant`.
-    pub fn from_std(std: std::time::Instant) -> Instant {
+    pub(crate) fn from_platform(std: crate::platform::time::Instant) -> Instant {
         Instant { std }
     }
 
     /// Convert the value into a `std::time::Instant`.
-    pub fn into_std(self) -> std::time::Instant {
+    pub(crate) fn into_platform(self) -> crate::platform::time::Instant {
         self.std
     }
+
+    /// Convert a standard-library instant on the compatibility platform.
+    #[cfg(not(feature="native"))]
+    pub fn from_std(value: std::time::Instant)->Self{Self::from_platform(value)}
+    /// Return the standard-library instant on the compatibility platform.
+    #[cfg(not(feature="native"))]
+    pub fn into_std(self)->std::time::Instant{self.into_platform()}
+    /// Convert a native TRUEOS monotonic instant.
+    #[cfg(feature="native")]
+    pub fn from_native(value:trueos_runtime::time::Instant)->Self{Self::from_platform(value)}
+    /// Return the native TRUEOS monotonic instant.
+    #[cfg(feature="native")]
+    pub fn into_native(self)->trueos_runtime::time::Instant{self.into_platform()}
 
     /// Returns the amount of time elapsed from another instant to this one, or
     /// zero duration if that instant is later than this one.
@@ -131,26 +146,26 @@ impl Instant {
     /// represented as `Instant` (which means it's inside the bounds of the
     /// underlying data structure), `None` otherwise.
     pub fn checked_add(&self, duration: Duration) -> Option<Instant> {
-        self.std.checked_add(duration).map(Instant::from_std)
+        self.std.checked_add(duration).map(Instant::from_platform)
     }
 
     /// Returns `Some(t)` where `t` is the time `self - duration` if `t` can be
     /// represented as `Instant` (which means it's inside the bounds of the
     /// underlying data structure), `None` otherwise.
     pub fn checked_sub(&self, duration: Duration) -> Option<Instant> {
-        self.std.checked_sub(duration).map(Instant::from_std)
+        self.std.checked_sub(duration).map(Instant::from_platform)
     }
 }
 
-impl From<std::time::Instant> for Instant {
-    fn from(time: std::time::Instant) -> Instant {
-        Instant::from_std(time)
+impl From<crate::platform::time::Instant> for Instant {
+    fn from(time: crate::platform::time::Instant) -> Instant {
+        Instant::from_platform(time)
     }
 }
 
-impl From<Instant> for std::time::Instant {
-    fn from(time: Instant) -> std::time::Instant {
-        time.into_std()
+impl From<Instant> for crate::platform::time::Instant {
+    fn from(time: Instant) -> crate::platform::time::Instant {
+        time.into_platform()
     }
 }
 
@@ -158,7 +173,7 @@ impl ops::Add<Duration> for Instant {
     type Output = Instant;
 
     fn add(self, other: Duration) -> Instant {
-        Instant::from_std(self.std + other)
+        Instant::from_platform(self.std + other)
     }
 }
 
@@ -180,7 +195,7 @@ impl ops::Sub<Duration> for Instant {
     type Output = Instant;
 
     fn sub(self, rhs: Duration) -> Instant {
-        Instant::from_std(std::time::Instant::sub(self.std, rhs))
+        Instant::from_platform(crate::platform::time::Instant::sub(self.std, rhs))
     }
 }
 
@@ -201,7 +216,7 @@ mod variant {
     use super::Instant;
 
     pub(super) fn now() -> Instant {
-        Instant::from_std(std::time::Instant::now())
+        Instant::from_platform(crate::platform::time::Instant::now())
     }
 }
 

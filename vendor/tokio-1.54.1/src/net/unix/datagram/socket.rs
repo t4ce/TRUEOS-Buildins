@@ -1,14 +1,16 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::io::{Interest, PollEvented, ReadBuf, Ready};
 use crate::net::unix::SocketAddr;
 use crate::util::check_socket_for_blocking;
 
-use std::fmt;
-use std::io;
+use ::core::fmt;
+use crate::platform::io;
 use std::net::Shutdown;
 use std::os::unix::io::{AsFd, AsRawFd, BorrowedFd, FromRawFd, IntoRawFd, RawFd};
 use std::os::unix::net;
 use std::path::Path;
-use std::task::{ready, Context, Poll};
+use ::core::task::{ready, Context, Poll};
 
 cfg_io_util! {
     use bytes::BufMut;
@@ -881,7 +883,7 @@ impl UnixDatagram {
             let (n, addr) = self.io.registration().try_io(Interest::READABLE, || {
                 let dst = buf.chunk_mut();
                 let dst =
-                    unsafe { &mut *(dst as *mut _ as *mut [std::mem::MaybeUninit<u8>] as *mut [u8]) };
+                    unsafe { &mut *(dst as *mut _ as *mut [::core::mem::MaybeUninit<u8>] as *mut [u8]) };
 
                 // Safety: We trust `UnixDatagram::recv_from` to have filled up `n` bytes in the
                 // buffer.
@@ -938,7 +940,7 @@ impl UnixDatagram {
             self.io.registration().async_io(Interest::READABLE, || {
                 let dst = buf.chunk_mut();
                 let dst =
-                    unsafe { &mut *(dst as *mut _ as *mut [std::mem::MaybeUninit<u8>] as *mut [u8]) };
+                    unsafe { &mut *(dst as *mut _ as *mut [::core::mem::MaybeUninit<u8>] as *mut [u8]) };
 
                 // Safety: We trust `UnixDatagram::recv_from` to have filled up `n` bytes in the
                 // buffer.
@@ -1000,7 +1002,7 @@ impl UnixDatagram {
             self.io.registration().try_io(Interest::READABLE, || {
                 let dst = buf.chunk_mut();
                 let dst =
-                    unsafe { &mut *(dst as *mut _ as *mut [std::mem::MaybeUninit<u8>] as *mut [u8]) };
+                    unsafe { &mut *(dst as *mut _ as *mut [::core::mem::MaybeUninit<u8>] as *mut [u8]) };
 
                 // Safety: We trust `UnixDatagram::recv` to have filled up `n` bytes in the
                 // buffer.
@@ -1048,7 +1050,7 @@ impl UnixDatagram {
             self.io.registration().async_io(Interest::READABLE, || {
                 let dst = buf.chunk_mut();
                 let dst =
-                    unsafe { &mut *(dst as *mut _ as *mut [std::mem::MaybeUninit<u8>] as *mut [u8]) };
+                    unsafe { &mut *(dst as *mut _ as *mut [::core::mem::MaybeUninit<u8>] as *mut [u8]) };
 
                 // Safety: We trust `UnixDatagram::recv_from` to have filled up `n` bytes in the
                 // buffer.
@@ -1189,7 +1191,7 @@ impl UnixDatagram {
         let (n, addr) = ready!(self.io.registration().poll_read_io(cx, || {
             // Safety: will not read the maybe uninitialized bytes.
             let b = unsafe {
-                &mut *(buf.unfilled_mut() as *mut [std::mem::MaybeUninit<u8>] as *mut [u8])
+                &mut *(buf.unfilled_mut() as *mut [::core::mem::MaybeUninit<u8>] as *mut [u8])
             };
 
             self.io.recv_from(b)
@@ -1291,7 +1293,7 @@ impl UnixDatagram {
         let n = ready!(self.io.registration().poll_read_io(cx, || {
             // Safety: will not read the maybe uninitialized bytes.
             let b = unsafe {
-                &mut *(buf.unfilled_mut() as *mut [std::mem::MaybeUninit<u8>] as *mut [u8])
+                &mut *(buf.unfilled_mut() as *mut [::core::mem::MaybeUninit<u8>] as *mut [u8])
             };
 
             self.io.recv(b)

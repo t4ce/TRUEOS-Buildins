@@ -226,6 +226,8 @@
 //! [`Command::kill_on_drop`]: crate::process::Command::kill_on_drop
 //! [`Child`]: crate::process::Child
 
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 #[path = "unix/mod.rs"]
 #[cfg(unix)]
 mod imp;
@@ -245,12 +247,12 @@ use crate::io::{AsyncRead, AsyncWrite, ReadBuf};
 use crate::process::kill::Kill;
 
 use std::ffi::OsStr;
-use std::future::Future;
-use std::io;
+use ::core::future::Future;
+use crate::platform::io;
 use std::path::Path;
-use std::pin::Pin;
+use ::core::pin::Pin;
 use std::process::{Child as StdChild, Command as StdCommand, ExitStatus, Output, Stdio};
-use std::task::{ready, Context, Poll};
+use ::core::task::{ready, Context, Poll};
 
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
@@ -1723,10 +1725,10 @@ mod test {
     use super::ChildDropGuard;
 
     use futures::future::FutureExt;
-    use std::future::Future;
-    use std::io;
-    use std::pin::Pin;
-    use std::task::{Context, Poll};
+    use ::core::future::Future;
+    use crate::platform::io;
+    use ::core::pin::Pin;
+    use ::core::task::{Context, Poll};
 
     struct Mock {
         num_kills: usize,

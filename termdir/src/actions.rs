@@ -1,4 +1,6 @@
-use std::{io, path::PathBuf};
+use alloc::{borrow::ToOwned, string::{String, ToString}, vec::Vec};
+use crate::app_io as io;
+use trueos_path::PathBuf;
 
 use crossterm::style::Color;
 
@@ -201,10 +203,9 @@ impl MenuLink {
     pub fn label(&self) -> String {
         self.path
             .file_name()
-            .and_then(|s| s.to_str())
             .filter(|s| !s.is_empty())
             .map(str::to_owned)
-            .unwrap_or_else(|| self.path.display().to_string())
+            .unwrap_or_else(|| self.path.as_str().to_string())
     }
 }
 
@@ -652,7 +653,7 @@ impl Modal {
             title: "Confirm".to_string(),
             lines: vec![
                 format!("Move {}", graph.label(source)),
-                format!("into {} ?", target.display()),
+                format!("into {} ?", target.as_str()),
             ],
             mode: ModalMode::Confirm,
             trash_origin_y: None,
@@ -683,7 +684,7 @@ impl Modal {
             title: "Confirm".to_string(),
             lines: vec![
                 format!("Move {count} files"),
-                format!("into {} ?", target.display()),
+                format!("into {} ?", target.as_str()),
             ],
             mode: ModalMode::Confirm,
             trash_origin_y: None,
@@ -693,8 +694,8 @@ impl Modal {
     pub fn move_path(source: PathBuf, target: PathBuf) -> Self {
         let label = source
             .file_name()
-            .map(|name| name.to_string_lossy().into_owned())
-            .unwrap_or_else(|| source.display().to_string());
+            .map(|name| name.to_string())
+            .unwrap_or_else(|| source.as_str().to_string());
         Self {
             pending: PendingAction::MovePath {
                 source,
@@ -703,7 +704,7 @@ impl Modal {
             title: "Confirm".to_string(),
             lines: vec![
                 format!("Move {label}"),
-                format!("into {} ?", target.display()),
+                format!("into {} ?", target.as_str()),
             ],
             mode: ModalMode::Confirm,
             trash_origin_y: None,
@@ -723,7 +724,7 @@ impl Modal {
             title: "Confirm".to_string(),
             lines: vec![
                 format!("Move {count} entities"),
-                format!("into {} ?", target.display()),
+                format!("into {} ?", target.as_str()),
             ],
             mode: ModalMode::Confirm,
             trash_origin_y: None,
@@ -1012,7 +1013,7 @@ pub fn dispatch_menu_selected(
                     let info = trueos::content_identity::content_type_info(content_type).unwrap();
                     Ok(Dispatch::Modal(Modal {
                         title: "Apply inferred type?".into(),
-                        lines: vec![format!("{}", path.display()), format!("Blob → {} ({})", info.canonical_name, info.mime_type), "Known extension and file bytes agree. Apply this type?".into()],
+                        lines: vec![format!("{}", path.as_str()), format!("Blob → {} ({})", info.canonical_name, info.mime_type), "Known extension and file bytes agree. Apply this type?".into()],
                         pending: PendingAction::Infer { path, bytes, content_type, digest },
                         mode: ModalMode::Confirm, trash_origin_y: None,
                     }))

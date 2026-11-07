@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::style::{Color, Colored};
 
 /// Represents, optionally, a foreground and/or a background color.
@@ -73,6 +75,8 @@ impl From<Colored> for Colors {
 
 #[cfg(test)]
 mod tests {
+    #[allow(unused_imports)]
+    use crate::alloc_prelude::*;
     use crate::style::{Color, Colors};
 
     #[test]

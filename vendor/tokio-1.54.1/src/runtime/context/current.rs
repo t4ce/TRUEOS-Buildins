@@ -1,10 +1,12 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use super::{Context, CONTEXT};
 
 use crate::runtime::{scheduler, TryCurrentError};
 use crate::util::markers::SyncNotSend;
 
-use std::cell::{Cell, RefCell};
-use std::marker::PhantomData;
+use ::core::cell::{Cell, RefCell};
+use ::core::marker::PhantomData;
 
 #[derive(Debug)]
 #[must_use]
@@ -78,7 +80,7 @@ impl Drop for SetCurrentGuard {
             let depth = ctx.current.depth.get();
 
             if depth != self.depth {
-                if !std::thread::panicking() {
+                if !crate::platform::thread::panicking() {
                     panic!(
                         "`EnterGuard` values dropped out of order. Guards returned by \
                          `tokio::runtime::Handle::enter()` must be dropped in the reverse \

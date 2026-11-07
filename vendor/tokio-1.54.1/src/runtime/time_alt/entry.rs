@@ -1,10 +1,12 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use super::cancellation_queue::Sender;
 use crate::loom::sync::{Arc, Mutex};
 use crate::util::linked_list;
 
-use std::marker::PhantomPinned;
-use std::ptr::NonNull;
-use std::task::{Context, Poll, Waker};
+use ::core::marker::PhantomPinned;
+use ::core::ptr::NonNull;
+use ::core::task::{Context, Poll, Waker};
 
 #[derive(Debug, Default)]
 struct State {
@@ -73,7 +75,7 @@ unsafe impl linked_list::Link for Entry {
         target: NonNull<Self::Target>,
     ) -> NonNull<linked_list::Pointers<Self::Target>> {
         let this = target.as_ptr();
-        let field = unsafe { std::ptr::addr_of_mut!((*this).extra_pointers) };
+        let field = unsafe { ::core::ptr::addr_of_mut!((*this).extra_pointers) };
         unsafe { NonNull::new_unchecked(field) }
     }
 }
@@ -104,7 +106,7 @@ unsafe impl linked_list::Link for RegistrationQueueEntry {
         target: NonNull<Self::Target>,
     ) -> NonNull<linked_list::Pointers<Self::Target>> {
         let this = target.as_ptr();
-        let field = unsafe { std::ptr::addr_of_mut!((*this).extra_pointers) };
+        let field = unsafe { ::core::ptr::addr_of_mut!((*this).extra_pointers) };
         unsafe { NonNull::new_unchecked(field) }
     }
 }
@@ -135,7 +137,7 @@ unsafe impl linked_list::Link for CancellationQueueEntry {
         target: NonNull<Self::Target>,
     ) -> NonNull<linked_list::Pointers<Self::Target>> {
         let this = target.as_ptr();
-        let field = unsafe { std::ptr::addr_of_mut!((*this).cancel_pointers) };
+        let field = unsafe { ::core::ptr::addr_of_mut!((*this).cancel_pointers) };
         unsafe { NonNull::new_unchecked(field) }
     }
 }
@@ -166,7 +168,7 @@ unsafe impl linked_list::Link for WakeQueueEntry {
         target: NonNull<Self::Target>,
     ) -> NonNull<linked_list::Pointers<Self::Target>> {
         let this = target.as_ptr();
-        let field = unsafe { std::ptr::addr_of_mut!((*this).extra_pointers) };
+        let field = unsafe { ::core::ptr::addr_of_mut!((*this).extra_pointers) };
         unsafe { NonNull::new_unchecked(field) }
     }
 }

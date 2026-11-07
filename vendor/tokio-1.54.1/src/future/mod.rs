@@ -2,6 +2,8 @@
 
 //! Asynchronous values.
 
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 #[cfg(any(feature = "macros", feature = "process"))]
 pub(crate) mod maybe_done;
 
@@ -23,6 +25,6 @@ cfg_trace! {
 
 cfg_not_trace! {
     cfg_rt! {
-        pub(crate) use std::future::Future;
+        pub(crate) use ::core::future::Future;
     }
 }

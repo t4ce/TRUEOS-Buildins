@@ -1,4 +1,7 @@
-use std::{io, sync::atomic::{AtomicBool, Ordering}};
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
+use crate::io;
+use core::sync::atomic::{AtomicBool, Ordering};
 
 use crate::terminal::WindowSize;
 
@@ -40,6 +43,8 @@ pub fn supports_keyboard_enhancement() -> io::Result<bool> { Ok(false) }
 
 #[cfg(test)]
 mod tests {
+    #[allow(unused_imports)]
+    use crate::alloc_prelude::*;
     use super::*;
     use crate::trueos::test_support::{SERIAL, STATE};
 

@@ -1,8 +1,10 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::runtime::AutoBox;
 use crate::task::JoinHandle;
 use crate::util::trace::SpawnMeta;
 
-use std::future::Future;
+use ::core::future::Future;
 
 cfg_rt! {
     /// Spawns a new asynchronous task, returning a
@@ -176,7 +178,7 @@ cfg_rt! {
         F: Future + Send + 'static,
         F::Output: Send + 'static,
     {
-        let fut_size = std::mem::size_of::<F>();
+        let fut_size = ::core::mem::size_of::<F>();
         if AutoBox::<F>::SHOULD_BOX {
             spawn_inner(Box::pin(future), SpawnMeta::new_unnamed(fut_size))
         } else {

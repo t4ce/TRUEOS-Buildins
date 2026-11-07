@@ -4,6 +4,8 @@
 //!
 //! [`Timeout`]: struct@Timeout
 
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::{
     task::coop,
     time::{error::Elapsed, Duration, Instant, Sleep},
@@ -11,9 +13,9 @@ use crate::{
 };
 
 use pin_project_lite::pin_project;
-use std::future::{Future, IntoFuture};
-use std::pin::Pin;
-use std::task::{self, Poll};
+use ::core::future::{Future, IntoFuture};
+use ::core::pin::Pin;
+use ::core::task::{self, Poll};
 
 /// Requires a `Future` to complete before the specified duration has elapsed.
 ///

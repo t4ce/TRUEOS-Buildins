@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use std::{io, os::unix::fs::OpenOptionsExt};
 
 #[cfg(not(test))]

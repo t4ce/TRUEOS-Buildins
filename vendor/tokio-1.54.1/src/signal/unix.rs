@@ -6,6 +6,8 @@
 #![cfg(unix)]
 #![cfg_attr(docsrs, doc(cfg(all(unix, feature = "signal"))))]
 
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::runtime::scheduler;
 use crate::runtime::signal::Handle;
 use crate::signal::registry::{globals, EventId, EventInfo, Globals, Storage};
@@ -13,9 +15,9 @@ use crate::signal::RxFuture;
 use crate::sync::watch;
 
 use mio::net::UnixStream;
-use std::io::{self, Error, Write};
-use std::sync::OnceLock;
-use std::task::{Context, Poll};
+use crate::platform::io::{self, Error, Write};
+use crate::platform::sync::OnceLock;
+use ::core::task::{Context, Poll};
 
 #[cfg(not(any(target_os = "linux", target_os = "illumos")))]
 pub(crate) struct OsStorage([SignalInfo; 33]);
@@ -33,13 +35,13 @@ impl Default for OsStorage {
     fn default() -> Self {
         // There are reliable signals ranging from 1 to 33 available on every Unix platform.
         #[cfg(not(any(target_os = "linux", target_os = "illumos")))]
-        let inner = std::array::from_fn(|_| SignalInfo::default());
+        let inner = ::core::array::from_fn(|_| SignalInfo::default());
 
         // On Linux and illumos, there are additional real-time signals
         // available. (This is also likely true on Solaris, but this should be
         // verified before being enabled.)
         #[cfg(any(target_os = "linux", target_os = "illumos"))]
-        let inner = std::iter::repeat_with(SignalInfo::default)
+        let inner = ::core::iter::repeat_with(SignalInfo::default)
             .take(libc::SIGRTMAX() as usize)
             .collect();
 

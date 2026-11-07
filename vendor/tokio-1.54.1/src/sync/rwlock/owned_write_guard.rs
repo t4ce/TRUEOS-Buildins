@@ -1,9 +1,14 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::sync::rwlock::owned_read_guard::OwnedRwLockReadGuard;
 use crate::sync::rwlock::owned_write_guard_mapped::OwnedRwLockMappedWriteGuard;
 use crate::sync::rwlock::RwLock;
-use std::marker::PhantomData;
-use std::sync::Arc;
-use std::{fmt, mem, ops, ptr};
+use ::core::marker::PhantomData;
+use alloc::sync::Arc;
+use ::core::fmt;
+use ::core::mem;
+use ::core::ops;
+use ::core::ptr;
 
 /// Owned RAII structure used to release the exclusive write access of a lock when
 /// dropped.

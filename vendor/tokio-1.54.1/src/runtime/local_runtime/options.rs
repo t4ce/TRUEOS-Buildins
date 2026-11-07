@@ -1,4 +1,6 @@
-use std::marker::PhantomData;
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
+use ::core::marker::PhantomData;
 
 /// [`LocalRuntime`]-only config options
 ///

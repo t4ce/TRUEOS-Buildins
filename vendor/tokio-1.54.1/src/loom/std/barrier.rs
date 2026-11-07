@@ -2,9 +2,11 @@
 //!
 //! This implementation mirrors that of the Rust standard library.
 
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::loom::sync::{Condvar, Mutex};
-use std::fmt;
-use std::time::{Duration, Instant};
+use ::core::fmt;
+use crate::platform::time::{Duration, Instant};
 
 /// A barrier enables multiple threads to synchronize the beginning
 /// of some computation.
@@ -163,7 +165,7 @@ impl Barrier {
             } else if Instant::now() > deadline {
                 return None;
             } else {
-                std::thread::yield_now();
+                crate::platform::thread::yield_now();
             }
         };
 

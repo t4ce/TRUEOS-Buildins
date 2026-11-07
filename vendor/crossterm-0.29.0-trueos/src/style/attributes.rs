@@ -1,4 +1,6 @@
-use std::ops::{BitAnd, BitOr, BitXor};
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
+use core::ops::{BitAnd, BitOr, BitXor};
 
 use crate::style::Attribute;
 
@@ -124,6 +126,8 @@ impl Attributes {
 
 #[cfg(test)]
 mod tests {
+    #[allow(unused_imports)]
+    use crate::alloc_prelude::*;
     use super::{Attribute, Attributes};
 
     #[test]

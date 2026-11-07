@@ -1,14 +1,16 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 mod h2_histogram;
 
 pub use h2_histogram::{InvalidHistogramConfiguration, LogHistogram, LogHistogramBuilder};
 
 use crate::util::metric_atomics::MetricAtomicU64;
-use std::sync::atomic::Ordering::Relaxed;
+use ::core::sync::atomic::Ordering::Relaxed;
 
 use crate::runtime::metrics::batch::duration_as_u64;
-use std::cmp;
-use std::ops::Range;
-use std::time::Duration;
+use ::core::cmp;
+use ::core::ops::Range;
+use ::core::time::Duration;
 
 #[derive(Debug)]
 pub(crate) struct Histogram {

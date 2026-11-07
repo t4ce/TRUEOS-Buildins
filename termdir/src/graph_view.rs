@@ -1,9 +1,8 @@
 use crate::chronos::{SystemTime, elapsed_since};
-use std::{
-    collections::BTreeSet,
-    io,
-    path::{Path, PathBuf},
-};
+use alloc::{borrow::ToOwned, boxed::Box, collections::BTreeSet, string::{String, ToString}, vec::Vec};
+use crate::app_io as io;
+use trueos_path::{Path, PathBuf};
+use crate::math::{ceil, round, sqrt, square};
 use trueos::async_fs;
 use trueos::collections::HashMap;
 
@@ -29,8 +28,7 @@ pub struct Sha256Result {
 }
 
 fn path_to_utf8(path: &Path) -> io::Result<&str> {
-    path.to_str()
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "path is not valid UTF-8"))
+    Ok(path.as_str())
 }
 
 fn trueos_fs_err(op: &str, err: i32) -> io::Error {
@@ -87,7 +85,6 @@ fn unique_archive_destination(
     let parent = preferred.parent().unwrap_or_else(|| Path::new(""));
     let name = preferred
         .file_name()
-        .and_then(|name| name.to_str())
         .ok_or_else(|| {
             io::Error::new(
                 io::ErrorKind::InvalidInput,
@@ -178,7 +175,7 @@ pub struct FsNode {
 
 pub fn is_editable_text_file(node: &FsNode) -> bool {
     !node.is_dir && !node.is_placeholder && !node.is_removed && !node.is_moved && !node.hidden
-        && node.path.extension().and_then(|ext| ext.to_str())
+        && node.path.extension()
             .is_some_and(|ext| ext.eq_ignore_ascii_case("txt"))
 }
 
@@ -295,18 +292,18 @@ struct EdgeCell {
 
 struct PendingArchive {
     future:
-        std::pin::Pin<Box<dyn std::future::Future<Output = Result<trueos::archive::Report, i32>>>>,
+        core::pin::Pin<Box<dyn core::future::Future<Output = Result<trueos::archive::Report, i32>>>>,
     destination: String,
     label: &'static str,
-    last_marker: std::time::Instant,
+    last_marker: crate::time::Instant,
     source: Option<PathBuf>,
-    progress: std::rc::Rc<std::cell::Cell<u32>>,
-    started: std::time::Instant,
-    next_poll: std::time::Instant,
+    progress: alloc::rc::Rc<core::cell::Cell<u32>>,
+    started: crate::time::Instant,
+    next_poll: crate::time::Instant,
     displayed_percent: Option<u32>,
 }
 
-fn unpack_label_percent(elapsed: std::time::Duration, percent: u32) -> Option<u32> {
+fn unpack_label_percent(elapsed: core::time::Duration, percent: u32) -> Option<u32> {
     (elapsed.as_millis() % 4000 < 3000).then_some(percent.min(99))
 }
 
@@ -333,7 +330,9 @@ impl GraphView {
         let root = PathBuf::from(trueos::env::current_dir()
             .map_err(|error| io::Error::other(format!("current directory unavailable ({error:?})")))?);
         #[cfg(not(target_os = "trueos"))]
-        let root = std::env::current_dir()?;
+        let root = std::env::current_dir().map_err(io::Error::other)?;
+        #[cfg(not(target_os = "trueos"))]
+        let root = PathBuf::from(root.to_str().ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "path is not valid UTF-8"))?);
         Self::from_path(&root)
     }
 
@@ -376,10 +375,9 @@ impl GraphView {
         let root_name = self
             .root
             .file_name()
-            .and_then(|s| s.to_str())
             .filter(|s| !s.is_empty())
             .map(str::to_owned)
-            .unwrap_or_else(|| self.root.display().to_string());
+            .unwrap_or_else(|| self.root.as_str().to_string());
 
         // The mount root remains structural only. It participates in hierarchy,
         // move validation, and layout centering, but is never rendered as a node.
@@ -564,9 +562,7 @@ impl GraphView {
         bool,
     )> {
         let mut entries = Vec::new();
-        let path = dir.to_str().ok_or_else(|| {
-            io::Error::new(io::ErrorKind::InvalidInput, "path is not valid UTF-8")
-        })?;
+        let path = dir.as_str();
         let listing = async_fs::block_on(async_fs::list_dir_typed(path.as_bytes()))
             .map_err(|err| io::Error::other(format!("list_dir failed ({err})")))?;
         for entry in listing.entries {
@@ -912,7 +908,7 @@ impl GraphView {
     }
 
     pub fn root_label(&self) -> String {
-        self.root.display().to_string()
+        self.root.as_str().to_string()
     }
 
     pub fn root_path(&self) -> &Path {
@@ -1218,9 +1214,9 @@ impl GraphView {
         let label = "LZ4";
         let preferred = match suffix {
             Some(suffix) => PathBuf::from(&source_text[..source_text.len() - suffix.len()]),
-            None => PathBuf::from(format!("{}.tar.lz4", source.display())),
+            None => PathBuf::from(format!("{}.tar.lz4", source.as_str())),
         };
-        if preferred.as_os_str().is_empty() {
+        if preferred.as_str().is_empty() {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "archive path has no output name",
@@ -1252,7 +1248,7 @@ impl GraphView {
         }) {
             return Err(io::Error::new(io::ErrorKind::AlreadyExists, "destination is already being written by an archive operation"));
         }
-        let progress = std::rc::Rc::new(std::cell::Cell::new(0));
+        let progress = alloc::rc::Rc::new(core::cell::Cell::new(0));
         let observed_progress = progress.clone();
         let target = destination.clone();
         crate::archive_log(format_args!("termdir/archive: phase=future-created extracting={extracting} source={source:?} destination={destination:?}"));
@@ -1267,11 +1263,11 @@ impl GraphView {
             }),
             destination: destination.clone(),
             label,
-            last_marker: std::time::Instant::now(),
+            last_marker: crate::time::Instant::now(),
             source: unpack_source,
             progress,
-            started: std::time::Instant::now(),
-            next_poll: std::time::Instant::now(),
+            started: crate::time::Instant::now(),
+            next_poll: crate::time::Instant::now(),
             displayed_percent: Some(0),
         });
         self.bump_scene_revision();
@@ -1279,15 +1275,15 @@ impl GraphView {
     }
 
     /// Observe all jobs on the same cadence as the falling drop animation.
-    pub fn poll_archive(&mut self, now: std::time::Instant) -> Option<String> {
-        let mut context = std::task::Context::from_waker(std::task::Waker::noop());
+    pub fn poll_archive(&mut self, now: crate::time::Instant) -> Option<String> {
+        let mut context = core::task::Context::from_waker(core::task::Waker::noop());
         let mut completed = Vec::new();
         let mut changed = false;
         let mut refresh = false;
         self.pending_archives.retain_mut(|pending| {
             if now < pending.next_poll { return true; }
             pending.next_poll = now + crate::FALL_TICK;
-            if now.duration_since(pending.last_marker) >= std::time::Duration::from_secs(5) {
+            if now.duration_since(pending.last_marker) >= core::time::Duration::from_secs(5) {
                 crate::archive_log(format_args!("termdir/archive: phase=ui-wait destination={:?}", pending.destination));
                 pending.last_marker = now;
             }
@@ -1296,7 +1292,7 @@ impl GraphView {
                 now.saturating_duration_since(pending.started), pending.progress.get()));
             changed |= percent != pending.displayed_percent;
             pending.displayed_percent = percent;
-            let std::task::Poll::Ready(result) = result else { return true; };
+            let core::task::Poll::Ready(result) = result else { return true; };
             changed = true;
             crate::archive_log(format_args!("termdir/archive: phase=api-return destination={:?} result={result:?}", pending.destination));
             completed.push(match result {
@@ -1348,11 +1344,11 @@ impl GraphView {
             }),
             destination: destination.clone(),
             label: "LZ4",
-            last_marker: std::time::Instant::now(),
+            last_marker: crate::time::Instant::now(),
             source: None,
-            progress: std::rc::Rc::new(std::cell::Cell::new(0)),
-            started: std::time::Instant::now(),
-            next_poll: std::time::Instant::now(),
+            progress: alloc::rc::Rc::new(core::cell::Cell::new(0)),
+            started: crate::time::Instant::now(),
+            next_poll: crate::time::Instant::now(),
             displayed_percent: None,
         });
         Ok(format!("LZ4 · running · {destination}"))
@@ -1741,13 +1737,13 @@ impl GraphView {
         if trueos_exists(&destination)? {
             return Err(io::Error::new(
                 io::ErrorKind::AlreadyExists,
-                format!("{} already exists in {}", src.name, target.display()),
+                format!("{} already exists in {}", src.name, target.as_str()),
             ));
         }
 
         trueos_rename(&src.path, &destination)?;
         self.mark_moved(source);
-        let message = format!("MOVE · {} → {}", src.name, target.display());
+        let message = format!("MOVE · {} → {}", src.name, target.as_str());
         Ok(message)
     }
 
@@ -1776,7 +1772,7 @@ impl GraphView {
             if !destination_set.insert(destination.clone()) || trueos_exists(&destination)? {
                 return Err(io::Error::new(
                     io::ErrorKind::AlreadyExists,
-                    format!("{} already exists in {}", source.name, target.display()),
+                    format!("{} already exists in {}", source.name, target.as_str()),
                 ));
             }
             destinations.push(destination);
@@ -1788,7 +1784,7 @@ impl GraphView {
         Ok(format!(
             "MOVE · {} files → {}",
             sources.len(),
-            target.display()
+            target.as_str()
         ))
     }
 
@@ -1815,8 +1811,8 @@ impl GraphView {
                 io::ErrorKind::AlreadyExists,
                 format!(
                     "{} already exists in {}",
-                    name.to_string_lossy(),
-                    target.display()
+                    name,
+                    target.as_str()
                 ),
             ));
         }
@@ -1827,8 +1823,8 @@ impl GraphView {
         }
         Ok(format!(
             "MOVE · {} → {}",
-            name.to_string_lossy(),
-            target.display()
+            name,
+            target.as_str()
         ))
     }
 
@@ -1853,7 +1849,7 @@ impl GraphView {
         for source in sources {
             self.move_path(source, target)?;
         }
-        Ok(format!("MOVE · {} entities → {}", sources.len(), target.display()))
+        Ok(format!("MOVE · {} entities → {}", sources.len(), target.as_str()))
     }
 
     pub fn trash_node(&mut self, source: usize) -> io::Result<String> {
@@ -1888,9 +1884,8 @@ impl GraphView {
             let stem = src
                 .path
                 .file_stem()
-                .and_then(|s| s.to_str())
                 .unwrap_or("item");
-            let ext = src.path.extension().and_then(|s| s.to_str());
+            let ext = src.path.extension();
             for n in 2..10_000 {
                 let candidate = match ext {
                     Some(ext) if !src.is_dir => format!("{stem}.{n}.{ext}"),
@@ -2046,12 +2041,8 @@ impl GraphView {
                 let stem = source
                     .path
                     .file_stem()
-                    .and_then(|stem| stem.to_str())
                     .unwrap_or("item");
-                let ext = source
-                    .path
-                    .extension()
-                    .and_then(|extension| extension.to_str());
+                let ext = source.path.extension();
                 let name = match ext {
                     Some(ext) if !source.is_dir => format!("{stem}.{n}.{ext}"),
                     _ => format!("{stem}.{n}"),
@@ -2363,8 +2354,8 @@ impl WorldBrailleCanvas {
     }
 
     fn set_dot(&mut self, x: f64, y: f64) {
-        let x = x.round() as i32;
-        let y = y.round() as i32;
+        let x = round(x) as i32;
+        let y = round(y) as i32;
         let cell_x = x.div_euclid(2);
         let cell_y = y.div_euclid(4);
         let local_x = x.rem_euclid(2) as usize;
@@ -2375,10 +2366,10 @@ impl WorldBrailleCanvas {
     }
 
     fn draw_segment(&mut self, a: Point, b: Point) {
-        let mut x0 = a.x.round() as i32;
-        let mut y0 = a.y.round() as i32;
-        let x1 = b.x.round() as i32;
-        let y1 = b.y.round() as i32;
+        let mut x0 = round(a.x) as i32;
+        let mut y0 = round(a.y) as i32;
+        let x1 = round(b.x) as i32;
+        let y1 = round(b.y) as i32;
         let dx = (x1 - x0).abs();
         let sx = if x0 < x1 { 1 } else { -1 };
         let dy = -(y1 - y0).abs();
@@ -2403,8 +2394,8 @@ impl WorldBrailleCanvas {
     }
 
     fn sample_cubic(&mut self, a: Point, c1: Point, c2: Point, b: Point) {
-        let distance = ((b.x - a.x).powi(2) + (b.y - a.y).powi(2)).sqrt();
-        let steps = ((distance / 1.9).ceil() as usize).clamp(10, 512);
+        let distance = sqrt(square(b.x - a.x) + square(b.y - a.y));
+        let steps = (ceil(distance / 1.9) as usize).clamp(10, 512);
         let mut previous = a;
         for i in 1..=steps {
             let t = i as f64 / steps as f64;
@@ -2425,8 +2416,8 @@ impl WorldBrailleCanvas {
     }
 
     fn sample_quadratic(&mut self, a: Point, c: Point, b: Point) {
-        let distance = ((b.x - a.x).powi(2) + (b.y - a.y).powi(2)).sqrt();
-        let steps = ((distance / 2.1).ceil() as usize).clamp(8, 512);
+        let distance = sqrt(square(b.x - a.x) + square(b.y - a.y));
+        let steps = (ceil(distance / 2.1) as usize).clamp(8, 512);
         let mut previous = a;
         for i in 1..=steps {
             let t = i as f64 / steps as f64;
@@ -2451,7 +2442,7 @@ impl WorldBrailleCanvas {
         let dy = b.y - a.y;
 
         if dx.abs() >= dy.abs() {
-            let middle_x = ((a.x + b.x) * 0.5).round();
+            let middle_x = round((a.x + b.x) * 0.5);
             let p1 = Point {
                 x: middle_x,
                 y: a.y,
@@ -2464,7 +2455,7 @@ impl WorldBrailleCanvas {
             self.draw_segment(p1, p2);
             self.draw_segment(p2, b);
         } else {
-            let middle_y = ((a.y + b.y) * 0.5).round();
+            let middle_y = round((a.y + b.y) * 0.5);
             let p1 = Point {
                 x: a.x,
                 y: middle_y,
@@ -2484,7 +2475,7 @@ impl WorldBrailleCanvas {
         let b = Self::to_dot(b);
         let dx = b.x - a.x;
         let dy = b.y - a.y;
-        let distance = (dx * dx + dy * dy).sqrt().max(1.0);
+        let distance = sqrt(dx * dx + dy * dy).max(1.0);
         let bend = (distance * 0.15).clamp(4.0, 18.0);
         let nx = -dy / distance;
         let ny = dx / distance;
@@ -2534,8 +2525,8 @@ impl WorldBrailleCanvas {
     fn draw_radial_spline(&mut self, a: Point, b: Point) {
         let a = Self::to_dot(a);
         let b = Self::to_dot(b);
-        let al = (a.x.powi(2) + a.y.powi(2)).sqrt().max(1.0);
-        let bl = (b.x.powi(2) + b.y.powi(2)).sqrt().max(1.0);
+        let al = sqrt(square(a.x) + square(a.y)).max(1.0);
+        let bl = sqrt(square(b.x) + square(b.y)).max(1.0);
         let au = Point {
             x: a.x / al,
             y: a.y / al,
@@ -2544,7 +2535,7 @@ impl WorldBrailleCanvas {
             x: b.x / bl,
             y: b.y / bl,
         };
-        let distance = ((b.x - a.x).powi(2) + (b.y - a.y).powi(2)).sqrt();
+        let distance = sqrt(square(b.x - a.x) + square(b.y - a.y));
         let reach = (distance * 0.36).max(5.0);
 
         self.sample_cubic(
@@ -2631,7 +2622,7 @@ mod tests {
             depth_limit: DEFAULT_DEPTH_LIMIT,
             scene_revision: 0,
             pending_archives: vec![PendingArchive {
-                future: Box::pin(std::future::poll_fn(move |_| {
+                future: Box::pin(core::future::poll_fn(move |_| {
                     counter.set(counter.get() + 1);
                     if counter.get() == 1 {
                         Poll::Pending
@@ -2641,15 +2632,15 @@ mod tests {
                 })),
                 destination: "test.tar.lz4".into(),
                 label: "LZ4",
-                last_marker: std::time::Instant::now(),
+                last_marker: crate::time::Instant::now(),
                 source: None,
-                progress: std::rc::Rc::new(std::cell::Cell::new(0)),
-                started: std::time::Instant::now(),
-                next_poll: std::time::Instant::now(),
+                progress: alloc::rc::Rc::new(core::cell::Cell::new(0)),
+                started: crate::time::Instant::now(),
+                next_poll: crate::time::Instant::now(),
                 displayed_percent: None,
             }],
         };
-        assert!(graph.poll_archive(std::time::Instant::now() + crate::FALL_TICK).is_none());
+        assert!(graph.poll_archive(crate::time::Instant::now() + crate::FALL_TICK).is_none());
         assert_eq!(polls.get(), 1);
         assert!(graph.archive_node(0).unwrap().contains("already running"));
         assert!(
@@ -2659,15 +2650,15 @@ mod tests {
                 .contains("already running")
         );
         assert_eq!(polls.get(), 1);
-        let message = graph.poll_archive(std::time::Instant::now() + crate::FALL_TICK * 2).unwrap();
+        let message = graph.poll_archive(crate::time::Instant::now() + crate::FALL_TICK * 2).unwrap();
         assert!(message.starts_with("ARCHIVE FAILED"));
         assert!(message.contains("resource limit (-7)"));
         assert_eq!(polls.get(), 2);
         assert!(graph.pending_archives.is_empty());
-        assert!(graph.poll_archive(std::time::Instant::now() + crate::FALL_TICK).is_none());
+        assert!(graph.poll_archive(crate::time::Instant::now() + crate::FALL_TICK).is_none());
 
         // Two jobs remain independent, and only the polled cadence changes labels.
-        let started = std::time::Instant::now();
+        let started = crate::time::Instant::now();
         let done = Rc::new(Cell::new(false));
         for (id, percent) in [(0, 42), (1, 67)] {
             let path = PathBuf::from(format!("assets-{id}.tar.lz4"));
@@ -2678,7 +2669,7 @@ mod tests {
             });
             let finished = done.clone();
             graph.pending_archives.push(PendingArchive {
-                future: Box::pin(std::future::poll_fn(move |_| {
+                future: Box::pin(core::future::poll_fn(move |_| {
                     if id == 0 && finished.get() { Poll::Ready(Err(-2)) } else { Poll::Pending }
                 })),
                 destination: format!("assets-{id}"), label: "UNPACK", last_marker: started,
@@ -2698,12 +2689,12 @@ mod tests {
         assert_eq!(graph.scene_revision(), revision);
         graph.poll_archive(started + crate::FALL_TICK);
         assert_eq!(graph.visual_label(0), "🖹 43%");
-        graph.poll_archive(started + std::time::Duration::from_millis(3000));
+        graph.poll_archive(started + core::time::Duration::from_millis(3000));
         assert_eq!(graph.visual_label(0), "🖹 assets-0.tar.lz4");
-        graph.poll_archive(started + std::time::Duration::from_millis(4000));
+        graph.poll_archive(started + core::time::Duration::from_millis(4000));
         assert_eq!(graph.visual_label(0), "🖹 43%");
         done.set(true);
-        assert!(graph.poll_archive(started + std::time::Duration::from_millis(4090)).is_some());
+        assert!(graph.poll_archive(started + core::time::Duration::from_millis(4090)).is_some());
         assert_eq!(graph.visual_label(0), "🖹 assets-0.tar.lz4");
         assert_eq!(graph.visual_label(1), "🖹 67%");
         assert_eq!(graph.pending_archives.len(), 1);
@@ -2711,7 +2702,7 @@ mod tests {
 
     #[test]
     fn archive_label_alternates_three_seconds_of_progress_and_one_of_filename() {
-        use std::time::Duration;
+        use core::time::Duration;
         for (ms, expected) in [(0, Some(42)), (2999, Some(42)), (3000, None),
             (3999, None), (4000, Some(42)), (7000, None), (8000, Some(42))] {
             assert_eq!(super::unpack_label_percent(Duration::from_millis(ms), 42), expected);
@@ -2819,4 +2810,9 @@ mod native_chrome_tests {
         assert!(graph.edge_cells.is_empty());
         assert!(graph.minimap_samples().is_empty());
     }
+}
+
+#[cfg(test)]
+mod render_regression_tests {
+    include!("render_regression_tests.rs");
 }

@@ -1,8 +1,10 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 cfg_net! {
     use crate::net::addr::{self, ToSocketAddrs};
 
-    use std::io;
-    use std::net::SocketAddr;
+    use crate::platform::io;
+    use ::core::net::SocketAddr;
 
     /// Performs a DNS resolution.
     ///

@@ -1,5 +1,7 @@
 #![cfg_attr(loom, allow(unused_imports))]
 
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::runtime::handle::Handle;
 use crate::runtime::{
     blocking, driver, Callback, HistogramBuilder, Runtime, TaskCallback, TimerFlavor,
@@ -12,10 +14,10 @@ use crate::util::rand::{RngSeed, RngSeedGenerator};
 
 use crate::runtime::blocking::BlockingPool;
 use crate::runtime::scheduler::CurrentThread;
-use std::fmt;
-use std::io;
-use std::thread::ThreadId;
-use std::time::Duration;
+use ::core::fmt;
+use crate::platform::io;
+use crate::platform::thread::ThreadId;
+use ::core::time::Duration;
 
 /// Builds Tokio Runtime with custom configuration values.
 ///
@@ -245,13 +247,13 @@ cfg_unstable! {
     }
 }
 
-pub(crate) type ThreadNameFn = std::sync::Arc<dyn Fn() -> String + Send + Sync + 'static>;
+pub(crate) type ThreadNameFn = alloc::sync::Arc<dyn Fn() -> String + Send + Sync + 'static>;
 
 /// The default for the `sharded_blocking_queue` option: enabled iff the
 /// `TOKIO_UNSTABLE_SHARDED_BLOCKING_QUEUE` environment variable is set to a
 /// value other than `0`.
 fn sharded_blocking_queue_default() -> bool {
-    match std::env::var_os("TOKIO_UNSTABLE_SHARDED_BLOCKING_QUEUE") {
+    match crate::platform::env::var_os("TOKIO_UNSTABLE_SHARDED_BLOCKING_QUEUE") {
         Some(value) => !value.is_empty() && value != "0",
         None => false,
     }
@@ -324,7 +326,7 @@ impl Builder {
             max_blocking_threads: 512,
 
             // Default thread name
-            thread_name: std::sync::Arc::new(|| "tokio-rt-worker".into()),
+            thread_name: alloc::sync::Arc::new(|| "tokio-rt-worker".into()),
 
             // Do not set a stack size by default
             thread_stack_size: None,
@@ -664,7 +666,7 @@ impl Builder {
     /// ```
     pub fn thread_name(&mut self, val: impl Into<String>) -> &mut Self {
         let val = val.into();
-        self.thread_name = std::sync::Arc::new(move || val.clone());
+        self.thread_name = alloc::sync::Arc::new(move || val.clone());
         self
     }
 
@@ -722,7 +724,7 @@ impl Builder {
     where
         F: Fn() -> String + Send + Sync + 'static,
     {
-        self.thread_name = std::sync::Arc::new(f);
+        self.thread_name = alloc::sync::Arc::new(f);
         self
     }
 
@@ -778,7 +780,7 @@ impl Builder {
     where
         F: Fn() + Send + Sync + 'static,
     {
-        self.after_start = Some(std::sync::Arc::new(f));
+        self.after_start = Some(alloc::sync::Arc::new(f));
         self
     }
 
@@ -806,7 +808,7 @@ impl Builder {
     where
         F: Fn() + Send + Sync + 'static,
     {
-        self.before_stop = Some(std::sync::Arc::new(f));
+        self.before_stop = Some(alloc::sync::Arc::new(f));
         self
     }
 
@@ -887,7 +889,7 @@ impl Builder {
     where
         F: Fn() + Send + Sync + 'static,
     {
-        self.before_park = Some(std::sync::Arc::new(f));
+        self.before_park = Some(alloc::sync::Arc::new(f));
         self
     }
 
@@ -925,7 +927,7 @@ impl Builder {
     where
         F: Fn() + Send + Sync + 'static,
     {
-        self.after_unpark = Some(std::sync::Arc::new(f));
+        self.after_unpark = Some(alloc::sync::Arc::new(f));
         self
     }
 
@@ -975,7 +977,7 @@ impl Builder {
     where
         F: Fn(&TaskMeta<'_>) + Send + Sync + 'static,
     {
-        self.before_spawn = Some(std::sync::Arc::new(f));
+        self.before_spawn = Some(alloc::sync::Arc::new(f));
         self
     }
 
@@ -1025,7 +1027,7 @@ impl Builder {
     where
         F: Fn(&TaskMeta<'_>) + Send + Sync + 'static,
     {
-        self.before_poll = Some(std::sync::Arc::new(f));
+        self.before_poll = Some(alloc::sync::Arc::new(f));
         self
     }
 
@@ -1075,7 +1077,7 @@ impl Builder {
     where
         F: Fn(&TaskMeta<'_>) + Send + Sync + 'static,
     {
-        self.after_poll = Some(std::sync::Arc::new(f));
+        self.after_poll = Some(alloc::sync::Arc::new(f));
         self
     }
 
@@ -1124,7 +1126,7 @@ impl Builder {
     where
         F: Fn(&TaskMeta<'_>) + Send + Sync + 'static,
     {
-        self.after_termination = Some(std::sync::Arc::new(f));
+        self.after_termination = Some(alloc::sync::Arc::new(f));
         self
     }
 
@@ -1746,7 +1748,7 @@ impl Builder {
     fn build_current_thread_local_runtime(&mut self) -> io::Result<LocalRuntime> {
         use crate::runtime::local_runtime::LocalRuntimeScheduler;
 
-        let tid = std::thread::current().id();
+        let tid = crate::platform::thread::current().id();
 
         let (scheduler, handle, blocking_pool) =
             self.build_current_thread_runtime_components(Some(tid))?;

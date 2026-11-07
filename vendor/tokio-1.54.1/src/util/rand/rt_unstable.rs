@@ -1,7 +1,9 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use super::RngSeed;
 
 use std::collections::hash_map::DefaultHasher;
-use std::hash::Hasher;
+use ::core::hash::Hasher;
 
 impl RngSeed {
     /// Generates a seed from the provided byte slice.

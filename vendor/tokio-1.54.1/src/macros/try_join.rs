@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 macro_rules! doc {
     ($try_join:item) => {
         /// Waits on multiple concurrent branches, returning when **all** branches

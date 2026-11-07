@@ -1,4 +1,6 @@
-use std::num::NonZeroU64;
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
+use ::core::num::NonZeroU64;
 
 #[derive(Eq, PartialEq, Clone, Copy, Hash, Debug)]
 pub(crate) struct ThreadId(NonZeroU64);

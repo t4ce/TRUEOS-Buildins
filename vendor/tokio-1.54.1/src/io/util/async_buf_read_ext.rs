@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::io::util::fill_buf::{fill_buf, FillBuf};
 use crate::io::util::lines::{lines, Lines};
 use crate::io::util::read_line::{read_line, ReadLine};
@@ -300,7 +302,7 @@ cfg_io_util! {
         where
             Self: Unpin,
         {
-            std::pin::Pin::new(self).consume(amt);
+            ::core::pin::Pin::new(self).consume(amt);
         }
 
         /// Returns a stream over the lines of this reader.

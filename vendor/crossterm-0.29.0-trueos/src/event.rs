@@ -118,10 +118,13 @@
 //! Check the [examples](https://github.com/crossterm-rs/crossterm/tree/master/examples) folder for more of
 //! them (`event-*`).
 
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 pub(crate) mod filter;
 pub(crate) mod read;
 pub(crate) mod source;
 #[cfg(feature = "event-stream")]
+#[cfg_attr(all(target_os = "trueos", feature = "native-core"), path = "event/stream_native.rs")]
 pub(crate) mod stream;
 pub(crate) mod sys;
 pub(crate) mod timeout;
@@ -137,33 +140,38 @@ use crate::event::{
     timeout::PollTimeout,
 };
 use crate::{csi, Command};
-use parking_lot::{MappedMutexGuard, Mutex, MutexGuard};
-use std::fmt::{self, Display};
-use std::time::Duration;
+use crate::platform::{Mutex, MutexGuard};
+use core::fmt::{self, Display};
+use core::time::Duration;
 
 use bitflags::bitflags;
-use std::hash::{Hash, Hasher};
+use core::hash::{Hash, Hasher};
 
 /// Static instance of `InternalEventReader`.
 /// This needs to be static because there can be one event reader.
-static INTERNAL_EVENT_READER: Mutex<Option<InternalEventReader>> = parking_lot::const_mutex(None);
+static INTERNAL_EVENT_READER: Mutex<Option<InternalEventReader>> = Mutex::new(None);
 
-pub(crate) fn lock_internal_event_reader() -> MappedMutexGuard<'static, InternalEventReader> {
-    MutexGuard::map(INTERNAL_EVENT_READER.lock(), |reader| {
-        reader.get_or_insert_with(InternalEventReader::default)
-    })
+pub(crate) struct InternalEventReaderGuard(MutexGuard<'static, Option<InternalEventReader>>);
+impl core::ops::Deref for InternalEventReaderGuard {
+    type Target = InternalEventReader;
+    fn deref(&self) -> &Self::Target { self.0.as_ref().expect("initialized event reader") }
 }
-fn try_lock_internal_event_reader_for(
-    duration: Duration,
-) -> Option<MappedMutexGuard<'static, InternalEventReader>> {
-    Some(MutexGuard::map(
-        INTERNAL_EVENT_READER.try_lock_for(duration)?,
-        |reader| reader.get_or_insert_with(InternalEventReader::default),
-    ))
+impl core::ops::DerefMut for InternalEventReaderGuard {
+    fn deref_mut(&mut self) -> &mut Self::Target { self.0.as_mut().expect("initialized event reader") }
+}
+fn initialized_reader(mut guard: MutexGuard<'static, Option<InternalEventReader>>) -> InternalEventReaderGuard {
+    guard.get_or_insert_with(InternalEventReader::default);
+    InternalEventReaderGuard(guard)
+}
+pub(crate) fn lock_internal_event_reader() -> InternalEventReaderGuard {
+    initialized_reader(INTERNAL_EVENT_READER.lock())
+}
+fn try_lock_internal_event_reader_for(duration: Duration) -> Option<InternalEventReaderGuard> {
+    INTERNAL_EVENT_READER.try_lock_for(duration).map(initialized_reader)
 }
 
 /// Whether discarding buffered input encountered an incomplete control sequence.
-#[cfg(unix)]
+#[cfg(any(unix, target_os = "trueos"))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InputDiscardStatus {
     /// Buffered events and incomplete input sequences were fully discarded.
@@ -184,8 +192,8 @@ pub enum InputDiscardStatus {
 /// Drop or pause all active `EventStream`s and other blocking event-reader users before calling this
 /// function. Event readers share a global lock, so a concurrently blocked reader can prevent it from
 /// returning.
-#[cfg(unix)]
-pub fn discard_buffered_input() -> std::io::Result<InputDiscardStatus> {
+#[cfg(any(unix, target_os = "trueos"))]
+pub fn discard_buffered_input() -> crate::io::Result<InputDiscardStatus> {
     lock_internal_event_reader().discard_buffered_input()
 }
 
@@ -228,7 +236,7 @@ pub fn discard_buffered_input() -> std::io::Result<InputDiscardStatus> {
 ///     poll(Duration::from_millis(100))
 /// }
 /// ```
-pub fn poll(timeout: Duration) -> std::io::Result<bool> {
+pub fn poll(timeout: Duration) -> crate::io::Result<bool> {
     poll_internal(Some(timeout), &EventFilter)
 }
 
@@ -256,7 +264,7 @@ pub fn poll(timeout: Duration) -> std::io::Result<bool> {
 /// Non-blocking read:
 ///
 /// ```no_run
-/// use std::time::Duration;
+/// use core::time::Duration;
 /// use std::io;
 ///
 /// use crossterm::event::{read, poll};
@@ -273,16 +281,16 @@ pub fn poll(timeout: Duration) -> std::io::Result<bool> {
 ///     }
 /// }
 /// ```
-pub fn read() -> std::io::Result<Event> {
+pub fn read() -> crate::io::Result<Event> {
     match read_internal(&EventFilter)? {
         InternalEvent::Event(event) => Ok(event),
-        #[cfg(unix)]
+        #[cfg(any(unix, target_os = "trueos"))]
         _ => unreachable!(),
     }
 }
 
 /// Polls to check if there are any `InternalEvent`s that can be read within the given duration.
-pub(crate) fn poll_internal<F>(timeout: Option<Duration>, filter: &F) -> std::io::Result<bool>
+pub(crate) fn poll_internal<F>(timeout: Option<Duration>, filter: &F) -> crate::io::Result<bool>
 where
     F: Filter,
 {
@@ -300,7 +308,7 @@ where
 }
 
 /// Reads a single `InternalEvent`.
-pub(crate) fn read_internal<F>(filter: &F) -> std::io::Result<InternalEvent>
+pub(crate) fn read_internal<F>(filter: &F) -> crate::io::Result<InternalEvent>
 where
     F: Filter,
 {
@@ -362,7 +370,7 @@ impl Command for EnableMouseCapture {
     }
 
     #[cfg(windows)]
-    fn execute_winapi(&self) -> std::io::Result<()> {
+    fn execute_winapi(&self) -> crate::io::Result<()> {
         sys::windows::enable_mouse_capture()
     }
 
@@ -391,7 +399,7 @@ impl Command for DisableMouseCapture {
     }
 
     #[cfg(windows)]
-    fn execute_winapi(&self) -> std::io::Result<()> {
+    fn execute_winapi(&self) -> crate::io::Result<()> {
         sys::windows::disable_mouse_capture()
     }
 
@@ -415,7 +423,7 @@ impl Command for EnableFocusChange {
     }
 
     #[cfg(windows)]
-    fn execute_winapi(&self) -> std::io::Result<()> {
+    fn execute_winapi(&self) -> crate::io::Result<()> {
         // Focus events are always enabled on Windows
         Ok(())
     }
@@ -431,7 +439,7 @@ impl Command for DisableFocusChange {
     }
 
     #[cfg(windows)]
-    fn execute_winapi(&self) -> std::io::Result<()> {
+    fn execute_winapi(&self) -> crate::io::Result<()> {
         // Focus events can't be disabled on Windows
         Ok(())
     }
@@ -454,9 +462,9 @@ impl Command for EnableBracketedPaste {
     }
 
     #[cfg(windows)]
-    fn execute_winapi(&self) -> std::io::Result<()> {
-        Err(std::io::Error::new(
-            std::io::ErrorKind::Unsupported,
+    fn execute_winapi(&self) -> crate::io::Result<()> {
+        Err(crate::io::Error::new(
+            crate::io::ErrorKind::Unsupported,
             "Bracketed paste not implemented in the legacy Windows API.",
         ))
     }
@@ -474,7 +482,7 @@ impl Command for DisableBracketedPaste {
     }
 
     #[cfg(windows)]
-    fn execute_winapi(&self) -> std::io::Result<()> {
+    fn execute_winapi(&self) -> crate::io::Result<()> {
         Ok(())
     }
 }
@@ -525,8 +533,8 @@ impl Command for PushKeyboardEnhancementFlags {
     }
 
     #[cfg(windows)]
-    fn execute_winapi(&self) -> std::io::Result<()> {
-        use std::io;
+    fn execute_winapi(&self) -> crate::io::Result<()> {
+        use crate::io;
 
         Err(io::Error::new(
             io::ErrorKind::Unsupported,
@@ -554,8 +562,8 @@ impl Command for PopKeyboardEnhancementFlags {
     }
 
     #[cfg(windows)]
-    fn execute_winapi(&self) -> std::io::Result<()> {
-        use std::io;
+    fn execute_winapi(&self) -> crate::io::Result<()> {
+        use crate::io;
 
         Err(io::Error::new(
             io::ErrorKind::Unsupported,
@@ -902,7 +910,7 @@ impl Display for KeyModifiers {
             first = false;
             match modifier {
                 KeyModifiers::SHIFT => f.write_str("Shift")?,
-                #[cfg(unix)]
+                #[cfg(any(unix, target_os = "trueos"))]
                 KeyModifiers::CONTROL => f.write_str("Control")?,
                 #[cfg(windows)]
                 KeyModifiers::CONTROL => f.write_str("Ctrl")?,
@@ -1503,20 +1511,22 @@ pub(crate) enum InternalEvent {
     /// An event.
     Event(Event),
     /// A cursor position (`col`, `row`).
-    #[cfg(unix)]
+    #[cfg(any(unix, target_os = "trueos"))]
     CursorPosition(u16, u16),
     /// The progressive keyboard enhancement flags enabled by the terminal.
-    #[cfg(unix)]
+    #[cfg(any(unix, target_os = "trueos"))]
     KeyboardEnhancementFlags(KeyboardEnhancementFlags),
     /// Attributes and architectural class of the terminal.
-    #[cfg(unix)]
+    #[cfg(any(unix, target_os = "trueos"))]
     PrimaryDeviceAttributes,
 }
 
 #[cfg(test)]
 mod tests {
+    #[allow(unused_imports)]
+    use crate::alloc_prelude::*;
     use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
+    use core::hash::{Hash, Hasher};
 
     use super::*;
     use KeyCode::*;

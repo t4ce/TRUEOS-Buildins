@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::io::interest::Interest;
 use crate::io::ready::Ready;
 use crate::loom::sync::atomic::AtomicUsize;
@@ -7,13 +9,13 @@ use crate::util::bit;
 use crate::util::linked_list::{self, LinkedList};
 use crate::util::WakeList;
 
-use std::cell::UnsafeCell;
-use std::future::Future;
-use std::marker::PhantomPinned;
-use std::pin::Pin;
-use std::ptr::NonNull;
-use std::sync::atomic::Ordering::{AcqRel, Acquire};
-use std::task::{Context, Poll, Waker};
+use ::core::cell::UnsafeCell;
+use ::core::future::Future;
+use ::core::marker::PhantomPinned;
+use ::core::pin::Pin;
+use ::core::ptr::NonNull;
+use ::core::sync::atomic::Ordering::{AcqRel, Acquire};
+use ::core::task::{Context, Poll, Waker};
 
 /// Stored in the I/O driver resource slab.
 #[derive(Debug)]
@@ -440,7 +442,7 @@ impl Future for Readiness<'_> {
     type Output = ReadyEvent;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        use std::sync::atomic::Ordering::SeqCst;
+        use ::core::sync::atomic::Ordering::SeqCst;
 
         let (scheduled_io, state, waiter) = {
             // Safety: `Self` is `!Unpin`
@@ -644,7 +646,7 @@ mod loom_tests {
                 let shutdown_io = io.clone();
                 let shutdown = thread::spawn(move || shutdown_io.shutdown());
 
-                let event = block_on(std::future::poll_fn(|cx| io.poll_readiness(cx, direction)));
+                let event = block_on(::core::future::poll_fn(|cx| io.poll_readiness(cx, direction)));
                 assert!(event.is_shutdown);
 
                 shutdown.join().unwrap();
@@ -662,7 +664,7 @@ mod loom_tests {
 
             let waiter_io = io.clone();
             let waiter = thread::spawn(move || {
-                let event = block_on(std::future::poll_fn(|cx| {
+                let event = block_on(::core::future::poll_fn(|cx| {
                     waiter_io.poll_readiness(cx, Direction::Read)
                 }));
                 assert!(event.ready.is_readable());

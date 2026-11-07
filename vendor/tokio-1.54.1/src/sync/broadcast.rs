@@ -130,6 +130,8 @@
 //! # }
 //! ```
 
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::loom::cell::UnsafeCell;
 use crate::loom::sync::atomic::{AtomicBool, AtomicUsize};
 use crate::loom::sync::{Arc, Mutex, MutexGuard};
@@ -137,13 +139,13 @@ use crate::task::coop::cooperative;
 use crate::util::linked_list::{self, GuardedLinkedList, LinkedList};
 use crate::util::WakeList;
 
-use std::fmt;
-use std::future::Future;
-use std::marker::PhantomPinned;
-use std::pin::Pin;
-use std::ptr::NonNull;
-use std::sync::atomic::Ordering::{AcqRel, Acquire, Relaxed, Release};
-use std::task::{ready, Context, Poll, Waker};
+use ::core::fmt;
+use ::core::future::Future;
+use ::core::marker::PhantomPinned;
+use ::core::pin::Pin;
+use ::core::ptr::NonNull;
+use ::core::sync::atomic::Ordering::{AcqRel, Acquire, Relaxed, Release};
+use ::core::task::{ready, Context, Poll, Waker};
 
 /// Sending-half of the [`broadcast`] channel.
 ///
@@ -261,7 +263,7 @@ pub struct Receiver<T> {
 pub mod error {
     //! Broadcast error types
 
-    use std::fmt;
+    use ::core::fmt;
 
     /// Error returned by the [`send`] function on a [`Sender`].
     ///
@@ -280,7 +282,7 @@ pub mod error {
         }
     }
 
-    impl<T: fmt::Debug> std::error::Error for SendError<T> {}
+    impl<T: fmt::Debug> ::core::error::Error for SendError<T> {}
 
     /// An error returned from the [`recv`] function on a [`Receiver`].
     ///
@@ -316,7 +318,7 @@ pub mod error {
         }
     }
 
-    impl std::error::Error for RecvError {}
+    impl ::core::error::Error for RecvError {}
 
     /// An error returned from the [`try_recv`] function on a [`Receiver`].
     ///
@@ -359,7 +361,7 @@ pub mod error {
         }
     }
 
-    impl std::error::Error for TryRecvError {}
+    impl ::core::error::Error for TryRecvError {}
 }
 
 use self::error::{RecvError, SendError, TryRecvError};
@@ -1033,7 +1035,7 @@ impl<T> Shared<T> {
         // * This wrapper will empty the list on drop. It is critical for safety
         //   that we will not leave any list entry with a pointer to the local
         //   guard node after this function returns / panics.
-        let mut list = WaitersList::new(std::mem::take(&mut tail.waiters), guard.as_ref(), self);
+        let mut list = WaitersList::new(::core::mem::take(&mut tail.waiters), guard.as_ref(), self);
 
         let mut wakers = WakeList::new();
         'outer: loop {

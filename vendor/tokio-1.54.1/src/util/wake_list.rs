@@ -1,6 +1,8 @@
-use core::mem::MaybeUninit;
-use core::ptr;
-use std::task::Waker;
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
+use ::core::mem::MaybeUninit;
+use ::core::ptr;
+use ::core::task::Waker;
 
 const NUM_WAKERS: usize = 32;
 

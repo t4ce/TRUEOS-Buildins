@@ -1,7 +1,9 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use backtrace::BacktraceSymbol;
-use std::fmt;
-use std::hash::{Hash, Hasher};
-use std::ptr;
+use ::core::fmt;
+use ::core::hash::{Hash, Hasher};
+use ::core::ptr;
 
 /// A symbol in a backtrace.
 ///

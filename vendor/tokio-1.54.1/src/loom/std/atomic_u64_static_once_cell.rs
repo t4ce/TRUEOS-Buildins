@@ -1,6 +1,8 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use super::AtomicU64;
 use crate::loom::sync::{atomic::Ordering, Mutex};
-use std::sync::OnceLock;
+use crate::platform::sync::OnceLock;
 
 pub(crate) struct StaticAtomicU64 {
     init: u64,

@@ -1,9 +1,11 @@
 #![cfg_attr(not(feature = "net"), allow(dead_code, unreachable_pub))]
 
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::io::ready::Ready;
 
-use std::fmt;
-use std::ops;
+use ::core::fmt;
+use ::core::ops;
 
 // These must be unique.
 // same as mio

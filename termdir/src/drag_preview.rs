@@ -1,5 +1,6 @@
 //! UI4 owns the floating preview; SSH retains Termdir's in-terminal preview.
-use std::path::PathBuf;
+use alloc::{string::String, vec::Vec};
+use trueos_path::PathBuf;
 
 pub struct Preview {
     #[cfg(not(test))]
@@ -9,7 +10,7 @@ pub struct Preview {
 pub fn encode_paths(paths: &[PathBuf]) -> Option<Vec<u8>> {
     let mut bytes = Vec::new();
     for path in paths {
-        let text = path.to_str()?;
+        let text = path.as_str();
         let len = u32::try_from(text.len()).ok()?;
         if bytes.len() + 4 + text.len() > trueos::ui4_drag::MAX_PAYLOAD_BYTES {
             return None;
@@ -24,7 +25,7 @@ pub fn decode_paths(mut bytes: &[u8]) -> Option<Vec<PathBuf>> {
     let mut paths = Vec::new();
     while !bytes.is_empty() {
         let len = u32::from_le_bytes(bytes.get(..4)?.try_into().ok()?) as usize;
-        let text = std::str::from_utf8(bytes.get(4..4usize.checked_add(len)?)?).ok()?;
+        let text = core::str::from_utf8(bytes.get(4..4usize.checked_add(len)?)?).ok()?;
         if text.is_empty() || text.contains('\0') {
             return None;
         }
@@ -111,7 +112,7 @@ mod tests {
         let mut cursor = bytes.as_slice();
         for path in &paths {
             let len = u32::from_le_bytes(cursor[..4].try_into().unwrap()) as usize;
-            assert_eq!(&cursor[4..4 + len], path.to_str().unwrap().as_bytes());
+            assert_eq!(&cursor[4..4 + len], path.as_str().as_bytes());
             cursor = &cursor[4 + len..];
         }
         assert!(cursor.is_empty());

@@ -9,11 +9,13 @@
 //! another activation on the thread during the park panics as a nested
 //! runtime.
 
-use std::ffi::c_void;
-use std::ptr;
-use std::sync::atomic::{AtomicPtr, Ordering::SeqCst};
-use std::sync::OnceLock;
-use std::time::Duration;
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
+use ::core::ffi::c_void;
+use ::core::ptr;
+use ::core::sync::atomic::{AtomicPtr, Ordering::SeqCst};
+use crate::platform::sync::OnceLock;
+use ::core::time::Duration;
 
 /// `em_promise_t`: an index into the host's promise table, never null.
 type Promise = *mut c_void;
@@ -105,7 +107,7 @@ fn emscripten_version() -> Option<(u32, u32, u32)> {
         .iter()
         .position(|&b| b == 0)
         .unwrap_or(uts.release.len());
-    let release = std::str::from_utf8(&uts.release[..len]).ok()?;
+    let release = ::core::str::from_utf8(&uts.release[..len]).ok()?;
     let mut parts = release.split('.');
     let major = parts.next()?.parse().ok()?;
     let minor = parts.next()?.parse().ok()?;

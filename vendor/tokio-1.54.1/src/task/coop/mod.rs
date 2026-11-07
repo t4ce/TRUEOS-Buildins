@@ -58,6 +58,8 @@
 //! [`poll`]: method@std::future::Future::poll
 //! [`task::unconstrained`]: crate::task::unconstrained()
 
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 cfg_rt! {
     mod consume_budget;
     pub use consume_budget::consume_budget;
@@ -248,11 +250,11 @@ cfg_rt! {
 
 cfg_coop! {
     use pin_project_lite::pin_project;
-    use std::cell::Cell;
-    use std::future::Future;
-    use std::marker::PhantomData;
-    use std::pin::Pin;
-    use std::task::{ready, Context, Poll};
+    use ::core::cell::Cell;
+    use ::core::future::Future;
+    use ::core::marker::PhantomData;
+    use ::core::pin::Pin;
+    use ::core::task::{ready, Context, Poll};
 
     /// Value returned by the [`poll_proceed`] method.
     #[derive(Debug)]
@@ -506,7 +508,7 @@ mod test {
 
     #[test]
     fn budgeting() {
-        use std::future::poll_fn;
+        use ::core::future::poll_fn;
         use tokio_test::*;
 
         assert!(get().0.is_none());
@@ -563,7 +565,7 @@ mod test {
             }
 
             let mut task = task::spawn(poll_fn(|cx| {
-                let coop = std::task::ready!(poll_proceed(cx));
+                let coop = ::core::task::ready!(poll_proceed(cx));
                 coop.made_progress();
                 Poll::Ready(())
             }));

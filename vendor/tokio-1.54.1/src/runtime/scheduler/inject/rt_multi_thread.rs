@@ -1,8 +1,10 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use super::{Inject, Pop};
 
 use crate::runtime::task;
 
-use std::sync::atomic::Ordering::Release;
+use ::core::sync::atomic::Ordering::Release;
 
 /// The multi-thread scheduler's inject queue. Each variant owns its queue and
 /// lock topology.

@@ -8,14 +8,16 @@
 //! split has no associated overhead and enforces all invariants at the type
 //! level.
 
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::io::{AsyncRead, AsyncWrite, Interest, ReadBuf, Ready};
 use crate::net::UnixStream;
 
 use crate::net::unix::SocketAddr;
-use std::io;
+use crate::platform::io;
 use std::net::Shutdown;
-use std::pin::Pin;
-use std::task::{Context, Poll};
+use ::core::pin::Pin;
+use ::core::task::{Context, Poll};
 
 cfg_io_util! {
     use bytes::BufMut;

@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 cfg_io_driver! {
     pub(crate) mod bit;
 }

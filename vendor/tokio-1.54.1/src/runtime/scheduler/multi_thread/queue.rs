@@ -1,13 +1,15 @@
 //! Run-queue structures to support a work-stealing scheduler
 
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::loom::cell::UnsafeCell;
 use crate::loom::sync::Arc;
 use crate::runtime::scheduler::multi_thread::{Overflow, Stats};
 use crate::runtime::task;
 
-use std::mem::{self, MaybeUninit};
-use std::ptr;
-use std::sync::atomic::Ordering::{AcqRel, Acquire, Relaxed, Release};
+use ::core::mem::{self, MaybeUninit};
+use ::core::ptr;
+use ::core::sync::atomic::Ordering::{AcqRel, Acquire, Relaxed, Release};
 
 // Use wider integers when possible to increase ABA resilience.
 //
@@ -83,7 +85,7 @@ fn make_fixed_size<T>(buffer: Box<[T]>) -> Box<[T; LOCAL_QUEUE_CAPACITY]> {
 
 /// Create a new local run-queue
 pub(crate) fn local<T: 'static>() -> (Steal<T>, Local<T>) {
-    let buffer = std::iter::repeat_with(|| UnsafeCell::new(MaybeUninit::uninit()));
+    let buffer = ::core::iter::repeat_with(|| UnsafeCell::new(MaybeUninit::uninit()));
 
     let inner = Arc::new(Inner {
         head: AtomicUnsignedLong::new(0),
@@ -349,7 +351,7 @@ impl<T> Local<T> {
             head: head.wrapping_add(NUM_TASKS_TAKEN) as UnsignedLong,
             i: 0,
         };
-        overflow.push_batch(batch_iter.chain(std::iter::once(task)));
+        overflow.push_batch(batch_iter.chain(::core::iter::once(task)));
 
         // Add 1 to factor in the task currently being scheduled.
         stats.incr_overflow_count();
@@ -570,7 +572,7 @@ impl<T> Clone for Steal<T> {
 
 impl<T> Drop for Local<T> {
     fn drop(&mut self) {
-        if !std::thread::panicking() {
+        if !crate::platform::thread::panicking() {
             assert!(self.pop().is_none(), "queue not empty");
         }
     }

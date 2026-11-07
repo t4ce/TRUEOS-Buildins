@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use super::AutoBox;
 use crate::runtime::blocking::BlockingPool;
 use crate::runtime::scheduler::CurrentThread;
@@ -6,10 +8,10 @@ use crate::task::JoinHandle;
 use crate::util::error::RUNTIME_SHUTTING_DOWN_ERROR;
 use crate::util::trace::SpawnMeta;
 
-use std::future::Future;
-use std::io;
-use std::mem;
-use std::time::Duration;
+use ::core::future::Future;
+use crate::platform::io;
+use ::core::mem;
+use ::core::time::Duration;
 
 cfg_rt_multi_thread! {
     use crate::runtime::Builder;
@@ -176,7 +178,7 @@ impl Runtime {
     /// [runtime builder]: crate::runtime::Builder
     #[cfg(feature = "rt-multi-thread")]
     #[cfg_attr(docsrs, doc(cfg(feature = "rt-multi-thread")))]
-    pub fn new() -> std::io::Result<Runtime> {
+    pub fn new() -> crate::platform::io::Result<Runtime> {
         Builder::new_multi_thread().enable_all().build()
     }
 
@@ -521,12 +523,13 @@ impl Drop for Runtime {
     }
 }
 
-impl std::panic::UnwindSafe for Runtime {}
+impl crate::platform::panic::UnwindSafe for Runtime {}
 
-impl std::panic::RefUnwindSafe for Runtime {}
+impl crate::platform::panic::RefUnwindSafe for Runtime {}
 
-fn display_eq(d: impl std::fmt::Display, s: &str) -> bool {
-    use std::fmt::Write;
+#[cfg(not(feature="native"))]
+fn display_eq(d: impl ::core::fmt::Display, s: &str) -> bool {
+    use ::core::fmt::Write;
 
     struct FormatEq<'r> {
         remainder: &'r str,
@@ -534,7 +537,7 @@ fn display_eq(d: impl std::fmt::Display, s: &str) -> bool {
     }
 
     impl<'r> Write for FormatEq<'r> {
-        fn write_str(&mut self, s: &str) -> std::fmt::Result {
+        fn write_str(&mut self, s: &str) -> ::core::fmt::Result {
             if !self.unequal {
                 if let Some(new_remainder) = self.remainder.strip_prefix(s) {
                     self.remainder = new_remainder;
@@ -583,6 +586,10 @@ fn display_eq(d: impl std::fmt::Display, s: &str) -> bool {
 /// # }
 /// ```
 pub fn is_rt_shutdown_err(err: &io::Error) -> bool {
+    #[cfg(feature="native")]
+    { return err.kind()==io::ErrorKind::Other && err.get_ref().is_some_and(|detail| *detail==RUNTIME_SHUTTING_DOWN_ERROR); }
+    #[cfg(not(feature="native"))]
+
     if let Some(inner) = err.get_ref() {
         err.kind() == io::ErrorKind::Other
             && inner.source().is_none()

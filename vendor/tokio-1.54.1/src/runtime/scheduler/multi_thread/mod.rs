@@ -1,5 +1,7 @@
 //! Multi-threaded runtime
 
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 mod counters;
 use counters::Counters;
 
@@ -43,8 +45,8 @@ use crate::runtime::{
 };
 use crate::util::RngSeedGenerator;
 
-use std::fmt;
-use std::future::Future;
+use ::core::fmt;
+use ::core::future::Future;
 
 /// Work-stealing based thread pool for executing futures.
 pub(crate) struct MultiThread;

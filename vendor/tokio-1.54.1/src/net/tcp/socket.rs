@@ -1,12 +1,14 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::net::{TcpListener, TcpStream};
 
-use std::fmt;
-use std::io;
-use std::net::SocketAddr;
+use ::core::fmt;
+use crate::platform::io;
+use ::core::net::SocketAddr;
 
 #[cfg(not(windows))]
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd, FromRawFd, IntoRawFd, RawFd};
-use std::time::Duration;
+use ::core::time::Duration;
 
 cfg_windows! {
     use crate::os::windows::io::{AsRawSocket, FromRawSocket, IntoRawSocket, RawSocket, AsSocket, BorrowedSocket};

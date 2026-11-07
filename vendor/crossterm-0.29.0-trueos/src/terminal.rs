@@ -83,7 +83,10 @@
 //!
 //! For manual execution control check out [crossterm::queue](../macro.queue.html).
 
-use std::{fmt, io};
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
+use core::fmt;
+use crate::io;
 
 #[cfg(windows)]
 use crossterm_winapi::{ConsoleMode, Handle, ScreenBuffer};
@@ -105,7 +108,7 @@ pub use sys::supports_keyboard_enhancement;
 ///
 /// Please have a look at the [raw mode](./index.html#raw-mode) section.
 pub fn is_raw_mode_enabled() -> io::Result<bool> {
-    #[cfg(unix)]
+    #[cfg(any(unix, target_os = "trueos"))]
     {
         Ok(sys::is_raw_mode_enabled())
     }
@@ -509,7 +512,10 @@ impl_display!(for Clear);
 
 #[cfg(test)]
 mod tests {
-    use std::{io::stdout, thread, time};
+    #[allow(unused_imports)]
+    use crate::alloc_prelude::*;
+    use crate::io::stdout;
+    use std::{thread, time};
 
     use crate::execute;
 

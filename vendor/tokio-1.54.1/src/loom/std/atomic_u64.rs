@@ -6,6 +6,8 @@
 // Once `cfg_target_has_atomic` feature is stable, we can replace it with
 // `#[cfg(target_has_atomic = "64")]`.
 // Refs: https://github.com/rust-lang/rust/tree/master/src/librustc_target
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 cfg_has_atomic_u64! {
     #[path = "atomic_u64_native.rs"]
     mod imp;

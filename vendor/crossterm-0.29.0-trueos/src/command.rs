@@ -1,5 +1,7 @@
-use std::fmt;
-use std::io::{self, Write};
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
+use core::fmt;
+use crate::io::{self, Write};
 
 use crate::terminal::{BeginSynchronizedUpdate, EndSynchronizedUpdate};
 
@@ -188,7 +190,7 @@ pub trait SynchronizedUpdate {
     fn sync_update<T>(&mut self, operations: impl FnOnce(&mut Self) -> T) -> io::Result<T>;
 }
 
-impl<W: std::io::Write + ?Sized> SynchronizedUpdate for W {
+impl<W: crate::io::Write + ?Sized> SynchronizedUpdate for W {
     /// Performs a set of actions within a synchronous update.
     ///
     /// Updates will be suspended in the terminal, the function will be executed against self,
@@ -278,7 +280,7 @@ fn write_command_ansi<C: Command>(
         .map_err(|fmt::Error| match adapter.res {
             Ok(()) => panic!(
                 "<{}>::write_ansi incorrectly errored",
-                std::any::type_name::<C>()
+                core::any::type_name::<C>()
             ),
             Err(e) => e,
         })

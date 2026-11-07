@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 cfg_rt! {
     pub(crate) mod current_thread;
     pub(crate) use current_thread::CurrentThread;
@@ -71,7 +73,7 @@ cfg_rt! {
     use crate::runtime::context;
     use crate::task::JoinHandle;
     use crate::util::RngSeedGenerator;
-    use std::task::Waker;
+    use ::core::task::Waker;
 
     macro_rules! match_flavor {
         ($self:expr, $ty:ident($h:ident) => $e:expr) => {
@@ -139,7 +141,7 @@ cfg_rt! {
         /// Returns true if this is a local runtime and the runtime is owned by the current thread.
         pub(crate) fn can_spawn_local_on_local_runtime(&self) -> bool {
             match self {
-                Handle::CurrentThread(h) => h.local_tid.is_some_and(|x| std::thread::current().id() == x),
+                Handle::CurrentThread(h) => h.local_tid.is_some_and(|x| crate::platform::thread::current().id() == x),
 
                 #[cfg(feature = "rt-multi-thread")]
                 Handle::MultiThread(_) => false,

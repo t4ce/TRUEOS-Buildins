@@ -1,6 +1,8 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 // Input-boundary handling adapted from Codex's pinned Crossterm fork.
 use crate::event::{sys::unix::parse::parse_event, InputDiscardStatus, InternalEvent};
-use std::collections::VecDeque;
+use alloc::collections::VecDeque;
 
 const BRACKETED_PASTE_START: &[u8] = b"\x1b[200~";
 const BRACKETED_PASTE_END: &[u8] = b"\x1b[201~";
@@ -267,7 +269,7 @@ mod discard_tests {
 
                 let remainder = &sequence[boundary..];
                 for (index, byte) in remainder.iter().enumerate() {
-                    parser.advance(std::slice::from_ref(byte), false);
+                    parser.advance(core::slice::from_ref(byte), false);
                     assert_eq!(parser.next(), None);
                     assert_eq!(
                         parser.discard_buffered_input() == InputDiscardStatus::Complete,
@@ -294,7 +296,7 @@ mod discard_tests {
         ] {
             let mut parser = Parser::default();
             for byte in sequence {
-                parser.advance(std::slice::from_ref(byte), true);
+                parser.advance(core::slice::from_ref(byte), true);
             }
             assert!(parser.buffer.is_empty());
             assert_eq!(
@@ -413,7 +415,7 @@ mod discard_tests {
             assert!(parser.buffer.is_empty());
             assert_eq!(parser.next(), None);
             for byte in terminator {
-                parser.advance(std::slice::from_ref(byte), true);
+                parser.advance(core::slice::from_ref(byte), true);
             }
             parser.advance(b"n", false);
 

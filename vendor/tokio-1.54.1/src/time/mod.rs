@@ -84,6 +84,8 @@
 //! [`interval`]: crate::time::interval()
 //! [`sleep`]: sleep()
 
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 fn safe_delay(duration: Duration) -> Duration {
     // Roughly 30 years from now.
     // 1000 years overflows on macOS, 100 years overflows on FreeBSD.
@@ -113,4 +115,4 @@ pub use timeout::{timeout, timeout_at, Timeout};
 
 // Re-export for convenience
 #[doc(no_inline)]
-pub use std::time::Duration;
+pub use ::core::time::Duration;

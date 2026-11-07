@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use super::{cancellation_queue, RegistrationQueue, Wheel};
 
 /// Local context for the time driver, used when the runtime wants to

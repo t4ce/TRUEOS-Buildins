@@ -1,9 +1,11 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::signal::unix::{OsExtraData, OsStorage};
 use crate::sync::watch;
 
-use std::ops;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::OnceLock;
+use ::core::ops;
+use ::core::sync::atomic::{AtomicBool, Ordering};
+use crate::platform::sync::OnceLock;
 
 pub(crate) type EventId = usize;
 

@@ -1,4 +1,6 @@
-use std::fmt;
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
+use ::core::fmt;
 
 #[derive(Clone, Copy, PartialEq)]
 pub(crate) struct Pack {

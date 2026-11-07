@@ -1,12 +1,15 @@
 #![no_std]
 
+#[cfg(all(feature = "native-runtime", any(feature = "tokio-runtime", feature = "tracing")))]
+compile_error!("native-runtime must have a core+alloc dependency closure; select std runtime/tracing in a separate consumer");
+
 extern crate alloc;
 pub extern crate alloc as alloc_crate;
 #[cfg(any(feature = "tokio-runtime", feature = "tracing"))]
 extern crate std;
 use core::alloc::{GlobalAlloc, Layout};
 use core::ptr::null_mut;
-#[cfg(feature = "tokio-runtime")]
+#[cfg(any(feature = "tokio-runtime", feature = "native-runtime"))]
 pub use tokio;
 pub use v::calculator_base;
 pub use v::child_hull;
@@ -185,7 +188,7 @@ pub mod platform {
     pub use v::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
     pub use v::vsys::{poll_once, sleep_ms, write_stream};
 
-    #[cfg(feature = "tokio-runtime")]
+    #[cfg(any(feature = "tokio-runtime", feature = "native-runtime"))]
     pub fn spawn_blocking<F>(f: F) -> Result<(), ()>
     where
         F: FnOnce() + Send + 'static,
@@ -197,6 +200,16 @@ pub mod platform {
     #[cfg(feature = "tokio-runtime")]
     pub mod io {
         pub use tokio::io::{Error, ErrorKind, Result, SeekFrom};
+    }
+
+    #[cfg(feature = "native-runtime")]
+    pub mod io {
+        pub use trueos_runtime::io::{Error, ErrorKind, Result, SeekFrom};
+    }
+
+    #[cfg(feature = "native-runtime")]
+    pub mod thread {
+        pub use trueos_runtime::thread::{Thread, ThreadId, current, yield_now};
     }
 
     #[cfg(feature = "tokio-runtime")]
@@ -296,7 +309,7 @@ pub mod logl {
     }
 }
 
-#[cfg(feature = "tokio-runtime")]
+#[cfg(any(feature = "tokio-runtime", feature = "native-runtime"))]
 pub mod worker;
 
 /// Blueprint-owned 32-bit x86 address spaces and execution contexts.
@@ -309,7 +322,7 @@ pub mod worker;
 #[cfg(feature = "wc3-x86")]
 pub mod x86;
 
-#[cfg(feature = "tokio-runtime")]
+#[cfg(any(feature = "tokio-runtime", feature = "native-runtime"))]
 pub mod runtime {
     pub use tokio::runtime::{Builder, Handle, Runtime};
 
@@ -327,20 +340,20 @@ pub mod runtime {
     }
 }
 
-#[cfg(feature = "tokio-runtime")]
+#[cfg(any(feature = "tokio-runtime", feature = "native-runtime"))]
 pub mod task {
     pub use tokio::spawn;
     pub use tokio::task::{JoinError, JoinHandle, JoinSet, LocalSet, yield_now};
 }
 
-#[cfg(feature = "tokio-runtime")]
+#[cfg(any(feature = "tokio-runtime", feature = "native-runtime"))]
 pub mod sync {
     pub use tokio::sync::{
         Barrier, Mutex, Notify, RwLock, Semaphore, broadcast, mpsc, oneshot, watch,
     };
 }
 
-#[cfg(feature = "tokio-runtime")]
+#[cfg(any(feature = "tokio-runtime", feature = "native-runtime"))]
 pub mod time {
     pub use tokio::time::{Duration, Instant, Interval, Sleep, interval, sleep, timeout};
 }
@@ -449,9 +462,53 @@ pub mod rng {
     }
 }
 
-#[cfg(feature = "tokio-runtime")]
+#[cfg(any(feature = "tokio-runtime", feature = "native-runtime"))]
 pub mod net {
     use core::fmt;
+
+    /// Resolve through the native DNS service on an explicit worker lane.
+    /// Numeric IPv4 and IPv6 addresses need neither a worker nor a DNS request.
+    /// Hostname resolution retains the existing platform IPv4 DNS policy.
+    #[cfg(feature = "native-runtime")]
+    pub async fn resolve_host(
+        host: &str,
+        port: u16,
+    ) -> trueos_runtime::io::Result<alloc::vec::Vec<core::net::SocketAddr>> {
+        use alloc::string::String;
+        use core::net::{IpAddr, Ipv4Addr, SocketAddr};
+        use trueos_runtime::io::{Error, ErrorKind};
+        if let Ok(ip) = host.parse::<IpAddr>() {
+            return Ok(alloc::vec![SocketAddr::new(ip, port)]);
+        }
+        let host = String::from(host);
+        crate::worker::spawn(move || {
+            unsafe extern "Rust" {
+                fn trueos_platform_dns_resolve_ipv4(host: &str) -> Result<[u8; 4], u32>;
+            }
+            // The kernel generation and SDK share the pinned Rust value ABI.
+            unsafe { trueos_platform_dns_resolve_ipv4(&host) }
+                .map(|ip| alloc::vec![SocketAddr::new(Ipv4Addr::from(ip).into(), port)])
+                .map_err(|code| {
+                    let kind = match code {
+                        2 => ErrorKind::InvalidInput,
+                        3 | 5 => ErrorKind::NotFound,
+                        4 => ErrorKind::TimedOut,
+                        _ => ErrorKind::Other,
+                    };
+                    Error::new(kind, "native DNS lookup failed")
+                })
+        })
+        .map_err(|error| {
+            let kind = match error {
+                crate::worker::SpawnError::Unavailable => ErrorKind::WouldBlock,
+                crate::worker::SpawnError::InvalidJob => ErrorKind::InvalidInput,
+                _ => ErrorKind::Other,
+            };
+            Error::new(kind, "native DNS worker submission failed")
+        })?
+        .await
+        .map_err(|_| Error::new(ErrorKind::Other, "native DNS worker completion dropped"))?
+    }
 
     #[cfg(feature = "tokio-net-probe")]
     pub use tokio::net::{TcpListener, TcpStream, ToSocketAddrs, UdpSocket, lookup_host};
@@ -602,6 +659,16 @@ pub mod io {
         AsyncBufReadExt, AsyncReadExt, AsyncSeekExt, AsyncWriteExt, Stderr, Stdin, Stdout, duplex,
         stderr, stdin, stdout,
     };
+}
+
+/// Native asynchronous I/O utilities, using TRUEOS I/O traits and errors.
+#[cfg(feature = "native-runtime")]
+pub mod io {
+    pub use tokio::io::{
+        AsyncBufRead, AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncSeek,
+        AsyncSeekExt, AsyncWrite, AsyncWriteExt, duplex,
+    };
+    pub use trueos_runtime::io::{Error, ErrorKind, Result, SeekFrom};
 }
 
 #[cfg(feature = "tokio-runtime")]
@@ -981,8 +1048,9 @@ pub mod ui3 {
     pub use frame::{CursorEvent, Frame, FrameBounds, FrameId};
 }
 
-#[cfg(feature = "tokio-runtime")]
+#[cfg(any(feature = "tokio-runtime", feature = "native-runtime"))]
 pub mod t {
+    #[cfg(feature = "tokio-runtime")]
     pub use crate::fs;
     pub use crate::io;
     #[cfg(feature = "tokio-net-probe")]
@@ -1074,8 +1142,12 @@ pub mod prelude {
     #[cfg(feature = "tokio-net-probe")]
     pub use crate::net;
     pub use crate::platform;
-    #[cfg(feature = "tokio-runtime")]
+    #[cfg(any(feature = "tokio-runtime", feature = "native-runtime"))]
     pub use crate::t;
+    #[cfg(any(feature = "tokio-runtime", feature = "native-runtime"))]
+    pub use crate::{runtime, sync, task, time, tokio, worker};
     #[cfg(feature = "tokio-runtime")]
-    pub use crate::{fs, io, runtime, sync, task, time, tokio, worker};
+    pub use crate::fs;
+    #[cfg(any(feature = "tokio-runtime", feature = "native-runtime"))]
+    pub use crate::io;
 }

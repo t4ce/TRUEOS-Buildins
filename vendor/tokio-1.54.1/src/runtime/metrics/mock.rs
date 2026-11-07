@@ -1,5 +1,7 @@
 //! This file contains mocks of the types in src/runtime/metrics
 
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 pub(crate) struct SchedulerMetrics {}
 
 #[derive(Clone, Default)]

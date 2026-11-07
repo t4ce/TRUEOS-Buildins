@@ -1,7 +1,8 @@
-use std::{
-    io::{self, Write},
-    time::Duration,
-};
+#![no_std]
+extern crate alloc;
+use alloc::{format, string::String, vec::Vec};
+use core::time::Duration;
+use crossterm::io::{self, Write};
 
 use crossterm::{
     cursor::{Hide, MoveTo, Show},
@@ -344,10 +345,17 @@ async fn run(
     draw(&app)?;
     lease
         .acknowledge_ready()
-        .map_err(|error| io::Error::new(io::ErrorKind::Other, error.to_string()))?;
+        .map_err(|error| {
+            let _ = trueos::logl::log_record(trueos::logl::level::ERROR, "os",
+                format_args!("terminal lease acknowledgement failed: {error}"));
+            io::Error::new(io::ErrorKind::Other, "OS terminal lease acknowledgement failed")
+        })?;
 
     // Drive the same visible UI and confirmation state machine as keyboard input.
-    for code in pxeproc::launch_keys().await.map_err(io::Error::other)? {
+    for code in pxeproc::launch_keys().await.map_err(|error| {
+        trueos::logl::log(trueos::logl::level::ERROR, error.as_str());
+        io::Error::new(io::ErrorKind::InvalidData, "OS launch script is invalid")
+    })? {
         trueos::time::sleep(Duration::from_millis(150)).await;
         if let Some(reason) = handle_key(&mut app, KeyEvent::new(code, event::KeyModifiers::NONE)) {
             return Ok(reason);
@@ -478,7 +486,7 @@ fn draw(app: &App) -> io::Result<()> {
     out.flush()
 }
 
-fn row(out: &mut io::Stdout, selected: bool, label: impl std::fmt::Display) -> io::Result<()> {
+fn row(out: &mut io::Stdout, selected: bool, label: impl core::fmt::Display) -> io::Result<()> {
     if selected {
         queue!(
             out,

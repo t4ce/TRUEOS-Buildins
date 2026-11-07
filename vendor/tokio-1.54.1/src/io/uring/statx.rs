@@ -15,15 +15,17 @@
     any(target_env = "gnu", target_os = "android")
 ))]
 
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::fs::File;
 use crate::io::uring::utils::cstr;
 use crate::runtime::driver::op::{CancelData, Cancellable, Completable, CqeResult, Op};
 use io_uring::{opcode, types};
 use libc::statx;
-use std::ffi::{CStr, CString};
-use std::fmt::{Debug, Formatter};
-use std::io;
-use std::mem::MaybeUninit;
+use ::core::ffi::{CStr, CString};
+use ::core::fmt::{Debug, Formatter};
+use crate::platform::io;
+use ::core::mem::MaybeUninit;
 use std::os::fd::AsRawFd;
 use std::path::Path;
 
@@ -37,7 +39,7 @@ impl Metadata {
 }
 
 impl Debug for Metadata {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> ::core::fmt::Result {
         let mut debug = f.debug_struct("Metadata");
         debug.field("len", &self.len());
         debug.finish_non_exhaustive()

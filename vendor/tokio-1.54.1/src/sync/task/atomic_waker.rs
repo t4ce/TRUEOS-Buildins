@@ -1,13 +1,15 @@
 #![cfg_attr(any(loom, not(feature = "sync")), allow(dead_code, unreachable_pub))]
 
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::loom::cell::UnsafeCell;
 use crate::loom::hint;
 use crate::loom::sync::atomic::AtomicUsize;
 
-use std::fmt;
-use std::panic::{resume_unwind, AssertUnwindSafe, RefUnwindSafe, UnwindSafe};
-use std::sync::atomic::Ordering::{AcqRel, Acquire, Release};
-use std::task::Waker;
+use ::core::fmt;
+use crate::platform::panic::{resume_unwind, AssertUnwindSafe, RefUnwindSafe, UnwindSafe};
+use ::core::sync::atomic::Ordering::{AcqRel, Acquire, Release};
+use ::core::task::Waker;
 
 /// A synchronization primitive for task waking.
 ///
@@ -176,8 +178,8 @@ impl AtomicWaker {
     where
         W: WakerRef,
     {
-        fn catch_unwind<F: FnOnce() -> R, R>(f: F) -> std::thread::Result<R> {
-            std::panic::catch_unwind(AssertUnwindSafe(f))
+        fn task_boundary<F: FnOnce() -> R, R>(f: F) -> crate::platform::thread::Result<R> {
+            crate::platform::panic::task_boundary(AssertUnwindSafe(f))
         }
 
         match self
@@ -192,7 +194,7 @@ impl AtomicWaker {
                     // unwind to restore the waker to a WAITING state. Otherwise
                     // any future calls to register will incorrectly be stuck
                     // believing it's being updated by someone else.
-                    let new_waker_or_panic = catch_unwind(move || waker.into_waker());
+                    let new_waker_or_panic = task_boundary(move || waker.into_waker());
 
                     // Set the field to contain the new waker, or if
                     // `into_waker` panicked, leave the old value.
@@ -221,7 +223,7 @@ impl AtomicWaker {
                         Ok(_) => {
                             // We don't want to give the caller the panic if it
                             // was someone else who put in that waker.
-                            let _ = catch_unwind(move || {
+                            let _ = task_boundary(move || {
                                 drop(old_waker);
                             });
                         }
@@ -249,7 +251,7 @@ impl AtomicWaker {
                             // We don't want to give the caller the panic if it
                             // was someone else who put in that waker.
                             if let Some(old_waker) = old_waker {
-                                let _ = catch_unwind(move || {
+                                let _ = task_boundary(move || {
                                     old_waker.wake();
                                 });
                             }

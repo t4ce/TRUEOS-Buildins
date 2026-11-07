@@ -3,10 +3,12 @@
 //! Each worker holds the `Sender` half. When all the `Sender` halves are
 //! dropped, the `Receiver` receives a notification.
 
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::loom::sync::Arc;
 use crate::sync::oneshot;
 
-use std::time::Duration;
+use ::core::time::Duration;
 
 #[derive(Debug, Clone)]
 pub(super) struct Sender {
@@ -44,7 +46,7 @@ impl Receiver {
         let mut e = match try_enter_blocking_region() {
             Some(enter) => enter,
             _ => {
-                if std::thread::panicking() {
+                if crate::platform::thread::panicking() {
                     // Don't panic in a panic
                     return false;
                 } else {

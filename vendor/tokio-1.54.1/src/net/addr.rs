@@ -1,6 +1,8 @@
-use std::future;
-use std::io;
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
+use ::core::future;
+use crate::platform::io;
+use ::core::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 
 /// Converts or resolves without blocking to one or more `SocketAddr` values.
 ///
@@ -50,7 +52,7 @@ where
 impl ToSocketAddrs for SocketAddr {}
 
 impl sealed::ToSocketAddrsPriv for SocketAddr {
-    type Iter = std::option::IntoIter<SocketAddr>;
+    type Iter = ::core::option::IntoIter<SocketAddr>;
     type Future = ReadyFuture<Self::Iter>;
 
     fn to_socket_addrs(&self, _: sealed::Internal) -> Self::Future {
@@ -64,7 +66,7 @@ impl sealed::ToSocketAddrsPriv for SocketAddr {
 impl ToSocketAddrs for SocketAddrV4 {}
 
 impl sealed::ToSocketAddrsPriv for SocketAddrV4 {
-    type Iter = std::option::IntoIter<SocketAddr>;
+    type Iter = ::core::option::IntoIter<SocketAddr>;
     type Future = ReadyFuture<Self::Iter>;
 
     fn to_socket_addrs(&self, _: sealed::Internal) -> Self::Future {
@@ -77,7 +79,7 @@ impl sealed::ToSocketAddrsPriv for SocketAddrV4 {
 impl ToSocketAddrs for SocketAddrV6 {}
 
 impl sealed::ToSocketAddrsPriv for SocketAddrV6 {
-    type Iter = std::option::IntoIter<SocketAddr>;
+    type Iter = ::core::option::IntoIter<SocketAddr>;
     type Future = ReadyFuture<Self::Iter>;
 
     fn to_socket_addrs(&self, _: sealed::Internal) -> Self::Future {
@@ -90,7 +92,7 @@ impl sealed::ToSocketAddrsPriv for SocketAddrV6 {
 impl ToSocketAddrs for (IpAddr, u16) {}
 
 impl sealed::ToSocketAddrsPriv for (IpAddr, u16) {
-    type Iter = std::option::IntoIter<SocketAddr>;
+    type Iter = ::core::option::IntoIter<SocketAddr>;
     type Future = ReadyFuture<Self::Iter>;
 
     fn to_socket_addrs(&self, _: sealed::Internal) -> Self::Future {
@@ -104,7 +106,7 @@ impl sealed::ToSocketAddrsPriv for (IpAddr, u16) {
 impl ToSocketAddrs for (Ipv4Addr, u16) {}
 
 impl sealed::ToSocketAddrsPriv for (Ipv4Addr, u16) {
-    type Iter = std::option::IntoIter<SocketAddr>;
+    type Iter = ::core::option::IntoIter<SocketAddr>;
     type Future = ReadyFuture<Self::Iter>;
 
     fn to_socket_addrs(&self, _: sealed::Internal) -> Self::Future {
@@ -118,7 +120,7 @@ impl sealed::ToSocketAddrsPriv for (Ipv4Addr, u16) {
 impl ToSocketAddrs for (Ipv6Addr, u16) {}
 
 impl sealed::ToSocketAddrsPriv for (Ipv6Addr, u16) {
-    type Iter = std::option::IntoIter<SocketAddr>;
+    type Iter = ::core::option::IntoIter<SocketAddr>;
     type Future = ReadyFuture<Self::Iter>;
 
     fn to_socket_addrs(&self, _: sealed::Internal) -> Self::Future {
@@ -132,7 +134,7 @@ impl sealed::ToSocketAddrsPriv for (Ipv6Addr, u16) {
 impl ToSocketAddrs for &[SocketAddr] {}
 
 impl sealed::ToSocketAddrsPriv for &[SocketAddr] {
-    type Iter = std::vec::IntoIter<SocketAddr>;
+    type Iter = alloc::vec::IntoIter<SocketAddr>;
     type Future = ReadyFuture<Self::Iter>;
 
     fn to_socket_addrs(&self, _: sealed::Internal) -> Self::Future {
@@ -180,7 +182,10 @@ cfg_net! {
             let s = self.to_owned();
 
             MaybeReady(sealed::State::Blocking(spawn_blocking(move || {
-                std::net::ToSocketAddrs::to_socket_addrs(&s)
+                #[cfg(not(feature="native"))]
+                {std::net::ToSocketAddrs::to_socket_addrs(&s)}
+                #[cfg(feature="native")]
+                {trueos_runtime::net::resolve_socket_addr(&s).map(Vec::into_iter)}
             })))
         }
     }
@@ -217,7 +222,10 @@ cfg_net! {
             let host = host.to_owned();
 
             MaybeReady(sealed::State::Blocking(spawn_blocking(move || {
-                std::net::ToSocketAddrs::to_socket_addrs(&(&host[..], port))
+                #[cfg(not(feature="native"))]
+                {std::net::ToSocketAddrs::to_socket_addrs(&(&host[..],port))}
+                #[cfg(feature="native")]
+                {trueos_runtime::net::resolve_host(&host,port).map(Vec::into_iter)}
             })))
         }
     }
@@ -254,9 +262,9 @@ pub(crate) mod sealed {
     //! part of the `ToSocketAddrs` public API. The details will change over
     //! time.
 
-    use std::future::Future;
-    use std::io;
-    use std::net::SocketAddr;
+    use ::core::future::Future;
+    use crate::platform::io;
+    use ::core::net::SocketAddr;
 
     #[doc(hidden)]
     pub trait ToSocketAddrsPriv {
@@ -272,10 +280,10 @@ pub(crate) mod sealed {
     cfg_net! {
         use crate::blocking::JoinHandle;
 
-        use std::option;
-        use std::pin::Pin;
-        use std::task::{ready,Context, Poll};
-        use std::vec;
+        use ::core::option;
+        use ::core::pin::Pin;
+        use ::core::task::{ready,Context, Poll};
+        use alloc::vec;
 
         #[doc(hidden)]
         #[derive(Debug)]

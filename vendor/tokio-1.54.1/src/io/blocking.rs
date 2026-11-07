@@ -1,13 +1,15 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::io::sys;
 use crate::io::{AsyncRead, AsyncWrite, ReadBuf};
 
-use std::cmp;
-use std::future::Future;
-use std::io;
-use std::io::prelude::*;
-use std::mem::MaybeUninit;
-use std::pin::Pin;
-use std::task::{ready, Context, Poll};
+use ::core::cmp;
+use ::core::future::Future;
+use crate::platform::io;
+use crate::platform::io::prelude::*;
+use ::core::mem::MaybeUninit;
+use ::core::pin::Pin;
+use ::core::task::{ready, Context, Poll};
 
 /// `T` should not implement _both_ Read and Write.
 #[derive(Debug)]

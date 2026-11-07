@@ -1,9 +1,11 @@
 //! Definition of the [`MaybeDone`] combinator.
 
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use pin_project_lite::pin_project;
-use std::future::{Future, IntoFuture};
-use std::pin::Pin;
-use std::task::{ready, Context, Poll};
+use ::core::future::{Future, IntoFuture};
+use ::core::pin::Pin;
+use ::core::task::{ready, Context, Poll};
 
 pin_project! {
     /// A future that may have completed.

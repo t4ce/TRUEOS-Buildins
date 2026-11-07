@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::runtime::metrics::WorkerMetrics;
 
 cfg_unstable_metrics! {
@@ -5,8 +7,8 @@ cfg_unstable_metrics! {
 }
 
 use crate::runtime::metrics::ScheduleLatencyContext;
-use std::sync::atomic::Ordering::Relaxed;
-use std::time::{Duration, Instant};
+use ::core::sync::atomic::Ordering::Relaxed;
+use crate::platform::time::{Duration, Instant};
 
 pub(crate) struct MetricsBatch {
     /// The total busy duration in nanoseconds.

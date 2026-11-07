@@ -114,7 +114,7 @@
 //#define FORCE_GC_AT_MALLOC
 
 #ifdef CONFIG_ATOMICS
-#include <pthread.h>
+#include "quickjs-thread.h"
 #include <stdatomic.h>
 #include <errno.h>
 #endif
@@ -3904,7 +3904,7 @@ static inline BOOL JS_IsEmptyString(JSValueConst v)
 /* JSClass support */
 
 #ifdef CONFIG_ATOMICS
-static pthread_mutex_t js_class_id_mutex = PTHREAD_MUTEX_INITIALIZER;
+static JSOSMutex js_class_id_mutex = JS_OS_MUTEX_INITIALIZER;
 #endif
 
 /* a new class ID is allocated if *pclass_id != 0 */
@@ -3912,7 +3912,7 @@ JSClassID JS_NewClassID(JSClassID *pclass_id)
 {
     JSClassID class_id;
 #ifdef CONFIG_ATOMICS
-    pthread_mutex_lock(&js_class_id_mutex);
+    js_os_mutex_lock(&js_class_id_mutex);
 #endif
     class_id = *pclass_id;
     if (class_id == 0) {
@@ -3920,7 +3920,7 @@ JSClassID JS_NewClassID(JSClassID *pclass_id)
         *pclass_id = class_id;
     }
 #ifdef CONFIG_ATOMICS
-    pthread_mutex_unlock(&js_class_id_mutex);
+    js_os_mutex_unlock(&js_class_id_mutex);
 #endif
     return class_id;
 }
@@ -64553,7 +64553,7 @@ static JSValue js_atomics_isLockFree(JSContext *ctx,
 typedef struct JSAtomicsWaiter {
     struct list_head link;
     BOOL linked;
-    pthread_cond_t cond;
+    JSOSCond cond;
     int32_t *ptr;
     /* asynchronous waiters (Atomics.waitAsync) */
     BOOL is_async;
@@ -64563,7 +64563,7 @@ typedef struct JSAtomicsWaiter {
     int async_state;      /* 0: waiting, 1: notified, 2: timed out */
 } JSAtomicsWaiter;
 
-static pthread_mutex_t js_atomics_mutex = PTHREAD_MUTEX_INITIALIZER;
+static JSOSMutex js_atomics_mutex = JS_OS_MUTEX_INITIALIZER;
 static struct list_head js_atomics_waiter_list =
     LIST_HEAD_INIT(js_atomics_waiter_list);
 static JS_AtomicsAsyncWaker *js_atomics_async_waker_cb;
@@ -64612,26 +64612,6 @@ static JSValue js_atomics_pause(JSContext *ctx, JSValueConst this_obj,
     return JS_UNDEFINED;
 }
 
-static int js_cond_timedwait(pthread_cond_t *cond, pthread_mutex_t *mutex,
-                             int64_t timeout_ms)
-{
-#if defined(__APPLE__)
-    struct timespec ts;
-    ts.tv_sec = timeout_ms / 1000;
-    ts.tv_nsec = (timeout_ms % 1000) * 1000000;
-    return pthread_cond_timedwait_relative_np(cond, mutex, &ts);
-#else
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    ts.tv_sec += timeout_ms / 1000;
-    ts.tv_nsec += (timeout_ms % 1000) * 1000000;
-    if (ts.tv_nsec >= 1000000000) {
-        ts.tv_nsec -= 1000000000;
-        ts.tv_sec++;
-    }
-    return pthread_cond_timedwait(cond, mutex, &ts);
-#endif
-}
 
 static JSValue js_atomics_wait(JSContext *ctx,
                                JSValueConst this_obj,
@@ -64677,45 +64657,35 @@ static JSValue js_atomics_wait(JSContext *ctx,
     /* XXX: inefficient if large number of waiters, should hash on
        'ptr' value */
     /* XXX: use Linux futexes when available ? */
-    pthread_mutex_lock(&js_atomics_mutex);
+    js_os_mutex_lock(&js_atomics_mutex);
     if (size_log2 == 3) {
         res = *(int64_t *)ptr != v;
     } else {
         res = *(int32_t *)ptr != v;
     }
     if (res) {
-        pthread_mutex_unlock(&js_atomics_mutex);
+        js_os_mutex_unlock(&js_atomics_mutex);
         return JS_AtomToString(ctx, JS_ATOM_not_equal);
     }
 
     waiter = &waiter_s;
     waiter->ptr = ptr;
-#if defined(__APPLE__)
-    pthread_cond_init(&waiter->cond, NULL);
-#else
-    {
-        pthread_condattr_t attr;
-        pthread_condattr_init(&attr);
-        pthread_condattr_setclock(&attr, CLOCK_MONOTONIC);
-        pthread_cond_init(&waiter->cond, &attr);
-        pthread_condattr_destroy(&attr);
-    }
-#endif
+    js_os_cond_init(&waiter->cond);
     waiter->linked = TRUE;
     waiter->is_async = FALSE;
     waiter->async_state = 0;
     list_add_tail(&waiter->link, &js_atomics_waiter_list);
 
     if (timeout == INT64_MAX) {
-        pthread_cond_wait(&waiter->cond, &js_atomics_mutex);
+        js_os_cond_wait(&waiter->cond, &js_atomics_mutex);
         ret = 0;
     } else {
-        ret = js_cond_timedwait(&waiter->cond, &js_atomics_mutex, timeout);
+        ret = js_os_cond_timedwait(&waiter->cond, &js_atomics_mutex, timeout);
     }
     if (waiter->linked)
         list_del(&waiter->link);
-    pthread_mutex_unlock(&js_atomics_mutex);
-    pthread_cond_destroy(&waiter->cond);
+    js_os_mutex_unlock(&js_atomics_mutex);
+    js_os_cond_destroy(&waiter->cond);
     if (ret == ETIMEDOUT) {
         return JS_AtomToString(ctx, JS_ATOM_timed_out);
     } else {
@@ -64725,9 +64695,7 @@ static JSValue js_atomics_wait(JSContext *ctx,
 
 static int64_t js_atomics_get_time_ms(void)
 {
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+    return js_os_monotonic_ms();
 }
 
 /* create the { async, value } result object of Atomics.waitAsync() */
@@ -64811,14 +64779,14 @@ static JSValue js_atomics_waitAsync(JSContext *ctx,
         return JS_EXCEPTION;
     }
     
-    pthread_mutex_lock(&js_atomics_mutex);
+    js_os_mutex_lock(&js_atomics_mutex);
     if (size_log2 == 3) {
         res = *(int64_t *)ptr != v;
     } else {
         res = *(int32_t *)ptr != v;
     }
     if (res || timeout == 0) {
-        pthread_mutex_unlock(&js_atomics_mutex);
+        js_os_mutex_unlock(&js_atomics_mutex);
         JS_FreeValue(ctx, result_obj);
         JS_FreeValue(ctx, resolving_funcs[0]);
         JS_FreeValue(ctx, resolving_funcs[1]);
@@ -64841,7 +64809,7 @@ static JSValue js_atomics_waitAsync(JSContext *ctx,
     else
         waiter->timeout_time = now + timeout;
     list_add_tail(&waiter->link, &js_atomics_waiter_list);
-    pthread_mutex_unlock(&js_atomics_mutex);
+    js_os_mutex_unlock(&js_atomics_mutex);
 
     return result_obj;
 }
@@ -64883,7 +64851,7 @@ int64_t JS_AtomicsPollWaiters(JSContext *ctx)
 
     now = js_atomics_get_time_ms();
     init_list_head(&ready_list);
-    pthread_mutex_lock(&js_atomics_mutex);
+    js_os_mutex_lock(&js_atomics_mutex);
     list_for_each_safe(el, el1, &js_atomics_waiter_list) {
         waiter = list_entry(el, JSAtomicsWaiter, link);
         if (!waiter->is_async || waiter->owner_rt != rt)
@@ -64909,7 +64877,7 @@ int64_t JS_AtomicsPollWaiters(JSContext *ctx)
             delay = 0;
         }
     }
-    pthread_mutex_unlock(&js_atomics_mutex);
+    js_os_mutex_unlock(&js_atomics_mutex);
 
     if (!list_empty(&ready_list))
         notify_async_waiters(ctx, &ready_list);
@@ -64921,10 +64889,10 @@ int64_t JS_AtomicsPollWaiters(JSContext *ctx)
    another runtime in the Atomics.waitAsync() case. */
 void JS_AtomicsSetAsyncWaker(JS_AtomicsAsyncWaker *cb, void *opaque)
 {
-    pthread_mutex_lock(&js_atomics_mutex);
+    js_os_mutex_lock(&js_atomics_mutex);
     js_atomics_async_waker_cb = cb;
     js_atomics_async_waker_opaque = opaque;
-    pthread_mutex_unlock(&js_atomics_mutex);
+    js_os_mutex_unlock(&js_atomics_mutex);
 }
 
 /* free the asynchronous waiters of a runtime (JS_FreeRuntime) */
@@ -64933,7 +64901,7 @@ static void js_atomics_free_waiters(JSRuntime *rt)
     struct list_head *el, *el1;
     JSAtomicsWaiter *waiter;
 
-    pthread_mutex_lock(&js_atomics_mutex);
+    js_os_mutex_lock(&js_atomics_mutex);
     list_for_each_safe(el, el1, &js_atomics_waiter_list) {
         waiter = list_entry(el, JSAtomicsWaiter, link);
         if (!waiter->is_async || waiter->owner_rt != rt)
@@ -64944,7 +64912,7 @@ static void js_atomics_free_waiters(JSRuntime *rt)
         JS_FreeValueRT(rt, waiter->resolving_funcs[1]);
         js_free_rt(rt, waiter);
     }
-    pthread_mutex_unlock(&js_atomics_mutex);
+    js_os_mutex_unlock(&js_atomics_mutex);
 }
 
 static JSValue js_atomics_notify(JSContext *ctx,
@@ -64979,7 +64947,7 @@ static JSValue js_atomics_notify(JSContext *ctx,
         ptr = p->u.array.u.uint8_ptr + ((uintptr_t)idx << size_log2);
         init_list_head(&waiter_list);
         init_list_head(&async_waiter_list);
-        pthread_mutex_lock(&js_atomics_mutex);
+        js_os_mutex_lock(&js_atomics_mutex);
         list_for_each_safe(el, el1, &js_atomics_waiter_list) {
             waiter = list_entry(el, JSAtomicsWaiter, link);
             if (waiter->ptr == ptr) {
@@ -65013,9 +64981,9 @@ static JSValue js_atomics_notify(JSContext *ctx,
         }
         list_for_each(el, &waiter_list) {
             waiter = list_entry(el, JSAtomicsWaiter, link);
-            pthread_cond_signal(&waiter->cond);
+            js_os_cond_signal(&waiter->cond);
         }
-        pthread_mutex_unlock(&js_atomics_mutex);
+        js_os_mutex_unlock(&js_atomics_mutex);
 
         /* better to resolve the promise outside the mutex */
         if (!list_empty(&async_waiter_list))

@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::io::{self, ReadBuf};
 use crate::loom::sync as trueos_sync;
 use crate::path::{Component, Path, PathBuf};
@@ -6,7 +8,7 @@ use ::core::future::{Future, poll_fn};
 use ::core::task::{Context, Poll, Waker};
 use alloc::string::String;
 use alloc::vec::Vec;
-use std::io::{Read, Seek, SeekFrom, Write};
+use crate::platform::io::{Read, Seek, SeekFrom, Write};
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct FileType {
@@ -438,7 +440,7 @@ async fn read_async(path: &Path) -> io::Result<Vec<u8>> {
     let mut bytes = vec![0u8; len as usize];
     let mut offset = 0usize;
     while offset < bytes.len() {
-        let end = core::cmp::min(offset.saturating_add(FS_TRANSFER_CHUNK_BYTES), bytes.len());
+        let end = ::core::cmp::min(offset.saturating_add(FS_TRANSFER_CHUNK_BYTES), bytes.len());
         let got = unsafe {
             trueos_cabi_async_fs_result_read(
                 operation.id,
@@ -471,7 +473,7 @@ async fn write_async(path: &Path, contents: &[u8]) -> io::Result<()> {
     )?;
     let mut offset = 0usize;
     while offset < contents.len() {
-        let end = core::cmp::min(
+        let end = ::core::cmp::min(
             offset.saturating_add(FS_TRANSFER_CHUNK_BYTES),
             contents.len(),
         );
@@ -565,7 +567,7 @@ async fn list_dir_async(path: &Path) -> io::Result<Vec<String>> {
     let mut bytes = vec![0u8; len as usize];
     let mut offset = 0usize;
     while offset < bytes.len() {
-        let end = core::cmp::min(offset.saturating_add(FS_TRANSFER_CHUNK_BYTES), bytes.len());
+        let end = ::core::cmp::min(offset.saturating_add(FS_TRANSFER_CHUNK_BYTES), bytes.len());
         let got = unsafe {
             trueos_cabi_async_fs_result_read(
                 operation.id,
@@ -608,7 +610,7 @@ fn decode_directory_names(bytes: &[u8]) -> io::Result<Vec<String>> {
         }
         let len = u16::from_le_bytes([header[2], header[3]]) as usize;
         offset += 4;
-        let name = core::str::from_utf8(bytes.get(offset..offset + len).ok_or_else(invalid)?)
+        let name = ::core::str::from_utf8(bytes.get(offset..offset + len).ok_or_else(invalid)?)
             .map_err(|_| invalid())?;
         if name.is_empty() || name.contains(['\0', '/']) || matches!(name, "." | "..") {
             return Err(invalid());
@@ -827,7 +829,7 @@ impl TrueosFile {
             ));
         }
         let pos = usize::try_from(inner.pos).unwrap_or(usize::MAX).min(inner.data.len());
-        let n = core::cmp::min(dst.remaining(), inner.data.len().saturating_sub(pos));
+        let n = ::core::cmp::min(dst.remaining(), inner.data.len().saturating_sub(pos));
         dst.put_slice(&inner.data[pos..pos + n]);
         inner.pos = inner.pos.saturating_add(n as u64);
         Ok(())
@@ -1110,7 +1112,7 @@ impl Read for &TrueosFile {
             ));
         }
         let pos = usize::try_from(inner.pos).unwrap_or(usize::MAX).min(inner.data.len());
-        let n = core::cmp::min(buf.len(), inner.data.len().saturating_sub(pos));
+        let n = ::core::cmp::min(buf.len(), inner.data.len().saturating_sub(pos));
         buf[..n].copy_from_slice(&inner.data[pos..pos + n]);
         inner.pos = inner.pos.saturating_add(n as u64);
         Ok(n)

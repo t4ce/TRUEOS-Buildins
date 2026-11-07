@@ -6,6 +6,8 @@
 
 //! Time driver.
 
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 mod entry;
 pub(crate) use entry::TimerEntry;
 use entry::{TimerHandle, TimerShared, MAX_SAFE_MILLIS_DURATION};
@@ -28,8 +30,9 @@ use crate::time::error::Error;
 use crate::time::{Clock, Duration};
 use crate::util::WakeList;
 
-use std::fmt;
-use std::{num::NonZeroU64, ptr::NonNull};
+use ::core::fmt;
+use ::core::num::NonZeroU64;
+use ::core::ptr::NonNull;
 
 /// Time implementation that drives [`Sleep`][sleep], [`Interval`][interval], and [`Timeout`][timeout].
 ///
@@ -234,7 +237,7 @@ impl Driver {
 
                 if duration > Duration::from_millis(0) {
                     if let Some(limit) = limit {
-                        duration = std::cmp::min(limit, duration);
+                        duration = ::core::cmp::min(limit, duration);
                     }
 
                     self.park_thread_timeout(rt_handle, duration);

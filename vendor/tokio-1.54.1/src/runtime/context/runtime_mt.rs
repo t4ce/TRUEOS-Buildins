@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use super::{EnterRuntime, CONTEXT};
 
 /// Returns true if in a runtime context.

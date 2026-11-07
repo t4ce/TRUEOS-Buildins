@@ -1,10 +1,12 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use super::utils::cstr;
 
 use crate::runtime::driver::op::{CancelData, Cancellable, Completable, CqeResult, Op};
 
 use io_uring::{opcode, types};
-use std::ffi::CString;
-use std::io;
+use alloc::ffi::CString;
+use crate::platform::io;
 use std::path::Path;
 
 #[derive(Debug)]

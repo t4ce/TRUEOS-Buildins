@@ -1,3 +1,4 @@
+#![cfg_attr(feature = "native", no_std)]
 #![allow(
     clippy::cognitive_complexity,
     clippy::large_enum_variant,
@@ -500,12 +501,26 @@ compile_error! {
     "Tokio requires the platform pointer width to be at least 32 bits"
 }
 
+#[macro_use]
 extern crate alloc;
 
+mod platform;
+#[allow(unused_imports)]
+mod alloc_prelude {
+    pub(crate) use alloc::{boxed::Box, string::{String, ToString}, vec::Vec, borrow::ToOwned};
+}
+
+#[cfg(all(feature="native", feature="std-compat"))]
+compile_error!("Tokio native and std-compat are separate runtime modes; disable default features for native");
+#[cfg(all(feature="native", not(panic="abort")))]
+compile_error!("Tokio native requires panic=abort; no unwinder is linked");
+
+#[cfg(not(feature="native"))]
 pub(crate) mod ffi {
     pub(crate) use std::ffi::*;
 }
 
+#[cfg(not(feature="native"))]
 pub(crate) mod path {
     pub(crate) use std::path::*;
 }
@@ -644,14 +659,14 @@ mod trace {
     cfg_not_taskdump! {
         #[inline(always)]
         #[allow(dead_code)]
-        pub(crate) fn trace_leaf(_: &mut std::task::Context<'_>) -> std::task::Poll<()> {
-            std::task::Poll::Ready(())
+        pub(crate) fn trace_leaf(_: &mut ::core::task::Context<'_>) -> ::core::task::Poll<()> {
+            ::core::task::Poll::Ready(())
         }
     }
 
     #[cfg_attr(not(feature = "sync"), allow(dead_code))]
     pub(crate) async fn async_trace_leaf() {
-        std::future::poll_fn(trace_leaf).await
+        ::core::future::poll_fn(trace_leaf).await
     }
 }
 
@@ -707,7 +722,7 @@ pub mod doc;
 #[allow(unused)]
 pub(crate) use self::doc::os;
 
-#[cfg(not(all(docsrs, unix)))]
+#[cfg(all(not(feature="native"), not(all(docsrs, unix))))]
 #[allow(unused)]
 pub(crate) use std::os;
 

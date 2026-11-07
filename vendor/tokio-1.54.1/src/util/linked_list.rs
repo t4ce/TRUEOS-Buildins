@@ -13,11 +13,13 @@
 //! structure's APIs are `unsafe` as they require the caller to ensure the
 //! specified node is actually contained by the list.
 
-use core::cell::UnsafeCell;
-use core::fmt;
-use core::marker::PhantomPinned;
-use core::mem::ManuallyDrop;
-use core::ptr::{self, NonNull};
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
+use ::core::cell::UnsafeCell;
+use ::core::fmt;
+use ::core::marker::PhantomPinned;
+use ::core::mem::ManuallyDrop;
+use ::core::ptr::{self, NonNull};
 
 /// An intrusive linked list.
 ///
@@ -467,7 +469,7 @@ impl<T> fmt::Debug for Pointers<T> {
 pub(crate) mod tests {
     use super::*;
 
-    use std::pin::Pin;
+    use ::core::pin::Pin;
 
     #[derive(Debug)]
     #[repr(C)]
@@ -740,7 +742,7 @@ pub(crate) mod tests {
             Pop,
             Remove(usize),
         }
-        use std::collections::VecDeque;
+        use alloc::collections::VecDeque;
 
         let ops = ops
             .iter()

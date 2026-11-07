@@ -1,7 +1,9 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::runtime::context;
 
-use std::future::poll_fn;
-use std::task::{ready, Poll};
+use ::core::future::poll_fn;
+use ::core::task::{ready, Poll};
 
 /// Yields execution back to the Tokio runtime.
 ///

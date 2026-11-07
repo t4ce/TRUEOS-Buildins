@@ -4,10 +4,13 @@
 //! of spawned tasks and allows asynchronously awaiting the output of those
 //! tasks as they complete. See the documentation for the [`JoinSet`] type for
 //! details.
-use std::future::Future;
-use std::pin::Pin;
-use std::task::{Context, Poll};
-use std::{fmt, panic};
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
+use ::core::future::Future;
+use ::core::pin::Pin;
+use ::core::task::{Context, Poll};
+use ::core::fmt;
+use crate::platform::panic;
 
 use crate::runtime::Handle;
 use crate::task::Id;
@@ -294,7 +297,7 @@ impl<T: 'static> JoinSet<T> {
     /// `tokio::select!` and another branch completes first, it is guaranteed
     /// that no tasks were removed from this `JoinSet`.
     pub async fn join_next(&mut self) -> Option<Result<T, JoinError>> {
-        std::future::poll_fn(|cx| self.poll_join_next(cx)).await
+        ::core::future::poll_fn(|cx| self.poll_join_next(cx)).await
     }
 
     /// Waits until one of the tasks in the set completes and returns its
@@ -314,7 +317,7 @@ impl<T: 'static> JoinSet<T> {
     /// [task ID]: crate::task::Id
     /// [`JoinError::id`]: fn@crate::task::JoinError::id
     pub async fn join_next_with_id(&mut self) -> Option<Result<(Id, T), JoinError>> {
-        std::future::poll_fn(|cx| self.poll_join_next_with_id(cx)).await
+        ::core::future::poll_fn(|cx| self.poll_join_next_with_id(cx)).await
     }
 
     /// Tries to join one of the tasks in the set that has completed and return its output.
@@ -634,7 +637,7 @@ impl<T> Default for JoinSet<T> {
 /// ```
 ///
 /// [`collect`]: std::iter::Iterator::collect
-impl<T, F> std::iter::FromIterator<F> for JoinSet<T>
+impl<T, F> ::core::iter::FromIterator<F> for JoinSet<T>
 where
     F: Future<Output = T>,
     F: Send + 'static,
@@ -678,7 +681,7 @@ where
 /// }
 /// # }
 /// ```
-impl<T, F> std::iter::Extend<F> for JoinSet<T>
+impl<T, F> ::core::iter::Extend<F> for JoinSet<T>
 where
     F: Future<Output = T>,
     F: Send + 'static,
@@ -719,7 +722,7 @@ impl<'a, T: 'static> Builder<'a, T> {
     ///
     /// [`AbortHandle`]: crate::task::AbortHandle
     #[track_caller]
-    pub fn spawn<F>(self, future: F) -> std::io::Result<AbortHandle>
+    pub fn spawn<F>(self, future: F) -> crate::platform::io::Result<AbortHandle>
     where
         F: Future<Output = T>,
         F: Send + 'static,
@@ -739,7 +742,7 @@ impl<'a, T: 'static> Builder<'a, T> {
     /// [`AbortHandle`]: crate::task::AbortHandle
     /// [runtime handle]: crate::runtime::Handle
     #[track_caller]
-    pub fn spawn_on<F>(self, future: F, handle: &Handle) -> std::io::Result<AbortHandle>
+    pub fn spawn_on<F>(self, future: F, handle: &Handle) -> crate::platform::io::Result<AbortHandle>
     where
         F: Future<Output = T>,
         F: Send + 'static,
@@ -762,7 +765,7 @@ impl<'a, T: 'static> Builder<'a, T> {
     /// [`JoinSet`]: crate::task::JoinSet
     /// [`AbortHandle`]: crate::task::AbortHandle
     #[track_caller]
-    pub fn spawn_blocking<F>(self, f: F) -> std::io::Result<AbortHandle>
+    pub fn spawn_blocking<F>(self, f: F) -> crate::platform::io::Result<AbortHandle>
     where
         F: FnOnce() -> T,
         F: Send + 'static,
@@ -782,7 +785,7 @@ impl<'a, T: 'static> Builder<'a, T> {
     /// [`JoinSet`]: crate::task::JoinSet
     /// [`AbortHandle`]: crate::task::AbortHandle
     #[track_caller]
-    pub fn spawn_blocking_on<F>(self, f: F, handle: &Handle) -> std::io::Result<AbortHandle>
+    pub fn spawn_blocking_on<F>(self, f: F, handle: &Handle) -> crate::platform::io::Result<AbortHandle>
     where
         F: FnOnce() -> T,
         F: Send + 'static,
@@ -808,7 +811,7 @@ impl<'a, T: 'static> Builder<'a, T> {
     /// [`LocalRuntime`]: crate::runtime::LocalRuntime
     /// [`AbortHandle`]: crate::task::AbortHandle
     #[track_caller]
-    pub fn spawn_local<F>(self, future: F) -> std::io::Result<AbortHandle>
+    pub fn spawn_local<F>(self, future: F) -> crate::platform::io::Result<AbortHandle>
     where
         F: Future<Output = T>,
         F: 'static,
@@ -826,7 +829,7 @@ impl<'a, T: 'static> Builder<'a, T> {
     /// [`LocalSet`]: crate::task::LocalSet
     /// [`AbortHandle`]: crate::task::AbortHandle
     #[track_caller]
-    pub fn spawn_local_on<F>(self, future: F, local_set: &LocalSet) -> std::io::Result<AbortHandle>
+    pub fn spawn_local_on<F>(self, future: F, local_set: &LocalSet) -> crate::platform::io::Result<AbortHandle>
     where
         F: Future<Output = T>,
         F: 'static,

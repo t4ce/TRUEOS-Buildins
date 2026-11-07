@@ -1,4 +1,6 @@
-use std::io;
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
+use crate::platform::io;
 use std::path::Path;
 
 use std::os::unix::io::{AsFd, AsRawFd, BorrowedFd, FromRawFd, IntoRawFd, RawFd};

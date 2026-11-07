@@ -1,3 +1,4 @@
+#![cfg_attr(all(target_os = "trueos", feature = "native-core"), no_std)]
 #![deny(unused_imports, unused_must_use)]
 
 //! # Cross-platform Terminal Manipulation Library
@@ -258,3 +259,14 @@ pub(crate) mod macros;
 
 #[cfg(target_os = "trueos")]
 mod trueos;
+
+extern crate alloc;
+#[cfg(test)]
+extern crate std;
+
+#[allow(unused_imports)]
+mod alloc_prelude {
+    pub(crate) use alloc::{borrow::ToOwned, boxed::Box, format, string::{String, ToString}, vec, vec::Vec};
+}
+pub mod io;
+mod platform;

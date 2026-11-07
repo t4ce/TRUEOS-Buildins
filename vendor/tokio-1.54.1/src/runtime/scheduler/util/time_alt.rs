@@ -1,11 +1,13 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::runtime::scheduler::driver;
 use crate::runtime::time_alt::cancellation_queue::{Receiver, Sender};
 use crate::runtime::time_alt::{EntryHandle, RegistrationQueue, WakeQueue, Wheel};
-use std::time::Duration;
+use ::core::time::Duration;
 
 pub(crate) fn min_duration(a: Option<Duration>, b: Option<Duration>) -> Option<Duration> {
     match (a, b) {
-        (Some(dur_a), Some(dur_b)) => Some(std::cmp::min(dur_a, dur_b)),
+        (Some(dur_a), Some(dur_b)) => Some(::core::cmp::min(dur_a, dur_b)),
         (Some(dur_a), None) => Some(dur_a),
         (None, Some(dur_b)) => Some(dur_b),
         (None, None) => None,

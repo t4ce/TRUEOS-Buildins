@@ -178,6 +178,8 @@
 //! poll call will notice it when the poll finishes, and the task is cancelled
 //! at that point.
 
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 mod core;
 use self::core::Cell;
 use self::core::Header;
@@ -223,12 +225,13 @@ use crate::util::sharded_list;
 
 use crate::runtime::metrics::ScheduleLatencyInstant;
 use crate::runtime::TaskCallback;
-use std::marker::PhantomData;
-use std::panic::Location;
-use std::ptr::NonNull;
+use ::core::marker::PhantomData;
+use crate::platform::panic::Location;
+use ::core::ptr::NonNull;
 #[cfg(tokio_unstable)]
-use std::time::Duration;
-use std::{fmt, mem};
+use ::core::time::Duration;
+use ::core::fmt;
+use ::core::mem;
 
 /// An owned handle to the task, tracked by ref count.
 #[repr(transparent)]
@@ -295,7 +298,7 @@ unsafe impl<S> Send for UnownedTask<S> {}
 unsafe impl<S> Sync for UnownedTask<S> {}
 
 /// Task result sent back.
-pub(crate) type Result<T> = std::result::Result<T, JoinError>;
+pub(crate) type Result<T> = ::core::result::Result<T, JoinError>;
 
 /// Hooks for scheduling tasks which are needed in the task harness.
 #[derive(Clone)]
@@ -391,8 +394,8 @@ cfg_rt! {
             raw: task.raw,
             _p: PhantomData,
         };
-        std::mem::forget(task);
-        std::mem::forget(notified);
+        ::core::mem::forget(task);
+        ::core::mem::forget(notified);
 
         (unowned, join)
     }
@@ -637,7 +640,7 @@ unsafe impl<S> sharded_list::ShardedListItem for Task<S> {
 #[cfg(tokio_unstable)]
 mod spawn_location {
 
-    use std::panic::Location;
+    use crate::platform::panic::Location;
 
     #[derive(Copy, Clone)]
     pub(crate) struct SpawnLocation(pub &'static Location<'static>);
@@ -651,7 +654,7 @@ mod spawn_location {
 
 #[cfg(not(tokio_unstable))]
 mod spawn_location {
-    use std::panic::Location;
+    use crate::platform::panic::Location;
 
     #[derive(Copy, Clone)]
     pub(crate) struct SpawnLocation();
@@ -665,7 +668,7 @@ mod spawn_location {
     #[cfg(test)]
     #[test]
     fn spawn_location_is_zero_sized() {
-        assert_eq!(std::mem::size_of::<SpawnLocation>(), 0);
+        assert_eq!(::core::mem::size_of::<SpawnLocation>(), 0);
     }
 }
 

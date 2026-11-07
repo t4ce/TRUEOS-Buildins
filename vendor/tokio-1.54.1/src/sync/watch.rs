@@ -162,16 +162,18 @@
 //! [`Sender::closed`]: crate::sync::watch::Sender::closed
 //! [`Sender::subscribe()`]: crate::sync::watch::Sender::subscribe
 
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::sync::notify::Notify;
 use crate::task::coop::cooperative;
 
 use crate::loom::sync::atomic::AtomicUsize;
 use crate::loom::sync::atomic::Ordering::{AcqRel, Relaxed};
 use crate::loom::sync::{Arc, RwLock, RwLockReadGuard};
-use std::fmt;
-use std::mem;
-use std::ops;
-use std::panic;
+use ::core::fmt;
+use ::core::mem;
+use ::core::ops;
+use crate::platform::panic;
 
 /// Receives values from the associated [`Sender`](struct@Sender).
 ///
@@ -331,8 +333,8 @@ impl<T: fmt::Debug> fmt::Debug for Shared<T> {
 pub mod error {
     //! Watch error types.
 
-    use std::error::Error;
-    use std::fmt;
+    use ::core::error::Error;
+    use ::core::fmt;
 
     /// Error produced when sending a value fails.
     #[derive(PartialEq, Eq, Clone, Copy)]
@@ -386,7 +388,7 @@ mod big_notify {
 
     pub(super) struct BigNotify {
         #[cfg(not(all(not(loom), feature = "sync", any(feature = "rt", feature = "macros"))))]
-        next: std::sync::atomic::AtomicUsize,
+        next: ::core::sync::atomic::AtomicUsize,
         inner: [Notify; 8],
     }
 
@@ -398,7 +400,7 @@ mod big_notify {
                     feature = "sync",
                     any(feature = "rt", feature = "macros")
                 )))]
-                next: std::sync::atomic::AtomicUsize::new(0),
+                next: ::core::sync::atomic::AtomicUsize::new(0),
                 inner: Default::default(),
             }
         }
@@ -412,7 +414,7 @@ mod big_notify {
         /// This function implements the case where randomness is not available.
         #[cfg(not(all(not(loom), feature = "sync", any(feature = "rt", feature = "macros"))))]
         pub(super) fn notified(&self) -> Notified<'_> {
-            let i = self.next.fetch_add(1, std::sync::atomic::Ordering::Relaxed) % 8;
+            let i = self.next.fetch_add(1, ::core::sync::atomic::Ordering::Relaxed) % 8;
             self.inner[i].notified()
         }
 
@@ -925,7 +927,7 @@ impl<T> Receiver<T> {
                 self.version = new_version;
 
                 if !closed || has_changed {
-                    let result = panic::catch_unwind(panic::AssertUnwindSafe(|| f(&inner)));
+                    let result = panic::task_boundary(panic::AssertUnwindSafe(|| f(&inner)));
                     match result {
                         Ok(true) => {
                             return Ok(Ref { inner, has_changed });
@@ -1195,7 +1197,7 @@ impl<T> Sender<T> {
             let mut lock = self.shared.value.write();
 
             // Update the value and catch possible panic inside func.
-            let result = panic::catch_unwind(panic::AssertUnwindSafe(|| modify(&mut lock)));
+            let result = panic::task_boundary(panic::AssertUnwindSafe(|| modify(&mut lock)));
             match result {
                 Ok(modified) => {
                     if !modified {

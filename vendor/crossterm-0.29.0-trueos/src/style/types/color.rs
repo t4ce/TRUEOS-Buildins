@@ -1,10 +1,12 @@
-use std::{
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
+use core::{
     convert::{AsRef, TryFrom},
     str::FromStr,
 };
 
 #[cfg(feature = "serde")]
-use std::fmt;
+use core::fmt;
 
 use crate::style::parse_next_u8;
 
@@ -329,6 +331,8 @@ impl<'de> serde::de::Deserialize<'de> for Color {
 
 #[cfg(test)]
 mod tests {
+    #[allow(unused_imports)]
+    use crate::alloc_prelude::*;
     use super::Color;
 
     #[test]
@@ -374,6 +378,8 @@ mod tests {
 #[cfg(test)]
 #[cfg(feature = "serde")]
 mod serde_tests {
+    #[allow(unused_imports)]
+    use crate::alloc_prelude::*;
     use super::Color;
     use serde_json;
 

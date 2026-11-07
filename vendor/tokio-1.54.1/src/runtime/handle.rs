@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::runtime;
 use crate::runtime::{context, scheduler, RuntimeFlavor, RuntimeMetrics};
 
@@ -19,9 +21,11 @@ use crate::runtime::AutoBox;
 use crate::util::error::{CONTEXT_MISSING_ERROR, THREAD_LOCAL_DESTROYED_ERROR};
 use crate::util::trace::SpawnMeta;
 
-use std::future::Future;
-use std::marker::PhantomData;
-use std::{error, fmt, mem};
+use ::core::future::Future;
+use ::core::marker::PhantomData;
+use ::core::error;
+use ::core::fmt;
+use ::core::mem;
 
 /// Runtime context guard.
 ///
@@ -517,9 +521,9 @@ impl Handle {
     }
 }
 
-impl std::panic::UnwindSafe for Handle {}
+impl crate::platform::panic::UnwindSafe for Handle {}
 
-impl std::panic::RefUnwindSafe for Handle {}
+impl crate::platform::panic::RefUnwindSafe for Handle {}
 
 cfg_taskdump! {
     impl Handle {

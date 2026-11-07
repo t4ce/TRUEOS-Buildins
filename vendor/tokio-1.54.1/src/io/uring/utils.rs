@@ -1,6 +1,8 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use std::os::fd::{AsRawFd, OwnedFd, RawFd};
 use std::os::unix::ffi::OsStrExt;
-use std::sync::Arc;
+use alloc::sync::Arc;
 use std::{ffi::CString, io, path::Path};
 
 pub(crate) type ArcFd = Arc<dyn AsRawFd + Send + Sync + 'static>;

@@ -1,4 +1,6 @@
 //! Mock version of std::fs::File;
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use mockall::mock;
 
 use crate::sync::oneshot;
@@ -163,7 +165,7 @@ impl<T> Future for JoinHandle<T> {
     type Output = Result<T, io::Error>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        use core::task::Poll;
+        use ::core::task::Poll;
 
         match Pin::new(&mut self.rx).poll(cx) {
             Poll::Ready(Ok(v)) => Poll::Ready(Ok(v)),

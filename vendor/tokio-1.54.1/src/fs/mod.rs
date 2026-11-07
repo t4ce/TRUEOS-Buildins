@@ -222,6 +222,8 @@
 //! [`flush`]: crate::io::AsyncWriteExt::flush
 //! [`tokio::fs::read`]: fn@crate::fs::read
 
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 mod canonicalize;
 pub use self::canonicalize::canonicalize;
 

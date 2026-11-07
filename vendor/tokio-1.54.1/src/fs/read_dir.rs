@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 #[cfg(not(any(target_os = "trueos", target_os = "zkvm")))]
 use crate::fs::asyncify;
 
@@ -9,9 +11,9 @@ use alloc::sync::Arc;
 use crate::fs::trueos::{FileType, Metadata};
 #[cfg(any(target_os = "trueos", target_os = "zkvm"))]
 use crate::fs::trueos::{TrueosDirEntry as StdDirEntry, TrueosReadDir as StdReadDir};
-use core::future::Future;
-use core::pin::Pin;
-use core::task::{ready, Context, Poll};
+use ::core::future::Future;
+use ::core::pin::Pin;
+use ::core::task::{ready, Context, Poll};
 use crate::ffi::OsString;
 #[cfg(not(any(target_os = "trueos", target_os = "zkvm")))]
 use std::fs::{FileType, Metadata};
@@ -92,7 +94,7 @@ impl ReadDir {
     ///
     /// This method is cancel safe.
     pub async fn next_entry(&mut self) -> io::Result<Option<DirEntry>> {
-        use core::future::poll_fn;
+        use ::core::future::poll_fn;
         poll_fn(|cx| self.poll_next_entry(cx)).await
     }
 

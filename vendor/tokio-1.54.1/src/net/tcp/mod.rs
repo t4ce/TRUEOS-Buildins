@@ -1,8 +1,11 @@
 //! TCP utility types.
 
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 pub(crate) mod listener;
 
 cfg_not_wasip1! {
+    #[cfg_attr(feature="native",path="socket_native.rs")]
     pub(crate) mod socket;
 }
 

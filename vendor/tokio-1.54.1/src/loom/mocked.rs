@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 pub(crate) use loom::*;
 
 pub(crate) mod sync {

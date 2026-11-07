@@ -1,7 +1,9 @@
-use std::sync::atomic::{AtomicUsize, Ordering};
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
+use ::core::sync::atomic::{AtomicUsize, Ordering};
 
 cfg_64bit_metrics! {
-    use std::sync::atomic::AtomicU64;
+    use ::core::sync::atomic::AtomicU64;
 }
 
 /// `AtomicU64` that is a no-op on platforms without 64-bit atomics

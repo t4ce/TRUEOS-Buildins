@@ -3,6 +3,8 @@
 
 #![allow(unused)]
 
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 #[cfg(not(all(test, loom)))]
 mod std;
 #[cfg(not(all(test, loom)))]

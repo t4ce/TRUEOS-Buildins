@@ -1,6 +1,8 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use std::collections::{hash_map::DefaultHasher, HashMap, HashSet};
-use std::fmt;
-use std::hash::{Hash, Hasher};
+use ::core::fmt;
+use ::core::hash::{Hash, Hasher};
 
 use super::{Backtrace, Symbol, SymbolTrace, Trace};
 

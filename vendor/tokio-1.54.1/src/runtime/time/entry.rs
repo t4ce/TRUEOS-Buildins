@@ -54,6 +54,8 @@
 //!
 //! [mark_pending]: TimerHandle::mark_pending
 
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::loom::cell::UnsafeCell;
 use crate::loom::sync::atomic::AtomicU64;
 use crate::loom::sync::atomic::Ordering;
@@ -63,8 +65,10 @@ use crate::sync::AtomicWaker;
 use crate::util::linked_list;
 
 use pin_project_lite::pin_project;
-use std::task::{Context, Poll, Waker};
-use std::{marker::PhantomPinned, pin::Pin, ptr::NonNull};
+use ::core::task::{Context, Poll, Waker};
+use ::core::marker::PhantomPinned;
+use ::core::pin::Pin;
+use ::core::ptr::NonNull;
 
 type TimerResult = Result<(), crate::time::error::Error>;
 
@@ -106,8 +110,8 @@ impl Default for StateCell {
     }
 }
 
-impl std::fmt::Debug for StateCell {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl ::core::fmt::Debug for StateCell {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
         write!(f, "StateCell({:?})", self.read_state())
     }
 }
@@ -354,8 +358,8 @@ pub(crate) struct TimerShared {
 unsafe impl Send for TimerShared {}
 unsafe impl Sync for TimerShared {}
 
-impl std::fmt::Debug for TimerShared {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl ::core::fmt::Debug for TimerShared {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
         f.debug_struct("TimerShared")
             .field(
                 "registered_when",

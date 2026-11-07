@@ -1,10 +1,12 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::io::{AsyncBufRead, AsyncRead, ReadBuf};
 
 use pin_project_lite::pin_project;
-use std::fmt;
-use std::io;
-use std::pin::Pin;
-use std::task::{ready, Context, Poll};
+use ::core::fmt;
+use crate::platform::io;
+use ::core::pin::Pin;
+use ::core::task::{ready, Context, Poll};
 
 pin_project! {
     /// Stream for the [`chain`](super::AsyncReadExt::chain) method.

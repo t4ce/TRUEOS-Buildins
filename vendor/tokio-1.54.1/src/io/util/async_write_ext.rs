@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::io::util::flush::{flush, Flush};
 use crate::io::util::shutdown::{shutdown, Shutdown};
 use crate::io::util::write::{write, Write};
@@ -15,7 +17,7 @@ use crate::io::util::write_int::{
 };
 use crate::io::util::write_vectored::{write_vectored, WriteVectored};
 use crate::io::AsyncWrite;
-use std::io::IoSlice;
+use crate::platform::io::IoSlice;
 
 use bytes::Buf;
 

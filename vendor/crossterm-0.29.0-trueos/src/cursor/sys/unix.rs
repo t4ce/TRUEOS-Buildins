@@ -1,7 +1,7 @@
-use std::{
-    io::{self, Error, ErrorKind, Write},
-    time::Duration,
-};
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
+use crate::io::{self, Error, ErrorKind, Write};
+use core::time::Duration;
 
 use crate::{
     event::{filter::CursorPositionFilter, poll_internal, read_internal, InternalEvent},

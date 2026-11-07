@@ -1,7 +1,9 @@
 //! Time error types.
 
-use std::error;
-use std::fmt;
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
+use ::core::error;
+use ::core::fmt;
 
 /// Errors encountered by the timer implementation.
 ///
@@ -114,10 +116,10 @@ impl fmt::Display for Elapsed {
     }
 }
 
-impl std::error::Error for Elapsed {}
+impl ::core::error::Error for Elapsed {}
 
-impl From<Elapsed> for std::io::Error {
-    fn from(_err: Elapsed) -> std::io::Error {
-        std::io::ErrorKind::TimedOut.into()
+impl From<Elapsed> for crate::platform::io::Error {
+    fn from(_err: Elapsed) -> crate::platform::io::Error {
+        crate::platform::io::ErrorKind::TimedOut.into()
     }
 }

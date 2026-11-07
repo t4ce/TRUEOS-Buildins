@@ -2,7 +2,9 @@
 //! are zero-sized so that the size of types using them are not increased
 //! unless schedule latency tracking is explicitly enabled.
 
-use std::time::Instant;
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
+use crate::platform::time::Instant;
 
 #[derive(Copy, Clone)]
 pub(crate) struct ScheduleLatencyInstant();

@@ -2,6 +2,8 @@
 //!
 //! [`File`]: File
 
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 #[cfg(not(any(target_os = "trueos", target_os = "zkvm")))]
 use crate::fs::asyncify;
 use crate::fs::{FileTimes, OpenOptions};
@@ -10,18 +12,18 @@ use crate::io::{AsyncRead, AsyncSeek, AsyncWrite, ReadBuf};
 use crate::sync::Mutex;
 
 use alloc::sync::Arc;
-use core::cmp;
+use ::core::cmp;
 use ::core::fmt;
-use core::future::Future;
-use core::pin::Pin;
-use core::task::{ready, Context, Poll};
+use ::core::future::Future;
+use ::core::pin::Pin;
+use ::core::task::{ready, Context, Poll};
 #[cfg(any(target_os = "trueos", target_os = "zkvm"))]
 use crate::fs::trueos::{Metadata, Permissions};
 #[cfg(not(any(target_os = "trueos", target_os = "zkvm")))]
 use std::fs::{Metadata, Permissions};
 use crate::io::{self, SeekFrom};
 use crate::path::Path;
-use std::io::Seek;
+use crate::platform::io::Seek;
 
 #[cfg(not(test))]
 use crate::blocking::JoinHandle;
@@ -980,7 +982,7 @@ impl AsyncWrite for File {
     fn poll_write_vectored(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-        bufs: &[std::io::IoSlice<'_>],
+        bufs: &[crate::platform::io::IoSlice<'_>],
     ) -> Poll<Result<usize, io::Error>> {
         ready!(crate::trace::trace_leaf(cx));
         let me = self.get_mut();
@@ -1307,7 +1309,7 @@ impl Inner {
     }
 
     async fn complete_inflight(&mut self) {
-        use core::future::poll_fn;
+        use ::core::future::poll_fn;
 
         poll_fn(|cx| self.poll_complete_inflight(cx)).await;
     }

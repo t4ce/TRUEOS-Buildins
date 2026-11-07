@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::task::JoinHandle;
 
 cfg_rt_multi_thread! {

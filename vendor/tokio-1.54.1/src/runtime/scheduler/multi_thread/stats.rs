@@ -1,7 +1,9 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::runtime::metrics::ScheduleLatencyContext;
 use crate::runtime::{Config, MetricsBatch, WorkerMetrics};
 
-use std::time::{Duration, Instant};
+use crate::platform::time::{Duration, Instant};
 
 /// Per-worker statistics. This is used for both tuning the scheduler and
 /// reporting runtime-level metrics/stats.
@@ -106,7 +108,10 @@ impl Stats {
             let mean_poll_duration = elapsed / num_polls;
 
             // Compute the alpha weighted by the number of tasks polled this batch.
+            #[cfg(not(feature="native"))]
             let weighted_alpha = 1.0 - (1.0 - TASK_POLL_TIME_EWMA_ALPHA).powf(num_polls);
+            #[cfg(feature="native")]
+            let weighted_alpha = 1.0 - libm::pow(1.0-TASK_POLL_TIME_EWMA_ALPHA,num_polls);
 
             // Now compute the new weighted average task poll time.
             self.task_poll_time_ewma = weighted_alpha * mean_poll_duration

@@ -5,20 +5,22 @@
 // triggers this warning but it is safe to ignore in this case.
 #![cfg_attr(not(feature = "sync"), allow(unreachable_pub, dead_code))]
 
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::loom::cell::UnsafeCell;
 use crate::loom::sync::atomic::AtomicUsize;
 use crate::loom::sync::Mutex;
 use crate::util::linked_list::{self, GuardedLinkedList, LinkedList};
 use crate::util::WakeList;
 
-use std::future::Future;
-use std::marker::PhantomPinned;
-use std::panic::{RefUnwindSafe, UnwindSafe};
-use std::pin::Pin;
-use std::ptr::NonNull;
-use std::sync::atomic::Ordering::{self, AcqRel, Acquire, Relaxed, Release};
-use std::sync::Arc;
-use std::task::{Context, Poll, Waker};
+use ::core::future::Future;
+use ::core::marker::PhantomPinned;
+use crate::platform::panic::{RefUnwindSafe, UnwindSafe};
+use ::core::pin::Pin;
+use ::core::ptr::NonNull;
+use ::core::sync::atomic::Ordering::{self, AcqRel, Acquire, Relaxed, Release};
+use alloc::sync::Arc;
+use ::core::task::{Context, Poll, Waker};
 
 /// Notifies a single task to wake up.
 ///
@@ -80,7 +82,7 @@ use std::task::{Context, Poll, Waker};
 /// ```
 /// use tokio::sync::Notify;
 ///
-/// use std::collections::VecDeque;
+/// use alloc::collections::VecDeque;
 /// use std::sync::Mutex;
 ///
 /// struct Channel<T> {
@@ -138,7 +140,7 @@ use std::task::{Context, Poll, Waker};
 /// ```
 /// use tokio::sync::Notify;
 ///
-/// use std::collections::VecDeque;
+/// use alloc::collections::VecDeque;
 /// use std::sync::Mutex;
 ///
 /// struct Channel<T> {
@@ -771,7 +773,7 @@ impl Notify {
         // * This wrapper will empty the list on drop. It is critical for safety
         //   that we will not leave any list entry with a pointer to the local
         //   guard node after this function returns / panics.
-        let mut list = NotifyWaitersList::new(std::mem::take(&mut *waiters), guard.as_ref(), self);
+        let mut list = NotifyWaitersList::new(::core::mem::take(&mut *waiters), guard.as_ref(), self);
 
         let mut wakers = WakeList::new();
         'outer: loop {
@@ -947,7 +949,7 @@ impl Notified<'_> {
     /// ```
     /// use tokio::sync::Notify;
     ///
-    /// use std::collections::VecDeque;
+    /// use alloc::collections::VecDeque;
     /// use std::sync::Mutex;
     ///
     /// struct Channel<T> {
@@ -1208,7 +1210,7 @@ impl NotifiedProject<'_> {
                         // None when we reach this line.
                         unsafe {
                             old_waker =
-                                waiter.waker.with_mut(|v| std::mem::replace(&mut *v, waker));
+                                waiter.waker.with_mut(|v| ::core::mem::replace(&mut *v, waker));
                         }
                     }
 
@@ -1225,7 +1227,7 @@ impl NotifiedProject<'_> {
                 State::Waiting => {
                     #[cfg(all(tokio_unstable, feature = "taskdump"))]
                     if let Some(ctx) = ctx.as_mut() {
-                        std::task::ready!(crate::trace::trace_leaf(ctx));
+                        ::core::task::ready!(crate::trace::trace_leaf(ctx));
                     }
 
                     if waiter.notification.load(Acquire).is_some() {
@@ -1319,7 +1321,7 @@ impl NotifiedProject<'_> {
                 State::Done => {
                     #[cfg(all(tokio_unstable, feature = "taskdump"))]
                     if let Some(ctx) = ctx.as_mut() {
-                        std::task::ready!(crate::trace::trace_leaf(ctx));
+                        ::core::task::ready!(crate::trace::trace_leaf(ctx));
                     }
                     return Poll::Ready(());
                 }

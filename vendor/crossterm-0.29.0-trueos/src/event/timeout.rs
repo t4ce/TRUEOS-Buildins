@@ -1,4 +1,7 @@
-use std::time::{Duration, Instant};
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
+use core::time::Duration;
+use crate::platform::Instant;
 
 /// Keeps track of the elapsed time since the moment the polling started.
 #[derive(Debug, Clone)]
@@ -41,7 +44,10 @@ impl PollTimeout {
 
 #[cfg(test)]
 mod tests {
-    use std::time::{Duration, Instant};
+    #[allow(unused_imports)]
+    use crate::alloc_prelude::*;
+    use core::time::Duration;
+use crate::platform::Instant;
 
     use super::PollTimeout;
 

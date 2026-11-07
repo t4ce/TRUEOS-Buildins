@@ -21,6 +21,8 @@
 //! processes in general aren't scalable (e.g. millions) so it shouldn't be that
 //! bad in theory...
 
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 pub(crate) mod orphan;
 use orphan::{OrphanQueue, OrphanQueueImpl, Wait};
 
@@ -39,18 +41,18 @@ use crate::signal::unix::{signal, Signal, SignalKind};
 
 use mio::event::Source;
 use mio::unix::pipe;
-use std::fmt;
+use ::core::fmt;
 use std::fs::File;
-use std::future::Future;
-use std::io;
+use ::core::future::Future;
+use crate::platform::io;
 use std::os::unix::io::{AsRawFd, OwnedFd, RawFd};
-use std::pin::Pin;
+use ::core::pin::Pin;
 use std::process::{
     Child as StdChild, ChildStderr as StdChildStderr, ChildStdin as StdChildStdin,
     ChildStdout as StdChildStdout, ExitStatus, Stdio,
 };
-use std::task::Context;
-use std::task::Poll;
+use ::core::task::Context;
+use ::core::task::Poll;
 
 impl Wait for StdChild {
     fn id(&self) -> u32 {
@@ -70,7 +72,7 @@ impl Kill for StdChild {
 
 cfg_not_has_const_mutex_new! {
     fn get_orphan_queue() -> &'static OrphanQueueImpl<StdChild> {
-        use std::sync::OnceLock;
+        use crate::platform::sync::OnceLock;
 
         static ORPHAN_QUEUE: OnceLock<OrphanQueueImpl<StdChild>> = OnceLock::new();
 

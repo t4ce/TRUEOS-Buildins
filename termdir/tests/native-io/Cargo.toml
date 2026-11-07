@@ -1,0 +1,12 @@
+[package]
+name = "termdir-native-io-tests"
+version = "0.0.0"
+edition = "2024"
+[workspace]
+[lib]
+path = "../../src/native_io_tests.rs"
+[dependencies]
+crossterm = { path = "../../../vendor/crossterm-0.29.0-trueos", default-features = false, features = ["events", "native-core"] }
+
+[patch.crates-io]
+mio = { path = "../../../../TRUEOS/vendor/mio-1.2.0" }

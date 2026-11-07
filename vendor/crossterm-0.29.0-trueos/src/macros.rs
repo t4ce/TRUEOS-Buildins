@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 /// Concatenate string literals while prepending a ANSI control sequence introducer (`"\x1b["`)
 #[macro_export]
 #[doc(hidden)]
@@ -65,7 +67,7 @@ macro_rules! osc {
 #[macro_export]
 macro_rules! queue {
     ($writer:expr $(, $command:expr)* $(,)?) => {{
-        use ::std::io::Write;
+        use $crate::io::Write;
 
         // This allows the macro to take both mut impl Write and &mut impl Write.
         Ok($writer.by_ref())
@@ -116,12 +118,12 @@ macro_rules! queue {
 #[macro_export]
 macro_rules! execute {
     ($writer:expr $(, $command:expr)* $(,)? ) => {{
-        use ::std::io::Write;
+        use $crate::io::Write;
 
         // Queue each command, then flush
         $crate::queue!($writer $(, $command)*)
             .and_then(|()| {
-                ::std::io::Write::flush($writer.by_ref())
+                $crate::io::Write::flush($writer.by_ref())
             })
     }}
 }
@@ -130,8 +132,8 @@ macro_rules! execute {
 #[macro_export]
 macro_rules! impl_display {
     (for $($t:ty),+) => {
-        $(impl ::std::fmt::Display for $t {
-            fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        $(impl ::core::fmt::Display for $t {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
                 $crate::command::execute_fmt(f, self)
             }
         })*
@@ -152,8 +154,10 @@ macro_rules! impl_from {
 
 #[cfg(test)]
 mod tests {
-    use std::io;
-    use std::str;
+    #[allow(unused_imports)]
+    use crate::alloc_prelude::*;
+    use crate::io;
+    use core::str;
 
     // Helper for execute tests to confirm flush
     #[derive(Default, Debug, Clone)]
@@ -165,7 +169,7 @@ mod tests {
     impl io::Write for FakeWrite {
         fn write(&mut self, content: &[u8]) -> io::Result<usize> {
             let content = str::from_utf8(content)
-                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+                .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid UTF-8"))?;
             self.buffer.push_str(content);
             self.flushed = false;
             Ok(content.len())
@@ -179,7 +183,7 @@ mod tests {
 
     #[cfg(not(windows))]
     mod unix {
-        use std::fmt;
+        use core::fmt;
 
         use super::FakeWrite;
         use crate::command::Command;
@@ -243,7 +247,7 @@ mod tests {
 
     #[cfg(windows)]
     mod windows {
-        use std::fmt;
+        use core::fmt;
 
         use std::cell::RefCell;
 
@@ -280,7 +284,7 @@ mod tests {
                 f.write_str(self.value)
             }
 
-            fn execute_winapi(&self) -> std::io::Result<()> {
+            fn execute_winapi(&self) -> crate::io::Result<()> {
                 self.stream.borrow_mut().push(self.value);
                 Ok(())
             }
@@ -301,7 +305,7 @@ mod tests {
         // write buffer are equal to the concatenation of `stream_result`.
         fn test_harness(
             stream_result: &[&'static str],
-            test: impl FnOnce(&mut FakeWrite, &mut WindowsEventStream) -> std::io::Result<()>,
+            test: impl FnOnce(&mut FakeWrite, &mut WindowsEventStream) -> crate::io::Result<()>,
         ) {
             let mut stream = WindowsEventStream::default();
             let mut writer = FakeWrite::default();

@@ -1,14 +1,16 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::io::util::read_until::read_until_internal;
 use crate::io::AsyncBufRead;
 
 use pin_project_lite::pin_project;
-use std::future::Future;
-use std::io;
-use std::marker::PhantomPinned;
-use std::mem;
-use std::pin::Pin;
-use std::string::FromUtf8Error;
-use std::task::{ready, Context, Poll};
+use ::core::future::Future;
+use crate::platform::io;
+use ::core::marker::PhantomPinned;
+use ::core::mem;
+use ::core::pin::Pin;
+use alloc::string::FromUtf8Error;
+use ::core::task::{ready, Context, Poll};
 
 pin_project! {
     /// Future for the [`read_line`](crate::io::AsyncBufReadExt::read_line) method.
@@ -79,7 +81,12 @@ pub(super) fn finish_string_read(
             let utf8_error = utf8_err.utf8_error();
             put_back_original_data(output, utf8_err.into_bytes(), num_bytes);
 
-            Poll::Ready(Err(io::Error::new(io::ErrorKind::InvalidData, utf8_error)))
+            Poll::Ready(Err({
+                #[cfg(not(feature="native"))]
+                {io::Error::new(io::ErrorKind::InvalidData,utf8_error)}
+                #[cfg(feature="native")]
+                {let _=utf8_error;io::Error::new(io::ErrorKind::InvalidData,"stream did not contain valid UTF-8")}
+            }))
         }
         (Err(io_err), Err(utf8_err)) => {
             put_back_original_data(output, utf8_err.into_bytes(), read);

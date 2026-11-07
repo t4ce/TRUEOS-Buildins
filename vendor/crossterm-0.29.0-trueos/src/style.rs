@@ -111,12 +111,12 @@
 //! );
 //! ```
 
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 #[cfg(not(target_os = "trueos"))]
 use std::env;
 
-use std::{
-    fmt::{self, Display},
-};
+use core::fmt::{self, Display};
 
 use crate::command::execute_fmt;
 use crate::{csi, impl_display, Command};
@@ -216,7 +216,7 @@ impl Command for SetForegroundColor {
     }
 
     #[cfg(windows)]
-    fn execute_winapi(&self) -> std::io::Result<()> {
+    fn execute_winapi(&self) -> crate::io::Result<()> {
         sys::windows::set_foreground_color(self.0)
     }
 }
@@ -240,7 +240,7 @@ impl Command for SetBackgroundColor {
     }
 
     #[cfg(windows)]
-    fn execute_winapi(&self) -> std::io::Result<()> {
+    fn execute_winapi(&self) -> crate::io::Result<()> {
         sys::windows::set_background_color(self.0)
     }
 }
@@ -264,9 +264,9 @@ impl Command for SetUnderlineColor {
     }
 
     #[cfg(windows)]
-    fn execute_winapi(&self) -> std::io::Result<()> {
-        Err(std::io::Error::new(
-            std::io::ErrorKind::Other,
+    fn execute_winapi(&self) -> crate::io::Result<()> {
+        Err(crate::io::Error::new(
+            crate::io::ErrorKind::Other,
             "SetUnderlineColor not supported by winapi.",
         ))
     }
@@ -319,7 +319,7 @@ impl Command for SetColors {
     }
 
     #[cfg(windows)]
-    fn execute_winapi(&self) -> std::io::Result<()> {
+    fn execute_winapi(&self) -> crate::io::Result<()> {
         if let Some(color) = self.0.foreground {
             sys::windows::set_foreground_color(color)?;
         }
@@ -346,7 +346,7 @@ impl Command for SetAttribute {
     }
 
     #[cfg(windows)]
-    fn execute_winapi(&self) -> std::io::Result<()> {
+    fn execute_winapi(&self) -> crate::io::Result<()> {
         // attributes are not supported by WinAPI.
         Ok(())
     }
@@ -373,7 +373,7 @@ impl Command for SetAttributes {
     }
 
     #[cfg(windows)]
-    fn execute_winapi(&self) -> std::io::Result<()> {
+    fn execute_winapi(&self) -> crate::io::Result<()> {
         // attributes are not supported by WinAPI.
         Ok(())
     }
@@ -406,7 +406,7 @@ impl Command for SetStyle {
     }
 
     #[cfg(windows)]
-    fn execute_winapi(&self) -> std::io::Result<()> {
+    fn execute_winapi(&self) -> crate::io::Result<()> {
         panic!("tried to execute SetStyle command using WinAPI, use ANSI instead");
     }
 
@@ -473,7 +473,7 @@ impl<D: Display> Command for PrintStyledContent<D> {
     }
 
     #[cfg(windows)]
-    fn execute_winapi(&self) -> std::io::Result<()> {
+    fn execute_winapi(&self) -> crate::io::Result<()> {
         Ok(())
     }
 }
@@ -492,7 +492,7 @@ impl Command for ResetColor {
     }
 
     #[cfg(windows)]
-    fn execute_winapi(&self) -> std::io::Result<()> {
+    fn execute_winapi(&self) -> crate::io::Result<()> {
         sys::windows::reset()
     }
 }
@@ -509,7 +509,7 @@ impl<T: Display> Command for Print<T> {
     }
 
     #[cfg(windows)]
-    fn execute_winapi(&self) -> std::io::Result<()> {
+    fn execute_winapi(&self) -> crate::io::Result<()> {
         panic!("tried to execute Print command using WinAPI, use ANSI instead");
     }
 
@@ -541,6 +541,8 @@ fn parse_next_u8<'a>(iter: &mut impl Iterator<Item = &'a str>) -> Option<u8> {
 
 #[cfg(test)]
 mod tests {
+    #[allow(unused_imports)]
+    use crate::alloc_prelude::*;
     use super::*;
 
     // On Windows many env var tests will fail so we need to conditionally check for ANSI support.

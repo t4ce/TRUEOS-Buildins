@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use super::MAX_SAFE_MILLIS_DURATION;
 use crate::time::{Clock, Duration, Instant};
 

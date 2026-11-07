@@ -1,9 +1,11 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 #[cfg(unix)]
 use super::unix::{self as os_impl};
 #[cfg(windows)]
 use super::windows::{self as os_impl};
 
-use std::io;
+use crate::platform::io;
 
 /// Completes when a "ctrl-c" notification is sent to the process.
 ///

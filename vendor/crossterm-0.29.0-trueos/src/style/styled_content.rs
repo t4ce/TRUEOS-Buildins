@@ -1,6 +1,8 @@
 //! This module contains the logic to style some content.
 
-use std::fmt::{self, Display, Formatter};
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
+use core::fmt::{self, Display, Formatter};
 
 use super::{ContentStyle, PrintStyledContent};
 

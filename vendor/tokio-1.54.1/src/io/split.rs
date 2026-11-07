@@ -4,14 +4,16 @@
 //! To restore this read/write object from its `split::ReadHalf` and
 //! `split::WriteHalf` use `unsplit`.
 
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::io::{AsyncRead, AsyncWrite, ReadBuf};
 
-use std::fmt;
-use std::io;
-use std::pin::Pin;
-use std::sync::Arc;
-use std::sync::Mutex;
-use std::task::{Context, Poll};
+use ::core::fmt;
+use crate::platform::io;
+use ::core::pin::Pin;
+use alloc::sync::Arc;
+use crate::platform::sync::Mutex;
+use ::core::task::{Context, Poll};
 
 cfg_io_util! {
     /// The readable half of a value returned from [`split`](split()).

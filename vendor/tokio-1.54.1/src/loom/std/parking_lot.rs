@@ -3,11 +3,13 @@
 //!
 //! This can be extended to additional types/methods as required.
 
-use std::fmt;
-use std::marker::PhantomData;
-use std::ops::{Deref, DerefMut};
-use std::sync::{LockResult, TryLockError};
-use std::time::Duration;
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
+use ::core::fmt;
+use ::core::marker::PhantomData;
+use ::core::ops::{Deref, DerefMut};
+use crate::platform::sync::{LockResult, TryLockError};
+use ::core::time::Duration;
 
 // All types in this file are marked with PhantomData to ensure that
 // parking_lot's send_guard feature does not leak through and affect when Tokio
@@ -19,29 +21,29 @@ use std::time::Duration;
 pub(crate) use parking_lot::WaitTimeoutResult;
 
 #[derive(Debug)]
-pub(crate) struct Mutex<T: ?Sized>(PhantomData<std::sync::Mutex<T>>, parking_lot::Mutex<T>);
+pub(crate) struct Mutex<T: ?Sized>(PhantomData<crate::platform::sync::Mutex<T>>, parking_lot::Mutex<T>);
 
 #[derive(Debug)]
-pub(crate) struct RwLock<T>(PhantomData<std::sync::RwLock<T>>, parking_lot::RwLock<T>);
+pub(crate) struct RwLock<T>(PhantomData<crate::platform::sync::RwLock<T>>, parking_lot::RwLock<T>);
 
 #[derive(Debug)]
-pub(crate) struct Condvar(PhantomData<std::sync::Condvar>, parking_lot::Condvar);
+pub(crate) struct Condvar(PhantomData<crate::platform::sync::Condvar>, parking_lot::Condvar);
 
 #[derive(Debug)]
 pub(crate) struct MutexGuard<'a, T: ?Sized>(
-    PhantomData<std::sync::MutexGuard<'a, T>>,
+    PhantomData<crate::platform::sync::MutexGuard<'a, T>>,
     parking_lot::MutexGuard<'a, T>,
 );
 
 #[derive(Debug)]
 pub(crate) struct RwLockReadGuard<'a, T: ?Sized>(
-    PhantomData<std::sync::RwLockReadGuard<'a, T>>,
+    PhantomData<crate::platform::sync::RwLockReadGuard<'a, T>>,
     parking_lot::RwLockReadGuard<'a, T>,
 );
 
 #[derive(Debug)]
 pub(crate) struct RwLockWriteGuard<'a, T: ?Sized>(
-    PhantomData<std::sync::RwLockWriteGuard<'a, T>>,
+    PhantomData<crate::platform::sync::RwLockWriteGuard<'a, T>>,
     parking_lot::RwLockWriteGuard<'a, T>,
 );
 

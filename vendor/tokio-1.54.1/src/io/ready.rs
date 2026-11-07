@@ -1,9 +1,11 @@
 #![cfg_attr(not(feature = "net"), allow(unreachable_pub))]
 
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::io::interest::Interest;
 
-use std::fmt;
-use std::ops;
+use ::core::fmt;
+use ::core::ops;
 
 const READABLE: usize = 0b0_01;
 const WRITABLE: usize = 0b0_10;

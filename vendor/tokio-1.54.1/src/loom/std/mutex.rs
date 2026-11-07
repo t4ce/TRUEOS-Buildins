@@ -1,4 +1,6 @@
-use std::sync::{self, MutexGuard, TryLockError};
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
+use crate::platform::sync::{self, MutexGuard, TryLockError};
 
 /// Adapter for `std::Mutex` that removes the poisoning aspects
 /// from its API.

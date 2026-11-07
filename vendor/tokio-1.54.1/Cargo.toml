@@ -67,7 +67,10 @@ allowed_external_types = [
 ]
 
 [features]
-default = []
+default = ["std-compat"]
+std-compat = ["bytes?/std", "mio?/std-compat"]
+# Genuine native runtime: core + alloc and execution-aware TRUEOS primitives.
+native = ["dep:trueos-runtime", "dep:trueos-io", "dep:libm"]
 fs = []
 full = [
     "fs",
@@ -880,13 +883,13 @@ path = "tests/unwindsafe.rs"
 
 [dependencies.bytes]
 version = "1.2.1"
+default-features = false
 optional = true
 
 [dependencies.mio]
 version = "1.2.0"
 optional = true
 default-features = false
-features = ["std-compat"]
 
 [dependencies.parking_lot]
 version = "0.12.0"
@@ -969,7 +972,7 @@ default-features = false
 [target.'cfg(any(not(target_family = "wasm"), target_os = "emscripten"))'.dev-dependencies.tempfile]
 version = "3.1.0"
 
-[target.'cfg(any(not(target_family = "wasm"), target_os = "emscripten", all(target_os = "wasi", not(target_env = "p1"))))'.dependencies.socket2]
+[target.'cfg(any(unix, windows, target_os = "emscripten", all(target_os = "wasi", not(target_env = "p1"))))'.dependencies.socket2]
 version = "0.6.3"
 features = ["all"]
 optional = true
@@ -1040,3 +1043,15 @@ check-cfg = [
     "cfg(tokio_unstable)",
     'cfg(target_os, values("cygwin", "trueos"))',
 ]
+
+[dependencies.trueos-runtime]
+path = "../../../TRUEOS/crates/trueos-runtime"
+optional = true
+
+[dependencies.trueos-io]
+path = "../../../TRUEOS/crates/trueos-io"
+optional = true
+
+[dependencies.libm]
+version = "0.2"
+optional = true

@@ -1,15 +1,17 @@
 #![allow(irrefutable_let_patterns)]
 
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::runtime::blocking::BlockingPool;
 use crate::runtime::scheduler::CurrentThread;
 use crate::runtime::{context, AutoBox, Builder, EnterGuard, Handle};
 use crate::task::JoinHandle;
 
 use crate::util::trace::SpawnMeta;
-use std::future::Future;
-use std::marker::PhantomData;
-use std::mem;
-use std::time::Duration;
+use ::core::future::Future;
+use ::core::marker::PhantomData;
+use ::core::mem;
+use ::core::time::Duration;
 
 /// A local Tokio runtime.
 ///
@@ -93,7 +95,7 @@ impl LocalRuntime {
     ///
     /// [mod]: crate::runtime
     /// [runtime builder]: crate::runtime::Builder
-    pub fn new() -> std::io::Result<LocalRuntime> {
+    pub fn new() -> crate::platform::io::Result<LocalRuntime> {
         Builder::new_current_thread()
             .enable_all()
             .build_local(Default::default())
@@ -153,7 +155,7 @@ impl LocalRuntime {
         F: Future + 'static,
         F::Output: 'static,
     {
-        let fut_size = std::mem::size_of::<F>();
+        let fut_size = ::core::mem::size_of::<F>();
         let meta = SpawnMeta::new_unnamed(fut_size);
 
         // safety: spawn_local can only be called from `LocalRuntime`, which this is
@@ -401,6 +403,6 @@ impl Drop for LocalRuntime {
     }
 }
 
-impl std::panic::UnwindSafe for LocalRuntime {}
+impl crate::platform::panic::UnwindSafe for LocalRuntime {}
 
-impl std::panic::RefUnwindSafe for LocalRuntime {}
+impl crate::platform::panic::RefUnwindSafe for LocalRuntime {}

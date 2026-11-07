@@ -26,6 +26,8 @@
 //! [`tokio::net::unix::pipe`]: unix::pipe
 //! [`AsyncFd`]: crate::io::unix::AsyncFd
 
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 mod addr;
 cfg_not_wasip1! {
     #[cfg(feature = "net")]

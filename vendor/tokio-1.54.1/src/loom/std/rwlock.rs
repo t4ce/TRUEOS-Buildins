@@ -1,4 +1,6 @@
-use std::sync::{self, RwLockReadGuard, RwLockWriteGuard, TryLockError};
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
+use crate::platform::sync::{self, RwLockReadGuard, RwLockWriteGuard, TryLockError};
 
 /// Adapter for `std::sync::RwLock` that removes the poisoning aspects
 /// from its api.

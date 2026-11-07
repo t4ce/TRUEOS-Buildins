@@ -6,10 +6,12 @@
 //! specified using the `T` parameter. It will usually be a `JoinHandle` or
 //! similar.
 
-use std::marker::PhantomPinned;
-use std::mem::ManuallyDrop;
-use std::ptr::NonNull;
-use std::task::{Context, Waker};
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
+use ::core::marker::PhantomPinned;
+use ::core::mem::ManuallyDrop;
+use ::core::ptr::NonNull;
+use ::core::task::{Context, Waker};
 
 use crate::loom::cell::UnsafeCell;
 use crate::loom::sync::{Arc, Mutex};
@@ -429,7 +431,7 @@ impl<T> Drop for IdleNotifiedSet<T> {
         self.drain(drop);
 
         #[cfg(debug_assertions)]
-        if !std::thread::panicking() {
+        if !crate::platform::thread::panicking() {
             let lock = self.lists.lock();
             assert!(lock.idle.is_empty());
             assert!(lock.notified.is_empty());

@@ -1,4 +1,6 @@
-use std::fmt::Display;
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
+use core::fmt::Display;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -154,7 +156,7 @@ Attribute! {
 }
 
 impl Display for Attribute {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "{}", SetAttribute(*self))?;
         Ok(())
     }

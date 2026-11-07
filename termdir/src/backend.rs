@@ -1,4 +1,5 @@
 //! Backend choice is explicit at launch; native frames are never inferred in the guest.
+use alloc::string::String;
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Backend {
     #[default]

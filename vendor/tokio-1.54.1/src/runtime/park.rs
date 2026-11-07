@@ -1,10 +1,12 @@
 #![cfg_attr(not(feature = "full"), allow(dead_code))]
 
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::loom::sync::atomic::AtomicUsize;
 use crate::loom::sync::{Arc, Condvar, Mutex};
 
-use std::sync::atomic::Ordering::SeqCst;
-use std::time::Duration;
+use ::core::sync::atomic::Ordering::SeqCst;
+use ::core::time::Duration;
 
 #[derive(Debug)]
 pub(crate) struct ParkThread {
@@ -154,7 +156,7 @@ impl Inner {
             match dur {
                 Some(Duration::ZERO) => return,
                 Some(dur) => {
-                    std::thread::sleep(dur);
+                    crate::platform::thread::sleep(dur);
                     return;
                 }
                 None => panic!(
@@ -234,7 +236,7 @@ impl Inner {
         // Wasm without atomics doesn't have threads, so just sleep.
         {
             let _m = m;
-            std::thread::sleep(dur);
+            crate::platform::thread::sleep(dur);
         }
 
         match self.state.swap(EMPTY, SeqCst) {
@@ -302,10 +304,10 @@ impl UnparkThread {
 }
 
 use crate::loom::thread::AccessError;
-use std::future::Future;
-use std::marker::PhantomData;
-use std::rc::Rc;
-use std::task::{RawWaker, RawWakerVTable, Waker};
+use ::core::future::Future;
+use ::core::marker::PhantomData;
+use alloc::rc::Rc;
+use ::core::task::{RawWaker, RawWakerVTable, Waker};
 
 /// Blocks the current thread using a condition variable.
 #[derive(Debug)]
@@ -364,8 +366,8 @@ impl CachedParkThread {
     }
 
     pub(crate) fn block_on<F: Future>(&mut self, f: F) -> Result<F::Output, AccessError> {
-        use std::task::Context;
-        use std::task::Poll::Ready;
+        use ::core::task::Context;
+        use ::core::task::Poll::Ready;
 
         let waker = self.waker()?;
         let mut cx = Context::from_waker(&waker);

@@ -1,4 +1,6 @@
-use std::future::Future;
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
+use ::core::future::Future;
 
 cfg_rt! {
     #[track_caller]

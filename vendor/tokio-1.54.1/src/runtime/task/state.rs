@@ -1,7 +1,9 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::loom::sync::atomic::AtomicUsize;
 
-use std::fmt;
-use std::sync::atomic::Ordering::{AcqRel, Acquire, Release};
+use ::core::fmt;
+use ::core::sync::atomic::Ordering::{AcqRel, Acquire, Release};
 
 pub(super) struct State {
     val: AtomicUsize,
@@ -358,7 +360,7 @@ impl State {
     /// Optimistically tries to swap the state assuming the join handle is
     /// __immediately__ dropped on spawn.
     pub(super) fn drop_join_handle_fast(&self) -> Result<(), ()> {
-        use std::sync::atomic::Ordering::Relaxed;
+        use ::core::sync::atomic::Ordering::Relaxed;
 
         // Relaxed is acceptable as if this function is called and succeeds,
         // then nothing has been done w/ the join handle.
@@ -474,8 +476,8 @@ impl State {
     }
 
     pub(super) fn ref_inc(&self) {
-        use std::process;
-        use std::sync::atomic::Ordering::Relaxed;
+
+        use ::core::sync::atomic::Ordering::Relaxed;
 
         // Using a relaxed ordering is alright here, as knowledge of the
         // original reference prevents other threads from erroneously deleting
@@ -492,7 +494,7 @@ impl State {
 
         // If the reference count overflowed, abort.
         if prev > isize::MAX as usize {
-            process::abort();
+            crate::platform::abort();
         }
     }
 

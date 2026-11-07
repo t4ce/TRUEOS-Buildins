@@ -1,10 +1,12 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::io::blocking::Buf;
 use crate::io::uring::utils::{ArcFd, UringFd};
 use crate::runtime::driver::op::{CancelData, Cancellable, Completable, CqeResult, Op};
 
 use io_uring::{opcode, types};
-use std::fmt;
-use std::io::{self, Error};
+use ::core::fmt;
+use crate::platform::io::{self, Error};
 use std::os::fd::OwnedFd;
 
 /// Trait for buffers that can be used with io-uring read operations.

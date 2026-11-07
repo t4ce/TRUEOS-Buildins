@@ -1,6 +1,8 @@
-use parking_lot::Once;
-use std::fmt::{self, Formatter};
-use std::sync::atomic::{AtomicBool, Ordering};
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
+use crate::platform::Once;
+use core::fmt::{self, Formatter};
+use core::sync::atomic::{AtomicBool, Ordering};
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -156,6 +158,8 @@ impl fmt::Display for Colored {
 
 #[cfg(test)]
 mod tests {
+    #[allow(unused_imports)]
+    use crate::alloc_prelude::*;
     use crate::style::{Color, Colored};
 
     fn check_format_color(colored: Colored, expected: &str) {

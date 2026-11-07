@@ -1,6 +1,8 @@
 // Some combinations of features may not use these constants.
 #![cfg_attr(not(feature = "full"), allow(dead_code))]
 
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 /// Error string explaining that the Tokio context hasn't been instantiated.
 pub(crate) const CONTEXT_MISSING_ERROR: &str =
     "there is no reactor running, must be called from the context of a Tokio 1.x runtime";

@@ -1,7 +1,9 @@
-use std::io::{self, IoSlice};
-use std::ops::DerefMut;
-use std::pin::Pin;
-use std::task::{Context, Poll};
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
+use crate::platform::io::{self, IoSlice};
+use ::core::ops::DerefMut;
+use ::core::pin::Pin;
+use ::core::task::{Context, Poll};
 
 /// Writes bytes asynchronously.
 ///
@@ -267,7 +269,18 @@ impl AsyncWrite for Vec<u8> {
         _: &mut Context<'_>,
         bufs: &[IoSlice<'_>],
     ) -> Poll<io::Result<usize>> {
-        Poll::Ready(io::Write::write_vectored(&mut *self, bufs))
+        #[cfg(not(feature="native"))]
+        { Poll::Ready(io::Write::write_vectored(&mut *self, bufs)) }
+        #[cfg(feature="native")]
+        {
+            let mut written=0;
+            for buf in bufs {
+                let n=io::Write::write(&mut *self,buf)?;
+                written+=n;
+                if n<buf.len(){break;}
+            }
+            Poll::Ready(Ok(written))
+        }
     }
 
     #[inline]
@@ -302,7 +315,18 @@ impl AsyncWrite for io::Cursor<&mut [u8]> {
         _: &mut Context<'_>,
         bufs: &[IoSlice<'_>],
     ) -> Poll<io::Result<usize>> {
-        Poll::Ready(io::Write::write_vectored(&mut *self, bufs))
+        #[cfg(not(feature="native"))]
+        { Poll::Ready(io::Write::write_vectored(&mut *self, bufs)) }
+        #[cfg(feature="native")]
+        {
+            let mut written=0;
+            for buf in bufs {
+                let n=io::Write::write(&mut *self,buf)?;
+                written+=n;
+                if n<buf.len(){break;}
+            }
+            Poll::Ready(Ok(written))
+        }
     }
 
     #[inline]
@@ -321,6 +345,7 @@ impl AsyncWrite for io::Cursor<&mut [u8]> {
     }
 }
 
+#[cfg(not(feature="native"))]
 impl AsyncWrite for io::Cursor<&mut Vec<u8>> {
     #[inline]
     fn poll_write(
@@ -337,7 +362,18 @@ impl AsyncWrite for io::Cursor<&mut Vec<u8>> {
         _: &mut Context<'_>,
         bufs: &[IoSlice<'_>],
     ) -> Poll<io::Result<usize>> {
-        Poll::Ready(io::Write::write_vectored(&mut *self, bufs))
+        #[cfg(not(feature="native"))]
+        { Poll::Ready(io::Write::write_vectored(&mut *self, bufs)) }
+        #[cfg(feature="native")]
+        {
+            let mut written=0;
+            for buf in bufs {
+                let n=io::Write::write(&mut *self,buf)?;
+                written+=n;
+                if n<buf.len(){break;}
+            }
+            Poll::Ready(Ok(written))
+        }
     }
 
     #[inline]
@@ -356,6 +392,7 @@ impl AsyncWrite for io::Cursor<&mut Vec<u8>> {
     }
 }
 
+#[cfg(not(feature="native"))]
 impl AsyncWrite for io::Cursor<Vec<u8>> {
     #[inline]
     fn poll_write(
@@ -372,7 +409,18 @@ impl AsyncWrite for io::Cursor<Vec<u8>> {
         _: &mut Context<'_>,
         bufs: &[IoSlice<'_>],
     ) -> Poll<io::Result<usize>> {
-        Poll::Ready(io::Write::write_vectored(&mut *self, bufs))
+        #[cfg(not(feature="native"))]
+        { Poll::Ready(io::Write::write_vectored(&mut *self, bufs)) }
+        #[cfg(feature="native")]
+        {
+            let mut written=0;
+            for buf in bufs {
+                let n=io::Write::write(&mut *self,buf)?;
+                written+=n;
+                if n<buf.len(){break;}
+            }
+            Poll::Ready(Ok(written))
+        }
     }
 
     #[inline]
@@ -391,6 +439,7 @@ impl AsyncWrite for io::Cursor<Vec<u8>> {
     }
 }
 
+#[cfg(not(feature="native"))]
 impl AsyncWrite for io::Cursor<Box<[u8]>> {
     #[inline]
     fn poll_write(
@@ -407,7 +456,18 @@ impl AsyncWrite for io::Cursor<Box<[u8]>> {
         _: &mut Context<'_>,
         bufs: &[IoSlice<'_>],
     ) -> Poll<io::Result<usize>> {
-        Poll::Ready(io::Write::write_vectored(&mut *self, bufs))
+        #[cfg(not(feature="native"))]
+        { Poll::Ready(io::Write::write_vectored(&mut *self, bufs)) }
+        #[cfg(feature="native")]
+        {
+            let mut written=0;
+            for buf in bufs {
+                let n=io::Write::write(&mut *self,buf)?;
+                written+=n;
+                if n<buf.len(){break;}
+            }
+            Poll::Ready(Ok(written))
+        }
     }
 
     #[inline]
@@ -425,3 +485,57 @@ impl AsyncWrite for io::Cursor<Box<[u8]>> {
         self.poll_flush(cx)
     }
 }
+
+// core3's Cursor intentionally has only the fixed-slice synchronous Write
+// implementation. These are genuine native asynchronous memory adapters.
+#[cfg(feature="native")]
+trait CursorStorage {
+    fn write_at(&mut self,position:u64,buf:&[u8])->io::Result<usize>;
+}
+#[cfg(feature="native")]
+impl CursorStorage for Vec<u8>{
+    fn write_at(&mut self,position:u64,buf:&[u8])->io::Result<usize>{
+        let pos=usize::try_from(position).map_err(|_|io::invalid_input("cursor position overflows address space"))?;
+        let end=pos.checked_add(buf.len()).ok_or_else(||io::invalid_input("cursor write overflows address space"))?;
+        if end>self.len(){self.resize(end,0);}
+        self[pos..end].copy_from_slice(buf);Ok(buf.len())
+    }
+}
+#[cfg(feature="native")]
+impl CursorStorage for &mut Vec<u8>{fn write_at(&mut self,p:u64,b:&[u8])->io::Result<usize>{(**self).write_at(p,b)}}
+#[cfg(feature="native")]
+impl CursorStorage for Box<[u8]>{
+    fn write_at(&mut self,p:u64,b:&[u8])->io::Result<usize>{
+        let pos=p.min(self.len()as u64)as usize;
+        let n=b.len().min(self.len()-pos);self[pos..pos+n].copy_from_slice(&b[..n]);Ok(n)
+    }
+}
+#[cfg(feature="native")]
+macro_rules! native_cursor_write {
+    ($ty:ty)=>{
+        impl AsyncWrite for io::Cursor<$ty>{
+            fn poll_write(mut self:Pin<&mut Self>,_:&mut Context<'_>,buf:&[u8])->Poll<io::Result<usize>>{
+                let position=self.position();let n=self.as_mut().get_mut().get_mut().write_at(position,buf)?;
+                self.set_position(position+n as u64);Poll::Ready(Ok(n))
+            }
+            fn poll_write_vectored(mut self:Pin<&mut Self>,cx:&mut Context<'_>,bufs:&[IoSlice<'_>])->Poll<io::Result<usize>>{
+                let mut written=0;
+                for buf in bufs {
+                    match self.as_mut().poll_write(cx,buf){
+                        Poll::Ready(Ok(n))=>{written+=n;if n<buf.len(){break;}},
+                        Poll::Ready(Err(e)) if written==0=>return Poll::Ready(Err(e)),
+                        Poll::Ready(Err(_))=>break,
+                        Poll::Pending=>unreachable!("memory write cannot park"),
+                    }
+                }
+                Poll::Ready(Ok(written))
+            }
+            fn is_write_vectored(&self)->bool{true}
+            fn poll_flush(self:Pin<&mut Self>,_:&mut Context<'_>)->Poll<io::Result<()>>{Poll::Ready(Ok(()))}
+            fn poll_shutdown(self:Pin<&mut Self>,_:&mut Context<'_>)->Poll<io::Result<()>>{Poll::Ready(Ok(()))}
+        }
+    }
+}
+#[cfg(feature="native")] native_cursor_write!(Vec<u8>);
+#[cfg(feature="native")] native_cursor_write!(&mut Vec<u8>);
+#[cfg(feature="native")] native_cursor_write!(Box<[u8]>);

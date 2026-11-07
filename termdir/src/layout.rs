@@ -1,4 +1,6 @@
-use std::f64::consts::PI;
+use alloc::vec::Vec;
+use core::f64::consts::PI;
+use crate::math::{cos, round, sin};
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct WorldPos {
@@ -303,12 +305,12 @@ fn place_radial(
     let node = nodes[id];
     let angle = (start + end) * 0.5;
     let radius = base_radius + radial_step * node.depth.saturating_sub(1) as f64;
-    let cx = angle.cos() * radius * x_aspect;
-    let cy = angle.sin() * radius * y_aspect;
+    let cx = cos(angle) * radius * x_aspect;
+    let cy = sin(angle) * radius * y_aspect;
 
     positions[id] = WorldPos {
-        x: (cx - node.visual_width as f64 * 0.5).round() as i32,
-        y: cy.round() as i32,
+        x: round(cx - node.visual_width as f64 * 0.5) as i32,
+        y: round(cy) as i32,
     };
 
     let kids = &children[id];

@@ -1,13 +1,17 @@
 #![cfg_attr(any(not(feature = "full"), loom), allow(unused_imports, dead_code))]
 
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 mod atomic_u16;
 mod atomic_u32;
 mod atomic_u64;
 mod atomic_usize;
 mod barrier;
+#[cfg(not(feature="native"))]
 mod mutex;
 #[cfg(all(feature = "parking_lot", not(miri)))]
 mod parking_lot;
+#[cfg(not(feature="native"))]
 mod rwlock;
 mod unsafe_cell;
 
@@ -26,14 +30,15 @@ pub(crate) mod future {
 }
 
 pub(crate) mod hint {
-    pub(crate) use std::hint::spin_loop;
+    pub(crate) use ::core::hint::spin_loop;
 }
 
+#[cfg(not(feature="native"))]
 pub(crate) mod rand {
     use std::collections::hash_map::RandomState;
-    use std::hash::{BuildHasher, Hash, Hasher};
-    use std::sync::atomic::AtomicU32;
-    use std::sync::atomic::Ordering::Relaxed;
+    use ::core::hash::{BuildHasher, Hash, Hasher};
+    use ::core::sync::atomic::AtomicU32;
+    use ::core::sync::atomic::Ordering::Relaxed;
 
     static COUNTER: AtomicU32 = AtomicU32::new(1);
 
@@ -45,7 +50,7 @@ pub(crate) mod rand {
 }
 
 pub(crate) mod sync {
-    pub(crate) use std::sync::{Arc, Weak};
+    pub(crate) use alloc::sync::{Arc, Weak};
 
     // Below, make sure all the feature-influenced types are exported for
     // internal use. Note however that some are not _currently_ named by
@@ -58,15 +63,20 @@ pub(crate) mod sync {
         Condvar, Mutex, MutexGuard, RwLock, RwLockReadGuard, WaitTimeoutResult,
     };
 
-    #[cfg(not(all(feature = "parking_lot", not(miri))))]
+    #[cfg(all(not(feature="native"), not(all(feature = "parking_lot", not(miri)))))]
     #[allow(unused_imports)]
-    pub(crate) use std::sync::{Condvar, MutexGuard, RwLockReadGuard, WaitTimeoutResult};
+    pub(crate) use crate::platform::sync::{Condvar, MutexGuard, RwLockReadGuard, WaitTimeoutResult};
 
-    #[cfg(not(all(feature = "parking_lot", not(miri))))]
+    #[cfg(all(not(feature="native"), not(all(feature = "parking_lot", not(miri)))))]
     pub(crate) use crate::loom::std::mutex::Mutex;
 
-    #[cfg(not(all(feature = "parking_lot", not(miri))))]
+    #[cfg(all(not(feature="native"), not(all(feature = "parking_lot", not(miri)))))]
     pub(crate) use crate::loom::std::rwlock::RwLock;
+
+    #[cfg(feature="native")]
+    pub(crate) use trueos_runtime::sync::{Condvar,MutexGuard,RwLockReadGuard,WaitTimeoutResult};
+    #[cfg(feature="native")]
+    pub(crate) use super::native_sync::{Mutex,RwLock};
 
     pub(crate) mod atomic {
         pub(crate) use crate::loom::std::atomic_u16::AtomicU16;
@@ -74,7 +84,7 @@ pub(crate) mod sync {
         pub(crate) use crate::loom::std::atomic_u64::AtomicU64;
         pub(crate) use crate::loom::std::atomic_usize::AtomicUsize;
 
-        pub(crate) use std::sync::atomic::{fence, AtomicBool, AtomicPtr, AtomicU8, Ordering};
+        pub(crate) use ::core::sync::atomic::{fence, AtomicBool, AtomicPtr, AtomicU8, Ordering};
     }
 
     pub(crate) use super::barrier::Barrier;
@@ -83,11 +93,11 @@ pub(crate) mod sync {
 pub(crate) mod sys {
     #[cfg(feature = "rt-multi-thread")]
     pub(crate) fn num_cpus() -> usize {
-        use std::num::NonZeroUsize;
+        use ::core::num::NonZeroUsize;
 
         const ENV_WORKER_THREADS: &str = "TOKIO_WORKER_THREADS";
 
-        match std::env::var(ENV_WORKER_THREADS) {
+        match crate::platform::env::var(ENV_WORKER_THREADS) {
             Ok(s) => {
                 let n = s.parse().unwrap_or_else(|e| {
                     panic!("\"{ENV_WORKER_THREADS}\" must be usize, error: {e}, value: {s}")
@@ -95,10 +105,10 @@ pub(crate) mod sys {
                 assert!(n > 0, "\"{ENV_WORKER_THREADS}\" cannot be set to 0");
                 n
             }
-            Err(std::env::VarError::NotPresent) => {
-                std::thread::available_parallelism().map_or(1, NonZeroUsize::get)
+            Err(crate::platform::env::VarError::NotPresent) => {
+                crate::platform::thread::available_parallelism().map_or(1, NonZeroUsize::get)
             }
-            Err(std::env::VarError::NotUnicode(e)) => {
+            Err(crate::platform::env::VarError::NotUnicode(e)) => {
                 panic!("\"{ENV_WORKER_THREADS}\" must be valid unicode, error: {e:?}")
             }
         }
@@ -113,12 +123,38 @@ pub(crate) mod sys {
 pub(crate) mod thread {
     #[inline]
     pub(crate) fn yield_now() {
-        std::hint::spin_loop();
+        ::core::hint::spin_loop();
     }
 
     #[allow(unused_imports)]
-    pub(crate) use std::thread::{
+    pub(crate) use crate::platform::thread::{
         current, panicking, park, park_timeout, sleep, spawn, AccessError, Builder, JoinHandle,
         LocalKey, Result, Thread, ThreadId,
     };
+}
+
+#[cfg(feature="native")]
+pub(crate) mod rand { pub(crate) fn seed()->u64 { trueos_runtime::random_seed() } }
+#[cfg(feature="native")]
+mod native_sync {
+    use trueos_runtime::sync as native;
+    #[derive(Debug)]
+    pub(crate) struct Mutex<T:?Sized>(native::Mutex<T>);
+    impl<T> Mutex<T>{
+        pub(crate) fn new(v:T)->Self{Self(native::Mutex::new(v))}
+        pub(crate) const fn const_new(v:T)->Self{Self(native::Mutex::new(v))}
+    }
+    impl<T:?Sized> Mutex<T>{
+        pub(crate) fn lock(&self)->native::MutexGuard<'_,T>{self.0.lock().unwrap()}
+        pub(crate) fn try_lock(&self)->Option<native::MutexGuard<'_,T>>{self.0.try_lock()}
+    }
+    #[derive(Debug)]
+    pub(crate) struct RwLock<T:?Sized>(native::RwLock<T>);
+    impl<T> RwLock<T>{pub(crate) fn new(v:T)->Self{Self(native::RwLock::new(v))}}
+    impl<T:?Sized> RwLock<T>{
+        pub(crate) fn read(&self)->native::RwLockReadGuard<'_,T>{self.0.read().unwrap()}
+        pub(crate) fn try_read(&self)->Option<native::RwLockReadGuard<'_,T>>{self.0.try_read()}
+        pub(crate) fn write(&self)->native::RwLockWriteGuard<'_,T>{self.0.write().unwrap()}
+        pub(crate) fn try_write(&self)->Option<native::RwLockWriteGuard<'_,T>>{self.0.try_write()}
+    }
 }

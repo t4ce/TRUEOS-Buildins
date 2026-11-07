@@ -1,7 +1,9 @@
-#[cfg(unix)]
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
+#[cfg(all(not(feature="native"),unix))]
 use std::os::fd::AsFd;
 
-#[cfg(unix)]
+#[cfg(all(not(feature="native"),unix))]
 #[allow(unused_variables)]
 #[track_caller]
 pub(crate) fn check_socket_for_blocking<S: AsFd>(s: &S) -> crate::io::Result<()> {
@@ -20,7 +22,7 @@ pub(crate) fn check_socket_for_blocking<S: AsFd>(s: &S) -> crate::io::Result<()>
     Ok(())
 }
 
-#[cfg(not(unix))]
+#[cfg(any(feature="native",not(unix)))]
 #[allow(unused_variables)]
 pub(crate) fn check_socket_for_blocking<S>(s: &S) -> crate::io::Result<()> {
     // we cannot retrieve the nonblocking status on windows

@@ -1,7 +1,9 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use super::Config;
-use std::marker::PhantomData;
+use ::core::marker::PhantomData;
 #[cfg(all(tokio_unstable, feature = "schedule-latency"))]
-use std::time::Duration;
+use ::core::time::Duration;
 
 impl TaskHooks {
     pub(crate) fn spawn(&self, meta: &TaskMeta<'_>) {
@@ -79,7 +81,7 @@ impl<'a> TaskMeta<'a> {
 
     /// Return the source code location where the task was spawned.
     #[cfg(tokio_unstable)]
-    pub fn spawned_at(&self) -> &'static std::panic::Location<'static> {
+    pub fn spawned_at(&self) -> &'static crate::platform::panic::Location<'static> {
         self.spawned_at.0
     }
 
@@ -111,4 +113,4 @@ impl<'a> TaskMeta<'a> {
 }
 
 /// Runs on specific task-related events
-pub(crate) type TaskCallback = std::sync::Arc<dyn Fn(&TaskMeta<'_>) + Send + Sync>;
+pub(crate) type TaskCallback = alloc::sync::Arc<dyn Fn(&TaskMeta<'_>) + Send + Sync>;

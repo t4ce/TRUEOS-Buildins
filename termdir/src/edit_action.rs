@@ -1,5 +1,7 @@
 //! Local desktop editing. Remote terminal handoff is deliberately separate.
-use std::{io, path::Path};
+use alloc::string::String;
+use crate::app_io as io;
+use trueos_path::Path;
 
 pub fn is_local_ui4() -> bool {
     trueos::async_fs::block_on(trueos::async_fs::read_file(b"vFile:terminal-frontend"))
@@ -7,7 +9,7 @@ pub fn is_local_ui4() -> bool {
 }
 
 fn start_script(path: &Path) -> io::Result<String> {
-    let path = path.to_str().ok_or_else(|| io::Error::other("file path is not UTF-8"))?;
+    let path = path.as_str();
     if path.is_empty() || path.contains(['\n', '\r', '\0']) {
         return Err(io::Error::other("file path cannot be represented in an edit runscript"));
     }

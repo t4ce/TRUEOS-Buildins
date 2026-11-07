@@ -5,10 +5,12 @@
 //! ## Implemented operations:
 //!
 //! - Copy: [`CopyToClipboard`](struct.CopyToClipboard.html)
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use base64::prelude::{Engine, BASE64_STANDARD};
 
-use std::fmt;
-use std::str::FromStr;
+use core::fmt;
+use core::str::FromStr;
 
 use crate::{osc, Command};
 
@@ -160,8 +162,8 @@ impl<T: AsRef<[u8]>> Command for CopyToClipboard<T> {
     }
 
     #[cfg(windows)]
-    fn execute_winapi(&self) -> std::io::Result<()> {
-        use std::io;
+    fn execute_winapi(&self) -> crate::io::Result<()> {
+        use crate::io;
 
         Err(io::Error::new(
             io::ErrorKind::Unsupported,
@@ -208,6 +210,8 @@ impl<T: AsRef<[u8]>> CopyToClipboard<T> {
 
 #[cfg(test)]
 mod tests {
+    #[allow(unused_imports)]
+    use crate::alloc_prelude::*;
     use super::*;
 
     #[test]

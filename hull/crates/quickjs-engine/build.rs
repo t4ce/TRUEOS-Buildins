@@ -577,6 +577,7 @@ fn main() {
         let formatter = out.join("hull_quickjs_formatter.c");
         fs::write(&formatter, FORMATTER).expect("write private QuickJS formatter");
         build
+            .define("HULL_QUICKJS_NATIVE_WAIT", None)
             .include(manifest.join("vendor/stb"))
             .file(formatter)
             .define("snprintf", Some("hull_quickjs_snprintf"))

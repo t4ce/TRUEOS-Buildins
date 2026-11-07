@@ -4,6 +4,8 @@
 //! **Note** this module is only visible on docs.rs, you cannot use it directly
 //! in your own code.
 
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 /// The name of a type which is not defined here.
 ///
 /// This is typically used as an alias for another type, like so:
@@ -27,7 +29,7 @@ impl mio::event::Source for NotDefinedHere {
         _registry: &mio::Registry,
         _token: mio::Token,
         _interests: mio::Interest,
-    ) -> std::io::Result<()> {
+    ) -> crate::platform::io::Result<()> {
         Ok(())
     }
     fn reregister(
@@ -35,10 +37,10 @@ impl mio::event::Source for NotDefinedHere {
         _registry: &mio::Registry,
         _token: mio::Token,
         _interests: mio::Interest,
-    ) -> std::io::Result<()> {
+    ) -> crate::platform::io::Result<()> {
         Ok(())
     }
-    fn deregister(&mut self, _registry: &mio::Registry) -> std::io::Result<()> {
+    fn deregister(&mut self, _registry: &mio::Registry) -> crate::platform::io::Result<()> {
         Ok(())
     }
 }

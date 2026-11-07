@@ -1,6 +1,8 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use super::{Driver, Handle, TOKEN_SIGNAL};
 
-use std::io;
+use crate::platform::io;
 
 impl Handle {
     pub(crate) fn register_signal_receiver(

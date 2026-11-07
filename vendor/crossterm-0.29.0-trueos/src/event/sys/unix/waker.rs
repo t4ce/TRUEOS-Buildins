@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 #[cfg(all(feature = "use-dev-tty", not(target_os = "trueos")))]
 pub(crate) mod tty;
 

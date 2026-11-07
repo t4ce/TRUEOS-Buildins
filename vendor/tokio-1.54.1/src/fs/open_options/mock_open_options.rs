@@ -1,5 +1,7 @@
 #![allow(unreachable_pub)]
 //! Mock version of `std::fs::OpenOptions`;
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use mockall::mock;
 
 use crate::fs::mocks::MockFile;

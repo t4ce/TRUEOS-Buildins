@@ -40,7 +40,7 @@ PACKAGE_REVISION = 3
 # These apps have an audited core/alloc target dependency closure. Keep this
 # admission explicit: an entry's no_std attribute alone cannot establish that
 # its dependencies avoid std or support a target without Unix platform cfgs.
-NATIVE_CORE_ALLOC_BUILTINS = frozenset({"img", "paper"})
+NATIVE_CORE_ALLOC_BUILTINS = frozenset({"backup", "commander", "img", "os", "paper", "termdir"})
 
 
 def run(args, **kwargs):
@@ -271,11 +271,22 @@ def settings(name: str):
     for match in re.finditer(r'trueos-blueprint:\s*features\s*=\s*(\[[^\]]*\])', text):
         for feature in json.loads(match[1]):
             features.add(feature if feature in doc.get("features", {}) else "trueos/" + feature)
+    sdk_features = set()
+    for dependencies in [doc.get("dependencies", {}),
+                         *(target.get("dependencies", {}) for target in doc.get("target", {}).values())]:
+        sdk = dependencies.get("trueos", {})
+        if isinstance(sdk, dict):
+            sdk_features.update(sdk.get("features", []))
+    native_runtime = "native-runtime" in sdk_features or "trueos/native-runtime" in features
+    std_runtime = bool(sdk_features & {"tokio-runtime", "tokio-net-probe"}
+                       or features & {"trueos/tokio-runtime", "trueos/tokio-net-probe"})
+    if native_runtime and std_runtime:
+        raise ValueError(f"{name}: native-runtime cannot be combined with std Tokio runtime features")
     uses_runtime = any(token in text for token in ("runtime", "worker", "task::", "tokio::"))
-    needs_std = "#![no_std]" not in text or uses_runtime
+    needs_std = "#![no_std]" not in text or (uses_runtime and not native_runtime)
     if uses_runtime:
-        features.add("trueos/tokio-runtime")
-    if any(token in text for token in ("trueos::net", "tokio::net", "current_thread_net")):
+        features.add("trueos/native-runtime" if native_runtime else "trueos/tokio-runtime")
+    if not native_runtime and any(token in text for token in ("trueos::net", "tokio::net", "current_thread_net")):
         features.add("trueos/tokio-net-probe")
     if "#[global_allocator]" not in text:
         features.add("trueos/default-global-allocator")

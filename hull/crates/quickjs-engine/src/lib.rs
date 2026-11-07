@@ -3,6 +3,10 @@
 //! Native values stay behind an opaque C adapter compiled against the same
 //! upstream header. Engine ownership stays on one local executor task; dropping
 //! an engine releases its context, pending jobs and runtime together.
+// C owns in-place atomics; this adapter only bridges the native wait/clock ABI.
+#[cfg(target_os = "trueos")]
+mod native_wait;
+
 use std::{
     cell::{Cell, RefCell},
     ffi::{CStr, CString, c_char, c_int, c_void},

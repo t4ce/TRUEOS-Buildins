@@ -1,11 +1,15 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::io::{Interest, PollEvented, ReadBuf, Ready};
 use crate::net::{to_socket_addrs, ToSocketAddrs};
 use crate::util::check_socket_for_blocking;
 
-use std::fmt;
-use std::io;
-use std::net::{self, Ipv4Addr, Ipv6Addr, SocketAddr};
-use std::task::{ready, Context, Poll};
+use ::core::fmt;
+use crate::platform::io;
+use ::core::net::{Ipv4Addr,Ipv6Addr,SocketAddr};
+#[cfg(not(feature="native"))]
+use std::net;
+use ::core::task::{ready, Context, Poll};
 
 cfg_io_util! {
     use bytes::BufMut;
@@ -224,6 +228,7 @@ impl UdpSocket {
     /// # }
     /// ```
     #[track_caller]
+    #[cfg(not(feature="native"))]
     pub fn from_std(socket: net::UdpSocket) -> io::Result<UdpSocket> {
         check_socket_for_blocking(&socket)?;
 
@@ -253,6 +258,7 @@ impl UdpSocket {
     /// [`tokio::net::UdpSocket`]: UdpSocket
     /// [`std::net::UdpSocket`]: std::net::UdpSocket
     /// [`set_nonblocking`]: fn@std::net::UdpSocket::set_nonblocking
+    #[cfg(not(feature="native"))]
     pub fn into_std(self) -> io::Result<std::net::UdpSocket> {
         #[cfg(not(windows))]
         {
@@ -273,6 +279,7 @@ impl UdpSocket {
         }
     }
 
+    #[cfg(not(feature="native"))]
     fn as_socket(&self) -> socket2::SockRef<'_> {
         socket2::SockRef::from(self)
     }
@@ -822,7 +829,7 @@ impl UdpSocket {
         let n = ready!(self.io.registration().poll_read_io(cx, || {
             // Safety: will not read the maybe uninitialized bytes.
             let b = unsafe {
-                &mut *(buf.unfilled_mut() as *mut [std::mem::MaybeUninit<u8>] as *mut [u8])
+                &mut *(buf.unfilled_mut() as *mut [::core::mem::MaybeUninit<u8>] as *mut [u8])
             };
 
             self.io.recv(b)
@@ -946,7 +953,7 @@ impl UdpSocket {
             self.io.registration().try_io(Interest::READABLE, || {
                 let dst = buf.chunk_mut();
                 let dst =
-                    unsafe { &mut *(dst as *mut _ as *mut [std::mem::MaybeUninit<u8>] as *mut [u8]) };
+                    unsafe { &mut *(dst as *mut _ as *mut [::core::mem::MaybeUninit<u8>] as *mut [u8]) };
 
                 let n = (*self.io).recv(dst)?;
 
@@ -996,7 +1003,7 @@ impl UdpSocket {
                 .async_io(Interest::READABLE | Interest::ERROR, || {
                 let dst = buf.chunk_mut();
                 let dst =
-                    unsafe { &mut *(dst as *mut _ as *mut [std::mem::MaybeUninit<u8>] as *mut [u8]) };
+                    unsafe { &mut *(dst as *mut _ as *mut [::core::mem::MaybeUninit<u8>] as *mut [u8]) };
 
                 let n = (*self.io).recv(dst)?;
 
@@ -1072,7 +1079,7 @@ impl UdpSocket {
             self.io.registration().try_io(Interest::READABLE, || {
                 let dst = buf.chunk_mut();
                 let dst =
-                    unsafe { &mut *(dst as *mut _ as *mut [std::mem::MaybeUninit<u8>] as *mut [u8]) };
+                    unsafe { &mut *(dst as *mut _ as *mut [::core::mem::MaybeUninit<u8>] as *mut [u8]) };
 
                 let (n, addr) = (*self.io).recv_from(dst)?;
 
@@ -1130,7 +1137,7 @@ impl UdpSocket {
                 .async_io(Interest::READABLE | Interest::ERROR, || {
                 let dst = buf.chunk_mut();
                 let dst =
-                    unsafe { &mut *(dst as *mut _ as *mut [std::mem::MaybeUninit<u8>] as *mut [u8]) };
+                    unsafe { &mut *(dst as *mut _ as *mut [::core::mem::MaybeUninit<u8>] as *mut [u8]) };
 
                 let (n, addr) = (*self.io).recv_from(dst)?;
 
@@ -1367,7 +1374,7 @@ impl UdpSocket {
         let (n, addr) = ready!(self.io.registration().poll_read_io(cx, || {
             // Safety: will not read the maybe uninitialized bytes.
             let b = unsafe {
-                &mut *(buf.unfilled_mut() as *mut [std::mem::MaybeUninit<u8>] as *mut [u8])
+                &mut *(buf.unfilled_mut() as *mut [::core::mem::MaybeUninit<u8>] as *mut [u8])
             };
 
             self.io.recv_from(b)
@@ -1617,7 +1624,7 @@ impl UdpSocket {
         let n = ready!(self.io.registration().poll_read_io(cx, || {
             // Safety: will not read the maybe uninitialized bytes.
             let b = unsafe {
-                &mut *(buf.unfilled_mut() as *mut [std::mem::MaybeUninit<u8>] as *mut [u8])
+                &mut *(buf.unfilled_mut() as *mut [::core::mem::MaybeUninit<u8>] as *mut [u8])
             };
 
             self.io.peek(b)
@@ -1766,7 +1773,7 @@ impl UdpSocket {
         let (n, addr) = ready!(self.io.registration().poll_read_io(cx, || {
             // Safety: will not read the maybe uninitialized bytes.
             let b = unsafe {
-                &mut *(buf.unfilled_mut() as *mut [std::mem::MaybeUninit<u8>] as *mut [u8])
+                &mut *(buf.unfilled_mut() as *mut [::core::mem::MaybeUninit<u8>] as *mut [u8])
             };
 
             self.io.peek_from(b)
@@ -1882,6 +1889,10 @@ impl UdpSocket {
 
     #[inline]
     fn peek_sender_inner(&self) -> io::Result<SocketAddr> {
+        #[cfg(feature="native")]
+        {self.io.peek_from(&mut []).map(|(_,addr)|addr)}
+        #[cfg(not(feature="native"))]
+        {
         self.io.try_io(|| {
             self.as_socket()
                 .peek_sender()?
@@ -1891,6 +1902,7 @@ impl UdpSocket {
                 .as_socket()
                 .ok_or_else(|| io::Error::other("sender not available"))
         })
+    }
     }
 
     /// Gets the value of the `SO_BROADCAST` option for this socket.
@@ -2004,7 +2016,10 @@ impl UdpSocket {
         )))
     )]
     pub fn tclass_v6(&self) -> io::Result<u32> {
-        self.as_socket().tclass_v6()
+        #[cfg(not(feature="native"))]
+        {self.as_socket().tclass_v6()}
+        #[cfg(feature="native")]
+        {Err(io::Error::new(io::ErrorKind::Other,"native transport does not support this socket option"))}
     }
 
     /// Sets the value for the `IPV6_TCLASS` option on this socket.
@@ -2042,7 +2057,10 @@ impl UdpSocket {
         )))
     )]
     pub fn set_tclass_v6(&self, tclass: u32) -> io::Result<()> {
-        self.as_socket().set_tclass_v6(tclass)
+        #[cfg(not(feature="native"))]
+        {self.as_socket().set_tclass_v6(tclass)}
+        #[cfg(feature="native")]
+        {Err(io::Error::new(io::ErrorKind::Other,"native transport does not support this socket option"))}
     }
 
     /// Gets the value of the `IP_TTL` option for this socket.
@@ -2116,7 +2134,10 @@ impl UdpSocket {
         ))))
     )]
     pub fn tos_v4(&self) -> io::Result<u32> {
-        self.as_socket().tos_v4()
+        #[cfg(not(feature="native"))]
+        {self.as_socket().tos_v4()}
+        #[cfg(feature="native")]
+        {Err(io::Error::new(io::ErrorKind::Other,"native transport does not support IPv4 TOS"))}
     }
 
     /// Deprecated. Use [`tos_v4()`] instead.
@@ -2180,7 +2201,10 @@ impl UdpSocket {
         ))))
     )]
     pub fn set_tos_v4(&self, tos: u32) -> io::Result<()> {
-        self.as_socket().set_tos_v4(tos)
+        #[cfg(not(feature="native"))]
+        {self.as_socket().set_tos_v4(tos)}
+        #[cfg(feature="native")]
+        {Err(io::Error::new(io::ErrorKind::Other,"native transport does not support IPv4 TOS"))}
     }
 
     /// Deprecated. Use [`set_tos_v4()`] instead.
@@ -2222,7 +2246,10 @@ impl UdpSocket {
         doc(cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux",)))
     )]
     pub fn device(&self) -> io::Result<Option<Vec<u8>>> {
-        self.as_socket().device()
+        #[cfg(not(feature="native"))]
+        {self.as_socket().device()}
+        #[cfg(feature="native")]
+        {Err(io::Error::new(io::ErrorKind::Other,"native transport does not support this socket option"))}
     }
 
     /// Sets the value for the `SO_BINDTODEVICE` option on this socket
@@ -2238,7 +2265,10 @@ impl UdpSocket {
         doc(cfg(all(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))))
     )]
     pub fn bind_device(&self, interface: Option<&[u8]>) -> io::Result<()> {
-        self.as_socket().bind_device(interface)
+        #[cfg(not(feature="native"))]
+        {self.as_socket().bind_device(interface)}
+        #[cfg(feature="native")]
+        {Err(io::Error::new(io::ErrorKind::Other,"native transport does not support this socket option"))}
     }
 
     /// Executes an operation of the `IP_ADD_MEMBERSHIP` type.
@@ -2304,6 +2334,7 @@ impl UdpSocket {
     }
 }
 
+#[cfg(not(feature="native"))]
 impl TryFrom<std::net::UdpSocket> for UdpSocket {
     type Error = io::Error;
 
@@ -2322,7 +2353,7 @@ impl fmt::Debug for UdpSocket {
     }
 }
 
-#[cfg(not(windows))]
+#[cfg(all(not(feature="native"),not(windows)))]
 mod sys {
     use super::UdpSocket;
     use std::os::fd::{AsFd, AsRawFd, BorrowedFd, RawFd};
@@ -2351,7 +2382,8 @@ cfg_windows! {
     }
 
     impl AsSocket for UdpSocket {
-        fn as_socket(&self) -> BorrowedSocket<'_> {
+        #[cfg(not(feature="native"))]
+    fn as_socket(&self) -> BorrowedSocket<'_> {
             unsafe { BorrowedSocket::borrow_raw(self.as_raw_socket()) }
         }
     }

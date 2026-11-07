@@ -1,4 +1,6 @@
-use std::io;
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
+use crate::platform::io;
 
 /// An interface for killing a running process.
 pub(crate) trait Kill {

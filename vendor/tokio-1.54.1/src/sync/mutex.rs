@@ -1,15 +1,19 @@
 #![cfg_attr(not(feature = "sync"), allow(unreachable_pub, dead_code))]
 
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::sync::batch_semaphore as semaphore;
 #[cfg(all(tokio_unstable, feature = "tracing"))]
 use crate::util::trace;
 
-use std::cell::UnsafeCell;
-use std::error::Error;
-use std::marker::PhantomData;
-use std::ops::{Deref, DerefMut};
-use std::sync::Arc;
-use std::{fmt, mem, ptr};
+use ::core::cell::UnsafeCell;
+use ::core::error::Error;
+use ::core::marker::PhantomData;
+use ::core::ops::{Deref, DerefMut};
+use alloc::sync::Arc;
+use ::core::fmt;
+use ::core::mem;
+use ::core::ptr;
 
 /// An asynchronous `Mutex`-like type.
 ///
@@ -341,7 +345,7 @@ impl<T: ?Sized> Mutex<T> {
     {
         #[cfg(all(tokio_unstable, feature = "tracing"))]
         let resource_span = {
-            let location = std::panic::Location::caller();
+            let location = crate::platform::panic::Location::caller();
 
             tracing::trace_span!(
                 parent: None,
@@ -807,11 +811,11 @@ where
     }
 }
 
-impl<T: ?Sized> std::fmt::Debug for Mutex<T>
+impl<T: ?Sized> ::core::fmt::Debug for Mutex<T>
 where
-    T: std::fmt::Debug,
+    T: ::core::fmt::Debug,
 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
         let mut d = f.debug_struct("Mutex");
         match self.try_lock() {
             Ok(inner) => d.field("data", &&*inner),
@@ -830,7 +834,7 @@ impl<'a, T: ?Sized> MutexGuard<'a, T> {
         // original. In the end, we have not duplicated or forgotten any values.
         MutexGuardInner {
             #[cfg(all(tokio_unstable, feature = "tracing"))]
-            resource_span: unsafe { std::ptr::read(&me.resource_span) },
+            resource_span: unsafe { ::core::ptr::read(&me.resource_span) },
             lock: me.lock,
         }
     }
@@ -1191,7 +1195,7 @@ impl<'a, T: ?Sized> MappedMutexGuard<'a, T> {
             s: me.s,
             data: me.data,
             #[cfg(all(tokio_unstable, feature = "tracing"))]
-            resource_span: unsafe { std::ptr::read(&me.resource_span) },
+            resource_span: unsafe { ::core::ptr::read(&me.resource_span) },
         }
     }
 

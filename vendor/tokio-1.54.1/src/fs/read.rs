@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 #[cfg(not(any(target_os = "trueos", target_os = "zkvm")))]
 use crate::fs::asyncify;
 
@@ -45,7 +47,7 @@ use std::{io, path::Path};
 ///
 /// ```no_run
 /// use tokio::fs;
-/// use std::net::SocketAddr;
+/// use core::net::SocketAddr;
 ///
 /// #[tokio::main]
 /// async fn main() -> Result<(), Box<dyn core::error::Error + 'static>> {

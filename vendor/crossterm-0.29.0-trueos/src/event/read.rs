@@ -1,9 +1,13 @@
-#[cfg(unix)]
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
+#[cfg(any(unix, target_os = "trueos"))]
 use crate::event::InputDiscardStatus;
 
-use std::{collections::vec_deque::VecDeque, io, time::Duration};
+use alloc::collections::VecDeque;
+use core::time::Duration;
+use crate::io;
 
-#[cfg(unix)]
+#[cfg(any(unix, target_os = "trueos"))]
 use crate::event::source::unix::UnixInternalEventSource;
 #[cfg(windows)]
 use crate::event::source::windows::WindowsEventSource;
@@ -22,7 +26,7 @@ impl Default for InternalEventReader {
     fn default() -> Self {
         #[cfg(windows)]
         let source = WindowsEventSource::new();
-        #[cfg(unix)]
+        #[cfg(any(unix, target_os = "trueos"))]
         let source = UnixInternalEventSource::new();
 
         #[cfg(target_os = "trueos")]
@@ -41,12 +45,12 @@ impl Default for InternalEventReader {
 }
 
 impl InternalEventReader {
-    #[cfg(unix)]
+    #[cfg(any(unix, target_os = "trueos"))]
     pub(crate) fn discard_buffered_input(&mut self) -> io::Result<InputDiscardStatus> {
         let source = self
             .source
             .as_mut()
-            .ok_or_else(|| io::Error::other("Failed to initialize input reader"))?;
+            .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "Failed to initialize input reader"))?;
         let status = source.discard_buffered_input();
         self.events.clear();
         self.skipped_events.clear();
@@ -73,8 +77,8 @@ impl InternalEventReader {
         let event_source = match self.source.as_mut() {
             Some(source) => source,
             None => {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
+                return Err(crate::io::Error::new(
+                    crate::io::ErrorKind::Other,
                     "Failed to initialize input reader",
                 ))
             }
@@ -148,12 +152,15 @@ impl InternalEventReader {
 
 #[cfg(test)]
 mod tests {
-    use std::io;
-    #[cfg(unix)]
+    #[allow(unused_imports)]
+    use crate::alloc_prelude::*;
+    use crate::io;
+    #[cfg(any(unix, target_os = "trueos"))]
     use super::InputDiscardStatus;
-    use std::{collections::VecDeque, time::Duration};
+    use alloc::collections::VecDeque;
+    use core::time::Duration;
 
-    #[cfg(unix)]
+    #[cfg(any(unix, target_os = "trueos"))]
     use super::super::filter::CursorPositionFilter;
     use super::{super::Event, EventSource, Filter, InternalEvent, InternalEventReader};
 
@@ -167,7 +174,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(unix)]
+    #[cfg(any(unix, target_os = "trueos"))]
     fn test_discard_buffered_input_clears_all_event_queues() {
         let mut reader = InternalEventReader {
             events: VecDeque::from([InternalEvent::Event(Event::Resize(10, 10))]),
@@ -225,7 +232,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(unix)]
+    #[cfg(any(unix, target_os = "trueos"))]
     fn test_poll_returns_true_for_matching_event_in_queue_at_back() {
         let mut reader = InternalEventReader {
             events: vec![
@@ -254,7 +261,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(unix)]
+    #[cfg(any(unix, target_os = "trueos"))]
     fn test_read_returns_matching_event_in_queue_at_back() {
         const CURSOR_EVENT: InternalEvent = InternalEvent::CursorPosition(10, 20);
 
@@ -268,7 +275,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(unix)]
+    #[cfg(any(unix, target_os = "trueos"))]
     fn test_read_does_not_consume_skipped_event() {
         const SKIPPED_EVENT: InternalEvent = InternalEvent::Event(Event::Resize(10, 10));
         const CURSOR_EVENT: InternalEvent = InternalEvent::CursorPosition(10, 20);
@@ -459,7 +466,7 @@ mod tests {
     }
 
     impl EventSource for FakeSource {
-        #[cfg(unix)]
+        #[cfg(any(unix, target_os = "trueos"))]
         fn discard_buffered_input(&mut self) -> InputDiscardStatus {
             self.events.clear();
             InputDiscardStatus::Complete

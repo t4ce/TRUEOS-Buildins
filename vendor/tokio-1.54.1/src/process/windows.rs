@@ -15,22 +15,24 @@
 //! `RegisterWaitForSingleObject` and then wait on the other end of the oneshot
 //! from then on out.
 
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::io::{blocking::Blocking, AsyncRead, AsyncWrite, ReadBuf};
 use crate::process::kill::Kill;
 use crate::process::SpawnedChild;
 use crate::sync::oneshot;
 
-use std::fmt;
+use ::core::fmt;
 use std::fs::File as StdFile;
-use std::future::Future;
-use std::io;
+use ::core::future::Future;
+use crate::platform::io;
 use std::os::windows::prelude::{AsRawHandle, IntoRawHandle, OwnedHandle, RawHandle};
-use std::pin::Pin;
+use ::core::pin::Pin;
 use std::process::Stdio;
 use std::process::{Child as StdChild, ExitStatus};
-use std::ptr::null_mut;
-use std::sync::Arc;
-use std::task::{Context, Poll};
+use ::core::ptr::null_mut;
+use alloc::sync::Arc;
+use ::core::task::{Context, Poll};
 
 use windows_sys::{
     Win32::Foundation::{DuplicateHandle, DUPLICATE_SAME_ACCESS, HANDLE, INVALID_HANDLE_VALUE},
@@ -165,7 +167,7 @@ impl Drop for Waiting {
     }
 }
 
-unsafe extern "system" fn callback(ptr: *mut std::ffi::c_void, _timer_fired: bool) {
+unsafe extern "system" fn callback(ptr: *mut ::core::ffi::c_void, _timer_fired: bool) {
     let complete = unsafe { &mut *(ptr as *mut Option<oneshot::Sender<()>>) };
     let _ = complete.take().unwrap().send(());
 }

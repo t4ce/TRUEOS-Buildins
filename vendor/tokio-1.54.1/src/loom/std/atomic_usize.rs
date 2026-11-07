@@ -1,11 +1,13 @@
-use std::cell::UnsafeCell;
-use std::fmt;
-use std::ops;
-use std::panic;
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
+use ::core::cell::UnsafeCell;
+use ::core::fmt;
+use ::core::ops;
+use crate::platform::panic;
 
 /// `AtomicUsize` providing an additional `unsync_load` function.
 pub(crate) struct AtomicUsize {
-    inner: UnsafeCell<std::sync::atomic::AtomicUsize>,
+    inner: UnsafeCell<::core::sync::atomic::AtomicUsize>,
 }
 
 unsafe impl Send for AtomicUsize {}
@@ -15,7 +17,7 @@ impl panic::UnwindSafe for AtomicUsize {}
 
 impl AtomicUsize {
     pub(crate) const fn new(val: usize) -> AtomicUsize {
-        let inner = UnsafeCell::new(std::sync::atomic::AtomicUsize::new(val));
+        let inner = UnsafeCell::new(::core::sync::atomic::AtomicUsize::new(val));
         AtomicUsize { inner }
     }
 
@@ -26,7 +28,7 @@ impl AtomicUsize {
     /// All mutations must have happened before the unsynchronized load.
     /// Additionally, there must be no concurrent mutations.
     pub(crate) unsafe fn unsync_load(&self) -> usize {
-        unsafe { core::ptr::read(self.inner.get() as *const usize) }
+        unsafe { ::core::ptr::read(self.inner.get() as *const usize) }
     }
 
     pub(crate) fn with_mut<R>(&mut self, f: impl FnOnce(&mut usize) -> R) -> R {
@@ -37,8 +39,8 @@ impl AtomicUsize {
     // TODO(MSRV 1.95): When bumping MSRV, switch to `try_update`.
     pub(crate) fn fetch_update<F>(
         &self,
-        set_order: std::sync::atomic::Ordering,
-        fetch_order: std::sync::atomic::Ordering,
+        set_order: ::core::sync::atomic::Ordering,
+        fetch_order: ::core::sync::atomic::Ordering,
         f: F,
     ) -> Result<usize, usize>
     where
@@ -50,7 +52,7 @@ impl AtomicUsize {
 }
 
 impl ops::Deref for AtomicUsize {
-    type Target = std::sync::atomic::AtomicUsize;
+    type Target = ::core::sync::atomic::AtomicUsize;
 
     fn deref(&self) -> &Self::Target {
         // safety: it is always safe to access `&self` fns on the inner value as

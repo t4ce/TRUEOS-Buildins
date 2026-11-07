@@ -1,8 +1,10 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use super::batch_semaphore as ll; // low level implementation
 use super::{AcquireError, TryAcquireError};
 #[cfg(all(tokio_unstable, feature = "tracing"))]
 use crate::util::trace;
-use std::sync::Arc;
+use alloc::sync::Arc;
 
 /// Counting semaphore performing asynchronous permit acquisition.
 ///
@@ -231,7 +233,7 @@ use std::sync::Arc;
 ///
 /// ```
 /// # use tokio::sync::Mutex;
-/// # use std::collections::BTreeMap;
+/// # use alloc::collections::BTreeMap;
 /// # struct Database {
 /// #   map: Mutex<BTreeMap<String, i32>>,
 /// # }
@@ -485,7 +487,7 @@ impl Semaphore {
     pub fn new(permits: usize) -> Self {
         #[cfg(all(tokio_unstable, feature = "tracing"))]
         let resource_span = {
-            let location = std::panic::Location::caller();
+            let location = crate::platform::panic::Location::caller();
 
             tracing::trace_span!(
                 parent: None,
@@ -1229,7 +1231,7 @@ impl<'a> SemaphorePermit<'a> {
     #[track_caller]
     pub fn merge(&mut self, mut other: Self) {
         assert!(
-            std::ptr::eq(self.sem, other.sem),
+            ::core::ptr::eq(self.sem, other.sem),
             "merging permits from different semaphore instances"
         );
         self.permits = self

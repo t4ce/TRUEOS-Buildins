@@ -1,10 +1,13 @@
-use std::alloc::Layout;
-use std::future::Future;
-use std::panic::AssertUnwindSafe;
-use std::pin::Pin;
-use std::ptr::{self, NonNull};
-use std::task::{Context, Poll};
-use std::{fmt, panic};
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
+use ::core::alloc::Layout;
+use ::core::future::Future;
+use crate::platform::panic::AssertUnwindSafe;
+use ::core::pin::Pin;
+use ::core::ptr::{self, NonNull};
+use ::core::task::{Context, Poll};
+use ::core::fmt;
+use crate::platform::panic;
 
 /// A reusable `Pin<Box<dyn Future<Output = T> + Send>>`.
 ///
@@ -81,7 +84,7 @@ impl<T> ReusableBoxFuture<T> {
         F: Future<Output = T> + Send + 'static,
     {
         // Drop the existing future, catching any panics.
-        let result = panic::catch_unwind(AssertUnwindSafe(|| unsafe {
+        let result = panic::task_boundary(AssertUnwindSafe(|| unsafe {
             ptr::drop_in_place(self.boxed.as_ptr());
         }));
 
@@ -157,10 +160,10 @@ impl<T> fmt::Debug for ReusableBoxFuture<T> {
 mod test {
     use super::ReusableBoxFuture;
     use futures::future::FutureExt;
-    use std::alloc::Layout;
-    use std::future::Future;
-    use std::pin::Pin;
-    use std::task::{Context, Poll};
+    use ::core::alloc::Layout;
+    use ::core::future::Future;
+    use ::core::pin::Pin;
+    use ::core::task::{Context, Poll};
 
     #[test]
     fn test_different_futures() {

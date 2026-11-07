@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use super::{EntryHandle, WakeQueueEntry};
 use crate::util::linked_list::LinkedList;
 

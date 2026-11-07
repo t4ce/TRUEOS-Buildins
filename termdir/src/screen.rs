@@ -1,4 +1,8 @@
-use std::io::{self, Write};
+use alloc::{
+    string::{String, ToString},
+    vec::Vec,
+};
+use crossterm::io::{self, Write};
 
 use crossterm::{
     cursor::MoveTo,
@@ -175,10 +179,14 @@ impl Frame {
         if wanted > 1 {
             if wanted > self.width - x {
                 // Do not emit a partial wide icon at the right edge.
-                for column in x..self.width { self.put(column, y, ' ', style); }
+                for column in x..self.width {
+                    self.put(column, y, ' ', style);
+                }
                 return wanted;
             }
-            for column in x..x + wanted { self.erase_occupant(column, y); }
+            for column in x..x + wanted {
+                self.erase_occupant(column, y);
+            }
             let lead = self.index(x, y);
             self.cells[lead] = Cell::wide(ch, style, wanted);
             for column in x + 1..x + wanted {
@@ -389,8 +397,12 @@ fn mark_footprint(dirty: &mut [bool], frame: &Frame, x: u16, y: u16) {
         lead_x -= 1;
     }
     let cell = frame.cell(lead_x, y);
-    let end = lead_x.saturating_add(u16::from(cell.width).max(1)).min(frame.width());
-    for column in lead_x..end { dirty[column as usize] = true; }
+    let end = lead_x
+        .saturating_add(u16::from(cell.width).max(1))
+        .min(frame.width());
+    for column in lead_x..end {
+        dirty[column as usize] = true;
+    }
 }
 
 fn paint_run<W: Write>(out: &mut W, x: u16, y: u16, style: Style, text: &str) -> io::Result<()> {
@@ -415,8 +427,10 @@ fn paint_run<W: Write>(out: &mut W, x: u16, y: u16, style: Style, text: &str) ->
 
 #[cfg(test)]
 mod tests {
-    use super::{mark_footprint, terminal_cell_width, text_cell_width, Frame, Renderer, Style};
-    use std::io::{self, BufWriter, Write};
+    use super::{Frame, Renderer, Style, mark_footprint, terminal_cell_width, text_cell_width};
+    use crate::buffered_output::BufWriter;
+    use alloc::vec::Vec;
+    use crossterm::io::{self, Write};
 
     #[derive(Debug, Default)]
     struct RecordingWriter {
@@ -461,13 +475,19 @@ mod tests {
 
         let mut unchanged = Vec::new();
         renderer.present(&mut unchanged, frame.clone()).unwrap();
-        assert!(!unchanged.windows(b"retained menu".len())
-            .any(|bytes| bytes == b"retained menu"));
+        assert!(
+            !unchanged
+                .windows(b"retained menu".len())
+                .any(|bytes| bytes == b"retained menu")
+        );
 
         renderer.invalidate();
         let mut restored = Vec::new();
         renderer.present(&mut restored, frame).unwrap();
-        assert_eq!(restored, initial, "reentry must restore the complete original frame");
+        assert_eq!(
+            restored, initial,
+            "reentry must restore the complete original frame"
+        );
     }
 
     #[test]
@@ -485,7 +505,10 @@ mod tests {
             assert_eq!(dirty, [true, true, true, false, false, false]);
             frame.put(overwrite_x, 0, 'A', Style::default());
             for x in 0..3 {
-                assert_eq!(frame.cell(x, 0).ch, if x == overwrite_x { 'A' } else { ' ' });
+                assert_eq!(
+                    frame.cell(x, 0).ch,
+                    if x == overwrite_x { 'A' } else { ' ' }
+                );
                 assert!(!frame.cell(x, 0).is_continuation());
             }
         }

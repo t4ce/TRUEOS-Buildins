@@ -1,9 +1,11 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::io::{AsyncRead, AsyncWrite, ReadBuf};
 
-use std::future::Future;
-use std::io;
-use std::pin::Pin;
-use std::task::{ready, Context, Poll};
+use ::core::future::Future;
+use crate::platform::io;
+use ::core::pin::Pin;
+use ::core::task::{ready, Context, Poll};
 
 #[derive(Debug)]
 pub(super) struct CopyBuffer {

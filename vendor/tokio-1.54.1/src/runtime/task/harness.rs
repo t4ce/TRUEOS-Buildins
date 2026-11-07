@@ -1,3 +1,5 @@
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::future::Future;
 use crate::runtime::task::core::{Cell, Core, Header, Trailer};
 use crate::runtime::task::state::{Snapshot, State};
@@ -6,12 +8,12 @@ use crate::runtime::task::{Id, JoinError, Notified, RawTask, Schedule, Task};
 
 #[cfg(tokio_unstable)]
 use crate::runtime::TaskMeta;
-use std::any::Any;
-use std::mem;
-use std::mem::ManuallyDrop;
-use std::panic;
-use std::ptr::NonNull;
-use std::task::{Context, Poll, Waker};
+use ::core::any::Any;
+use ::core::mem;
+use ::core::mem::ManuallyDrop;
+use crate::platform::panic;
+use ::core::ptr::NonNull;
+use ::core::task::{Context, Poll, Waker};
 
 /// Typed raw task handle.
 pub(super) struct Harness<T: Future, S: 'static> {
@@ -299,7 +301,7 @@ where
             // Panics are delivered to the user via the `JoinHandle`. Given that
             // they are dropping the `JoinHandle`, we assume they are not
             // interested in the panic and swallow it.
-            let _ = panic::catch_unwind(panic::AssertUnwindSafe(|| {
+            let _ = panic::task_boundary(panic::AssertUnwindSafe(|| {
                 self.core().drop_future_or_output();
             }));
         }
@@ -335,7 +337,7 @@ where
 
         // We catch panics here in case dropping the future or waking the
         // JoinHandle panics.
-        let _ = panic::catch_unwind(panic::AssertUnwindSafe(|| {
+        let _ = panic::task_boundary(panic::AssertUnwindSafe(|| {
             if !snapshot.is_join_interested() {
                 // The `JoinHandle` is not interested in the output of
                 // this task. It is our responsibility to drop the
@@ -370,7 +372,7 @@ where
         // completed and will still run if the destructor panics.
         #[cfg(tokio_unstable)]
         if let Some(f) = self.trailer().hooks.task_terminate_callback.as_ref() {
-            let _ = panic::catch_unwind(panic::AssertUnwindSafe(|| {
+            let _ = panic::task_boundary(panic::AssertUnwindSafe(|| {
                 f(&TaskMeta {
                     id: self.core().task_id,
                     spawned_at: self.core().spawned_at.into(),
@@ -501,7 +503,7 @@ enum PollFuture {
 /// Cancels the task and store the appropriate error in the stage field.
 fn cancel_task<T: Future, S: Schedule>(core: &Core<T, S>) {
     // Drop the future from a panic guard.
-    let res = panic::catch_unwind(panic::AssertUnwindSafe(|| {
+    let res = panic::task_boundary(panic::AssertUnwindSafe(|| {
         core.drop_future_or_output();
     }));
 
@@ -522,7 +524,7 @@ fn panic_result_to_join_error(
 /// stage field.
 fn poll_future<T: Future, S: Schedule>(core: &Core<T, S>, cx: Context<'_>) -> Poll<()> {
     // Poll the future.
-    let output = panic::catch_unwind(panic::AssertUnwindSafe(|| {
+    let output = panic::task_boundary(panic::AssertUnwindSafe(|| {
         struct Guard<'a, T: Future, S: Schedule> {
             core: &'a Core<T, S>,
         }
@@ -547,7 +549,7 @@ fn poll_future<T: Future, S: Schedule>(core: &Core<T, S>, cx: Context<'_>) -> Po
     };
 
     // Catch and ignore panics if the future panics on drop.
-    let res = panic::catch_unwind(panic::AssertUnwindSafe(|| {
+    let res = panic::task_boundary(panic::AssertUnwindSafe(|| {
         core.store_output(output);
     }));
 

@@ -2,6 +2,8 @@
 // This module does not currently provide any public API, but it was
 // unintentionally defined as a public module. Hide it from the documentation
 // instead of changing it to a private module to avoid breakage.
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 #[doc(hidden)]
 pub mod datagram;
 

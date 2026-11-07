@@ -42,8 +42,10 @@
 //! }
 //! # }
 //! ```
+#[allow(unused_imports)]
+use crate::alloc_prelude::*;
 use crate::sync::watch::Receiver;
-use std::task::{Context, Poll};
+use ::core::task::{Context, Poll};
 
 #[cfg(feature = "signal")]
 mod ctrl_c;
@@ -76,7 +78,7 @@ impl RxFuture {
     }
 
     async fn recv(&mut self) {
-        use std::future::poll_fn;
+        use ::core::future::poll_fn;
         poll_fn(|cx| self.poll_recv(cx)).await
     }
 
