@@ -277,7 +277,8 @@ def settings(name: str):
         sdk = dependencies.get("trueos", {})
         if isinstance(sdk, dict):
             sdk_features.update(sdk.get("features", []))
-    native_runtime = "native-runtime" in sdk_features or "trueos/native-runtime" in features
+    native_runtime = bool(sdk_features & {"native-runtime", "native-net"}
+                          or features & {"trueos/native-runtime", "trueos/native-net"})
     std_runtime = bool(sdk_features & {"tokio-runtime", "tokio-net-probe"}
                        or features & {"trueos/tokio-runtime", "trueos/tokio-net-probe"})
     if native_runtime and std_runtime:

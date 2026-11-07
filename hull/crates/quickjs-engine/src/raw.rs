@@ -5,7 +5,8 @@
 //! balance ownership, keep callback state alive, and never unwind through C.
 //! This uses Hull's pinned engine and header; it installs no browser host APIs.
 #![allow(non_snake_case, unsafe_op_in_unsafe_fn)]
-use std::ffi::{c_char, c_int, c_void};
+use alloc::vec::Vec;
+use core::ffi::{c_char, c_int, c_void};
 
 #[repr(C)]
 pub struct JSRuntime {
@@ -43,7 +44,7 @@ pub const JS_CFUNC_GENERIC: c_int = 0;
 
 // Match the C adapter's assertions for the full-pointer representation.
 const _: () = assert!(size_of::<JSValue>() == 16);
-const _: () = assert!(std::mem::offset_of!(JSValue, tag) == 8);
+const _: () = assert!(core::mem::offset_of!(JSValue, tag) == 8);
 
 impl JSValue {
     #[inline]

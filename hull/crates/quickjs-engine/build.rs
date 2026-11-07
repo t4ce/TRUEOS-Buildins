@@ -544,6 +544,7 @@ int hull_quickjs_snprintf(char *buffer, size_t count, const char *format, ...) {
 "#;
 
 fn main() {
+    println!("cargo:rustc-check-cfg=cfg(target_os, values(\"trueos\"))");
     let manifest = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").unwrap());
     let out = PathBuf::from(env::var_os("OUT_DIR").unwrap());
     let source = manifest.join("vendor/quickjs");
@@ -573,11 +574,25 @@ fn main() {
     ] {
         build.file(source.join(name));
     }
+    if env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("trueos")
+        || env::var_os("CARGO_FEATURE_NATIVE_ALLOCATOR_TEST").is_some()
+    {
+        // Every engine translation unit and the opaque adapter share one owned
+        // allocation format. No pointer enters the kernel's C allocation map.
+        build
+            .define("HULL_QUICKJS_NATIVE_ALLOC", None)
+            .define("malloc", Some("hull_quickjs_native_alloc"))
+            .define("calloc", Some("hull_quickjs_native_calloc"))
+            .define("realloc", Some("hull_quickjs_native_realloc"))
+            .define("free", Some("hull_quickjs_native_free"))
+            .define("malloc_usable_size", Some("hull_quickjs_native_alloc_size"));
+    }
     if env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("trueos") {
         let formatter = out.join("hull_quickjs_formatter.c");
         fs::write(&formatter, FORMATTER).expect("write private QuickJS formatter");
         build
             .define("HULL_QUICKJS_NATIVE_WAIT", None)
+            .define("HULL_QUICKJS_NATIVE_CLOCK", None)
             .include(manifest.join("vendor/stb"))
             .file(formatter)
             .define("snprintf", Some("hull_quickjs_snprintf"))

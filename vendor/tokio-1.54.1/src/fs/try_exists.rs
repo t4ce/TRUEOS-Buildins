@@ -1,6 +1,6 @@
 #[allow(unused_imports)]
 use crate::alloc_prelude::*;
-#[cfg(not(any(target_os = "trueos", target_os = "zkvm")))]
+#[cfg(not(any(feature = "native", target_os = "trueos", target_os = "zkvm")))]
 use crate::fs::asyncify;
 
 use crate::io;
@@ -26,10 +26,10 @@ use crate::path::Path;
 /// # }
 /// ```
 pub async fn try_exists(path: impl AsRef<Path>) -> io::Result<bool> {
-    #[cfg(any(target_os = "trueos", target_os = "zkvm"))]
+    #[cfg(any(feature = "native", target_os = "trueos", target_os = "zkvm"))]
     return crate::fs::trueos::try_exists(path.as_ref()).await;
 
-    #[cfg(not(any(target_os = "trueos", target_os = "zkvm")))]
+    #[cfg(not(any(feature = "native", target_os = "trueos", target_os = "zkvm")))]
     {
         let path = path.as_ref();
 
@@ -91,7 +91,7 @@ cfg_io_uring! {
     }
 }
 
-#[cfg(not(any(target_os = "trueos", target_os = "zkvm")))]
+#[cfg(not(any(feature = "native", target_os = "trueos", target_os = "zkvm")))]
 async fn try_exists_spawn_blocking(path: &Path) -> io::Result<bool> {
     let path = path.to_owned();
     // FIXME: When MSRV is 1.81, change this to

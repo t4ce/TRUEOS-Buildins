@@ -217,6 +217,11 @@ pub mod platform {
         pub use std::path::{Component, Components, Path, PathBuf};
     }
 
+    #[cfg(feature = "native-runtime")]
+    pub mod path {
+        pub use trueos_path::{Component, Components, Path, PathBuf};
+    }
+
     #[cfg(feature = "tokio-runtime")]
     pub mod thread {
         pub use std::thread::{Thread, ThreadId, current};
@@ -510,8 +515,8 @@ pub mod net {
         .map_err(|_| Error::new(ErrorKind::Other, "native DNS worker completion dropped"))?
     }
 
-    #[cfg(feature = "tokio-net-probe")]
-    pub use tokio::net::{TcpListener, TcpStream, ToSocketAddrs, UdpSocket, lookup_host};
+    #[cfg(any(feature = "tokio-net-probe", feature = "native-net"))]
+    pub use tokio::net::{TcpListener, TcpSocket, TcpStream, ToSocketAddrs, UdpSocket, lookup_host};
 
     /// Resolve hostnames on explicit native capacity. Tokio's generic
     /// `lookup_host` uses its independently scheduled std-thread blocking pool.
@@ -666,18 +671,21 @@ pub mod io {
 pub mod io {
     pub use tokio::io::{
         AsyncBufRead, AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncSeek,
-        AsyncSeekExt, AsyncWrite, AsyncWriteExt, duplex,
+        AsyncSeekExt, AsyncWrite, AsyncWriteExt, Stderr, Stdin, Stdout, duplex,
+        stderr, stdin, stdout,
     };
     pub use trueos_runtime::io::{Error, ErrorKind, Result, SeekFrom};
 }
 
-#[cfg(feature = "tokio-runtime")]
+#[cfg(any(feature = "tokio-runtime", feature = "native-runtime"))]
 pub mod fs {
     pub use tokio::fs::{
         DirEntry, File, OpenOptions, ReadDir, canonicalize, copy, create_dir, create_dir_all,
         metadata, read, read_dir, read_to_string, remove_dir_all, remove_file, rename, try_exists,
         write,
     };
+    #[cfg(feature = "native-runtime")]
+    pub use tokio::fs::{Path, PathBuf};
 }
 
 #[cfg(feature = "ui3")]

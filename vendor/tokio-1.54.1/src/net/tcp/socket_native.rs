@@ -40,6 +40,9 @@ impl TcpSocket {
         TcpStream::connect_mio(self.inner.connect(addr)?).await
     }
     /// Listen using this socket's endpoint reservation and requested backlog.
+    ///
+    /// The current native service accepts backlogs through 32. Zero requests
+    /// one slot; larger values return an error without silently reducing it.
     pub fn listen(self, backlog: u32) -> io::Result<TcpListener> {
         TcpListener::new(self.inner.listen(backlog)?)
     }

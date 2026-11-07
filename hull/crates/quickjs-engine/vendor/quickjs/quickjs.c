@@ -28,8 +28,10 @@
 #include <inttypes.h>
 #include <string.h>
 #include <assert.h>
+#if !defined(HULL_QUICKJS_NATIVE_CLOCK)
 #include <sys/time.h>
 #include <time.h>
+#endif
 #include <fenv.h>
 #include <math.h>
 #if defined(__APPLE__)
@@ -47,6 +49,12 @@
 #include "libunicode.h"
 #include "dtoa.h"
 
+#if defined(HULL_QUICKJS_NATIVE_CLOCK)
+extern uint64_t hull_quickjs_native_random_seed(void);
+extern int64_t hull_quickjs_native_unix_millis(void);
+extern int32_t hull_quickjs_native_timezone_offset_seconds(int64_t utc_seconds);
+#endif
+
 #define OPTIMIZE         1
 #define SHORT_OPCODES    1
 #if defined(__EMSCRIPTEN__)
@@ -55,7 +63,9 @@
 #define DIRECT_DISPATCH  1
 #endif
 
-#if defined(__APPLE__)
+#if defined(HULL_QUICKJS_NATIVE_ALLOC)
+#define MALLOC_OVERHEAD  16
+#elif defined(__APPLE__)
 #define MALLOC_OVERHEAD  0
 #else
 #define MALLOC_OVERHEAD  8
@@ -116,7 +126,6 @@
 #ifdef CONFIG_ATOMICS
 #include "quickjs-thread.h"
 #include <stdatomic.h>
-#include <errno.h>
 #endif
 
 enum {
@@ -50022,9 +50031,13 @@ static uint64_t xorshift64star(uint64_t *pstate)
 
 static void js_random_init(JSContext *ctx)
 {
+#if defined(HULL_QUICKJS_NATIVE_CLOCK)
+    ctx->random_state = hull_quickjs_native_random_seed();
+#else
     struct timeval tv;
     gettimeofday(&tv, NULL);
     ctx->random_state = ((int64_t)tv.tv_sec * 1000000) + tv.tv_usec;
+#endif
     /* the state must be non zero */
     if (ctx->random_state == 0)
         ctx->random_state = 1;
@@ -50103,6 +50116,10 @@ static const JSCFunctionListEntry js_math_obj[] = {
    between UTC time and local time 'd' in minutes */
 static int getTimezoneOffset(int64_t time)
 {
+#if defined(HULL_QUICKJS_NATIVE_CLOCK)
+    // Keep TRUEOS's configured civil-time/DST policy without a POSIX tm object.
+    return -hull_quickjs_native_timezone_offset_seconds(time / 1000) / 60;
+#else
     time_t ti;
     int res;
 
@@ -50153,6 +50170,7 @@ static int getTimezoneOffset(int64_t time)
     }
 #endif
     return res;
+#endif
 }
 
 #if 0
@@ -59069,9 +59087,13 @@ static JSValue get_date_string(JSContext *ctx, JSValueConst this_val,
 
 /* OS dependent: return the UTC time in ms since 1970. */
 static int64_t date_now(void) {
+#if defined(HULL_QUICKJS_NATIVE_CLOCK)
+    return hull_quickjs_native_unix_millis();
+#else
     struct timeval tv;
     gettimeofday(&tv, NULL);
     return (int64_t)tv.tv_sec * 1000 + (tv.tv_usec / 1000);
+#endif
 }
 
 static JSValue js_date_constructor(JSContext *ctx, JSValueConst new_target,
@@ -64686,7 +64708,7 @@ static JSValue js_atomics_wait(JSContext *ctx,
         list_del(&waiter->link);
     js_os_mutex_unlock(&js_atomics_mutex);
     js_os_cond_destroy(&waiter->cond);
-    if (ret == ETIMEDOUT) {
+    if (ret == JS_OS_WAIT_TIMEOUT) {
         return JS_AtomToString(ctx, JS_ATOM_timed_out);
     } else {
         return JS_AtomToString(ctx, JS_ATOM_ok);

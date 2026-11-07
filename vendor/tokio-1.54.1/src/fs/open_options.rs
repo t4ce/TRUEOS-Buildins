@@ -1,6 +1,6 @@
 #[allow(unused_imports)]
 use crate::alloc_prelude::*;
-#[cfg(not(any(target_os = "trueos", target_os = "zkvm")))]
+#[cfg(not(any(feature = "native", target_os = "trueos", target_os = "zkvm")))]
 use crate::fs::asyncify;
 use crate::fs::File;
 use alloc::borrow::ToOwned;
@@ -14,12 +14,12 @@ cfg_io_uring! {
 
 }
 
-#[cfg(all(not(test), not(any(target_os = "trueos", target_os = "zkvm"))))]
+#[cfg(all(not(test), not(any(feature = "native", target_os = "trueos", target_os = "zkvm"))))]
 use std::fs::OpenOptions as StdOpenOptions;
-#[cfg(all(not(test), any(target_os = "trueos", target_os = "zkvm")))]
+#[cfg(all(not(test), any(feature = "native", target_os = "trueos", target_os = "zkvm")))]
 use crate::fs::trueos::TrueosOpenOptions as StdOpenOptions;
 
-#[cfg(all(unix, not(any(target_os = "trueos", target_os = "zkvm"))))]
+#[cfg(all(unix, not(any(feature = "native", target_os = "trueos", target_os = "zkvm"))))]
 use std::os::unix::fs::OpenOptionsExt;
 #[cfg(windows)]
 use std::os::windows::fs::OpenOptionsExt;
@@ -556,13 +556,16 @@ impl OpenOptions {
         let path = path.to_owned();
         let opts = opts.clone();
 
-        #[cfg(any(target_os = "trueos", target_os = "zkvm"))]
+        #[cfg(any(feature = "native", target_os = "trueos", target_os = "zkvm"))]
         {
             let std = opts.open(path)?;
+            #[cfg(feature = "native")]
+            return Ok(File::from_native(std));
+            #[cfg(not(feature = "native"))]
             return Ok(File::from_std(std));
         }
 
-        #[cfg(not(any(target_os = "trueos", target_os = "zkvm")))]
+        #[cfg(not(any(feature = "native", target_os = "trueos", target_os = "zkvm")))]
         {
             Ok(asyncify(move || opts.open(path)).await?.into())
         }
@@ -588,7 +591,7 @@ impl OpenOptions {
 }
 
 feature! {
-    #![all(unix, not(any(target_os = "trueos", target_os = "zkvm")))]
+    #![all(unix, not(any(feature = "native", target_os = "trueos", target_os = "zkvm")))]
 
     impl OpenOptions {
         /// Sets the mode bits that a new file will be created with.

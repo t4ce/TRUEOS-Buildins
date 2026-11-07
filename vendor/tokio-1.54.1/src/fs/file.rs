@@ -4,7 +4,7 @@
 
 #[allow(unused_imports)]
 use crate::alloc_prelude::*;
-#[cfg(not(any(target_os = "trueos", target_os = "zkvm")))]
+#[cfg(not(any(feature = "native", target_os = "trueos", target_os = "zkvm")))]
 use crate::fs::asyncify;
 use crate::fs::{FileTimes, OpenOptions};
 use crate::io::blocking::{Buf, DEFAULT_MAX_BUF_SIZE};
@@ -17,9 +17,9 @@ use ::core::fmt;
 use ::core::future::Future;
 use ::core::pin::Pin;
 use ::core::task::{ready, Context, Poll};
-#[cfg(any(target_os = "trueos", target_os = "zkvm"))]
+#[cfg(any(feature = "native", target_os = "trueos", target_os = "zkvm"))]
 use crate::fs::trueos::{Metadata, Permissions};
-#[cfg(not(any(target_os = "trueos", target_os = "zkvm")))]
+#[cfg(not(any(feature = "native", target_os = "trueos", target_os = "zkvm")))]
 use std::fs::{Metadata, Permissions};
 use crate::io::{self, SeekFrom};
 use crate::path::Path;
@@ -27,13 +27,13 @@ use crate::platform::io::Seek;
 
 #[cfg(not(test))]
 use crate::blocking::JoinHandle;
-#[cfg(all(not(test), not(any(target_os = "trueos", target_os = "zkvm"))))]
+#[cfg(all(not(test), not(any(feature = "native", target_os = "trueos", target_os = "zkvm"))))]
 use crate::blocking::{spawn_blocking, spawn_mandatory_blocking};
-#[cfg(all(not(test), any(target_os = "trueos", target_os = "zkvm")))]
+#[cfg(all(not(test), any(feature = "native", target_os = "trueos", target_os = "zkvm")))]
 use crate::blocking::spawn_blocking;
-#[cfg(all(not(test), not(any(target_os = "trueos", target_os = "zkvm"))))]
+#[cfg(all(not(test), not(any(feature = "native", target_os = "trueos", target_os = "zkvm"))))]
 use std::fs::File as StdFile;
-#[cfg(all(not(test), any(target_os = "trueos", target_os = "zkvm")))]
+#[cfg(all(not(test), any(feature = "native", target_os = "trueos", target_os = "zkvm")))]
 use crate::fs::trueos::TrueosFile as StdFile;
 
 cfg_io_uring! {
@@ -285,16 +285,20 @@ impl File {
     /// let std_file = std::fs::File::open("foo.txt").unwrap();
     /// let file = tokio::fs::File::from_std(std_file);
     /// ```
-    #[cfg(not(target_os = "trueos"))]
+    #[cfg(all(not(feature = "native"), not(target_os = "trueos")))]
     pub fn from_std(std: StdFile) -> File {
         Self::from_inner(std)
     }
 
     /// Retains a standard file's open handle, cursor and access flags on TRUEOS.
-    #[cfg(target_os = "trueos")]
+    #[cfg(all(not(feature = "native"), target_os = "trueos"))]
     pub fn from_std(std: impl Into<StdFile>) -> File {
         Self::from_inner(std.into())
     }
+
+    /// Wrap an owned native TRUEOSFS file without a standard descriptor.
+    #[cfg(feature = "native")]
+    pub fn from_native(file: StdFile) -> File { Self::from_inner(file) }
 
     fn from_inner(std: StdFile) -> File {
         File {
@@ -332,10 +336,10 @@ impl File {
     /// [`write_all`]: fn@crate::io::AsyncWriteExt::write_all
     /// [`AsyncWriteExt`]: trait@crate::io::AsyncWriteExt
     pub async fn sync_all(&self) -> io::Result<()> {
-        #[cfg(any(target_os = "trueos", target_os = "zkvm"))]
+        #[cfg(any(feature = "native", target_os = "trueos", target_os = "zkvm"))]
         return self.std.sync_all();
 
-        #[cfg(not(any(target_os = "trueos", target_os = "zkvm")))]
+        #[cfg(not(any(feature = "native", target_os = "trueos", target_os = "zkvm")))]
         {
         let mut inner = self.inner.lock().await;
         inner.complete_inflight().await;
@@ -373,10 +377,10 @@ impl File {
     /// [`write_all`]: fn@crate::io::AsyncWriteExt::write_all
     /// [`AsyncWriteExt`]: trait@crate::io::AsyncWriteExt
     pub async fn sync_data(&self) -> io::Result<()> {
-        #[cfg(any(target_os = "trueos", target_os = "zkvm"))]
+        #[cfg(any(feature = "native", target_os = "trueos", target_os = "zkvm"))]
         return self.std.sync_data();
 
-        #[cfg(not(any(target_os = "trueos", target_os = "zkvm")))]
+        #[cfg(not(any(feature = "native", target_os = "trueos", target_os = "zkvm")))]
         {
         let mut inner = self.inner.lock().await;
         inner.complete_inflight().await;
@@ -417,10 +421,10 @@ impl File {
     /// [`write_all`]: fn@crate::io::AsyncWriteExt::write_all
     /// [`AsyncWriteExt`]: trait@crate::io::AsyncWriteExt
     pub async fn set_len(&self, size: u64) -> io::Result<()> {
-        #[cfg(any(target_os = "trueos", target_os = "zkvm"))]
+        #[cfg(any(feature = "native", target_os = "trueos", target_os = "zkvm"))]
         return self.std.set_len(size);
 
-        #[cfg(not(any(target_os = "trueos", target_os = "zkvm")))]
+        #[cfg(not(any(feature = "native", target_os = "trueos", target_os = "zkvm")))]
         {
         let mut inner = self.inner.lock().await;
         inner.complete_inflight().await;
@@ -489,10 +493,10 @@ impl File {
     /// # }
     /// ```
     pub async fn metadata(&self) -> io::Result<Metadata> {
-        #[cfg(any(target_os = "trueos", target_os = "zkvm"))]
+        #[cfg(any(feature = "native", target_os = "trueos", target_os = "zkvm"))]
         return self.std.metadata();
 
-        #[cfg(not(any(target_os = "trueos", target_os = "zkvm")))]
+        #[cfg(not(any(feature = "native", target_os = "trueos", target_os = "zkvm")))]
         {
         let std = self.std.clone();
         asyncify(move || std.metadata()).await
@@ -515,15 +519,15 @@ impl File {
     /// # }
     /// ```
     pub async fn try_clone(&self) -> io::Result<File> {
-        #[cfg(any(target_os = "trueos", target_os = "zkvm"))]
+        #[cfg(any(feature = "native", target_os = "trueos", target_os = "zkvm"))]
         {
             let std_file = self.std.try_clone()?;
-            let mut file = File::from_std(std_file);
+            let mut file = File::from_inner(std_file);
             file.set_max_buf_size(self.max_buf_size);
             return Ok(file);
         }
 
-        #[cfg(not(any(target_os = "trueos", target_os = "zkvm")))]
+        #[cfg(not(any(feature = "native", target_os = "trueos", target_os = "zkvm")))]
         {
         self.inner.lock().await.complete_inflight().await;
         let std = self.std.clone();
@@ -550,6 +554,7 @@ impl File {
     /// # Ok(())
     /// # }
     /// ```
+    #[cfg(not(feature = "native"))]
     pub async fn into_std(mut self) -> StdFile {
         self.inner.get_mut().complete_inflight().await;
         Arc::try_unwrap(self.std).expect("Arc::try_unwrap failed")
@@ -574,6 +579,7 @@ impl File {
     /// # }
     /// ```
     #[allow(clippy::result_large_err)]
+    #[cfg(not(feature = "native"))]
     pub fn try_into_std(mut self) -> Result<StdFile, Self> {
         match Arc::try_unwrap(self.std) {
             Ok(file) => Ok(file),
@@ -581,6 +587,23 @@ impl File {
                 self.std = std_file_arc;
                 Err(self)
             }
+        }
+    }
+
+    /// Recover the native file after in-flight operations complete.
+    #[cfg(feature = "native")]
+    pub async fn into_native(mut self) -> StdFile {
+        self.inner.get_mut().complete_inflight().await;
+        Arc::try_unwrap(self.std).expect("Arc::try_unwrap failed")
+    }
+
+    /// Recover the native file immediately if no operation still owns it.
+    #[cfg(feature = "native")]
+    #[allow(clippy::result_large_err)]
+    pub fn try_into_native(mut self) -> Result<StdFile, Self> {
+        match Arc::try_unwrap(self.std) {
+            Ok(file) => Ok(file),
+            Err(file) => { self.std = file; Err(self) }
         }
     }
 
@@ -614,10 +637,10 @@ impl File {
     /// # }
     /// ```
     pub async fn set_permissions(&self, perm: Permissions) -> io::Result<()> {
-        #[cfg(any(target_os = "trueos", target_os = "zkvm"))]
+        #[cfg(any(feature = "native", target_os = "trueos", target_os = "zkvm"))]
         return self.std.set_permissions(perm);
 
-        #[cfg(not(any(target_os = "trueos", target_os = "zkvm")))]
+        #[cfg(not(any(feature = "native", target_os = "trueos", target_os = "zkvm")))]
         {
         let std = self.std.clone();
         asyncify(move || std.set_permissions(perm)).await
@@ -626,7 +649,7 @@ impl File {
 
     /// Changes the timestamps on the underlying file.
     ///
-    /// Native TRUEOSFS files return [`io::ErrorKind::Unsupported`] because the
+    /// Native TRUEOSFS files return an error because the
     /// filesystem broker does not expose a timestamp setter. Files converted
     /// from `std::fs::File` preserve the standard descriptor's behavior.
     ///
@@ -651,17 +674,17 @@ impl File {
     /// # }
     /// ```
     pub async fn set_times(&self, times: FileTimes) -> io::Result<()> {
-        #[cfg(any(target_os = "trueos", target_os = "zkvm"))]
-        return self.std.set_times(times.into_std());
+        #[cfg(any(feature = "native", target_os = "trueos", target_os = "zkvm"))]
+        return self.std.set_times(times.into_platform());
 
-        #[cfg(not(any(target_os = "trueos", target_os = "zkvm")))]
+        #[cfg(not(any(feature = "native", target_os = "trueos", target_os = "zkvm")))]
         {
             // Wait for in-flight reads/writes like `sync_all` does, so they
             // cannot complete after us and overwrite the timestamps.
             self.inner.lock().await.complete_inflight().await;
 
             let std = self.std.clone();
-            let std_times = times.into_std();
+            let std_times = times.into_platform();
             asyncify(move || std.set_times(std_times)).await
         }
     }
@@ -669,7 +692,14 @@ impl File {
     /// Changes the modification timestamp on the underlying file.
     ///
     /// This is equivalent to `set_times` with only the modification time set.
+    #[cfg(not(feature = "native"))]
     pub async fn set_modified(&self, time: std::time::SystemTime) -> io::Result<()> {
+        self.set_times(FileTimes::new().set_modified(time)).await
+    }
+
+    /// Request a native file modification time. TRUEOSFS reports it unavailable.
+    #[cfg(feature = "native")]
+    pub async fn set_modified(&self, time: super::FileTimestamp) -> io::Result<()> {
         self.set_times(FileTimes::new().set_modified(time)).await
     }
 
@@ -723,10 +753,10 @@ impl AsyncRead for File {
 
         let me = self.get_mut();
 
-        #[cfg(any(target_os = "trueos", target_os = "zkvm"))]
+        #[cfg(any(feature = "native", target_os = "trueos", target_os = "zkvm"))]
         return Poll::Ready(me.std.poll_read_into(dst));
 
-        #[cfg(not(any(target_os = "trueos", target_os = "zkvm")))]
+        #[cfg(not(any(feature = "native", target_os = "trueos", target_os = "zkvm")))]
         {
         let inner = me.inner.get_mut();
 
@@ -796,13 +826,13 @@ impl AsyncSeek for File {
     fn start_seek(self: Pin<&mut Self>, mut pos: SeekFrom) -> io::Result<()> {
         let me = self.get_mut();
 
-        #[cfg(any(target_os = "trueos", target_os = "zkvm"))]
+        #[cfg(any(feature = "native", target_os = "trueos", target_os = "zkvm"))]
         {
             me.std.seek_inner(pos)?;
             return Ok(());
         }
 
-        #[cfg(not(any(target_os = "trueos", target_os = "zkvm")))]
+        #[cfg(not(any(feature = "native", target_os = "trueos", target_os = "zkvm")))]
         {
         let inner = me.inner.get_mut();
 
@@ -851,10 +881,10 @@ impl AsyncSeek for File {
     fn poll_complete(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<u64>> {
         ready!(crate::trace::trace_leaf(cx));
 
-        #[cfg(any(target_os = "trueos", target_os = "zkvm"))]
+        #[cfg(any(feature = "native", target_os = "trueos", target_os = "zkvm"))]
         return Poll::Ready(self.std.position());
 
-        #[cfg(not(any(target_os = "trueos", target_os = "zkvm")))]
+        #[cfg(not(any(feature = "native", target_os = "trueos", target_os = "zkvm")))]
         {
         let inner = self.inner.get_mut();
 
@@ -900,10 +930,10 @@ impl AsyncWrite for File {
         ready!(crate::trace::trace_leaf(cx));
         let me = self.get_mut();
 
-        #[cfg(any(target_os = "trueos", target_os = "zkvm"))]
+        #[cfg(any(feature = "native", target_os = "trueos", target_os = "zkvm"))]
         return Poll::Ready(me.std.poll_write_from(src));
 
-        #[cfg(not(any(target_os = "trueos", target_os = "zkvm")))]
+        #[cfg(not(any(feature = "native", target_os = "trueos", target_os = "zkvm")))]
         {
         let inner = me.inner.get_mut();
 
@@ -987,7 +1017,7 @@ impl AsyncWrite for File {
         ready!(crate::trace::trace_leaf(cx));
         let me = self.get_mut();
 
-        #[cfg(any(target_os = "trueos", target_os = "zkvm"))]
+        #[cfg(any(feature = "native", target_os = "trueos", target_os = "zkvm"))]
         {
             let mut written = 0usize;
             for buf in bufs {
@@ -1000,7 +1030,7 @@ impl AsyncWrite for File {
             return Poll::Ready(Ok(written));
         }
 
-        #[cfg(not(any(target_os = "trueos", target_os = "zkvm")))]
+        #[cfg(not(any(feature = "native", target_os = "trueos", target_os = "zkvm")))]
         {
         let inner = me.inner.get_mut();
 
@@ -1083,10 +1113,10 @@ impl AsyncWrite for File {
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         ready!(crate::trace::trace_leaf(cx));
 
-        #[cfg(any(target_os = "trueos", target_os = "zkvm"))]
+        #[cfg(any(feature = "native", target_os = "trueos", target_os = "zkvm"))]
         return Poll::Ready(self.std.sync_all());
 
-        #[cfg(not(any(target_os = "trueos", target_os = "zkvm")))]
+        #[cfg(not(any(feature = "native", target_os = "trueos", target_os = "zkvm")))]
         {
         let inner = self.inner.get_mut();
         inner.poll_flush(cx)
@@ -1101,7 +1131,7 @@ impl AsyncWrite for File {
 
 impl From<StdFile> for File {
     fn from(std: StdFile) -> Self {
-        Self::from_std(std)
+        Self::from_inner(std)
     }
 }
 
@@ -1113,21 +1143,21 @@ impl fmt::Debug for File {
     }
 }
 
-#[cfg(all(unix, not(any(target_os = "trueos", target_os = "zkvm"))))]
+#[cfg(all(unix, not(any(feature = "native", target_os = "trueos", target_os = "zkvm"))))]
 impl From<std::os::fd::OwnedFd> for File {
     fn from(fd: std::os::fd::OwnedFd) -> Self {
         Self::from_std(StdFile::from(fd))
     }
 }
 
-#[cfg(all(unix, not(any(target_os = "trueos", target_os = "zkvm"))))]
+#[cfg(all(unix, not(any(feature = "native", target_os = "trueos", target_os = "zkvm"))))]
 impl std::os::unix::io::AsRawFd for File {
     fn as_raw_fd(&self) -> std::os::unix::io::RawFd {
         self.std.as_raw_fd()
     }
 }
 
-#[cfg(all(unix, not(any(target_os = "trueos", target_os = "zkvm"))))]
+#[cfg(all(unix, not(any(feature = "native", target_os = "trueos", target_os = "zkvm"))))]
 impl std::os::unix::io::AsFd for File {
     fn as_fd(&self) -> std::os::unix::io::BorrowedFd<'_> {
         unsafe {
@@ -1136,7 +1166,7 @@ impl std::os::unix::io::AsFd for File {
     }
 }
 
-#[cfg(all(unix, not(any(target_os = "trueos", target_os = "zkvm"))))]
+#[cfg(all(unix, not(any(feature = "native", target_os = "trueos", target_os = "zkvm"))))]
 impl std::os::unix::io::FromRawFd for File {
     unsafe fn from_raw_fd(fd: std::os::unix::io::RawFd) -> Self {
         // Safety: exactly the same safety contract as

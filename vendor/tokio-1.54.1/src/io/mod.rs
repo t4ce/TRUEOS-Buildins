@@ -267,6 +267,8 @@ cfg_net_unix! {
 }
 
 cfg_io_std! {
+    #[cfg(feature = "native")]
+    pub(crate) mod native_stdio_backend;
     mod stdio_common;
 
     mod stderr;

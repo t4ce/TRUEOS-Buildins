@@ -93,7 +93,7 @@ cfg_io_std! {
     }
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(feature = "native")))]
 mod sys {
     use std::os::unix::io::{AsFd, AsRawFd, BorrowedFd, RawFd};
 

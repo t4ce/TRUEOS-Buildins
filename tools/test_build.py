@@ -112,7 +112,14 @@ class BuildInputs(unittest.TestCase):
             self.assertNotIn("trueos/tokio-runtime", features)
             self.assertNotIn("trueos/tokio-net-probe", features)
             manifest = app / "Cargo.toml"
-            manifest.write_text(manifest.read_text().replace('["native-runtime"]', '["native-runtime","tokio-runtime"]'))
+            manifest.write_text(manifest.read_text().replace('["native-runtime"]', '["native-net"]'))
+            with patch.object(build, "ROOT", root):
+                _, _, needs_std, features, _ = build.settings("example")
+            self.assertFalse(needs_std)
+            self.assertIn("trueos/native-runtime", features)
+            self.assertNotIn("trueos/tokio-runtime", features)
+            self.assertNotIn("trueos/tokio-net-probe", features)
+            manifest.write_text(manifest.read_text().replace('["native-net"]', '["native-net","tokio-runtime"]'))
             with patch.object(build, "ROOT", root), self.assertRaisesRegex(ValueError, "cannot be combined"):
                 build.settings("example")
 

@@ -1,6 +1,6 @@
 #[allow(unused_imports)]
 use crate::alloc_prelude::*;
-#[cfg(not(any(target_os = "trueos", target_os = "zkvm")))]
+#[cfg(not(any(feature = "native", target_os = "trueos", target_os = "zkvm")))]
 use crate::fs::asyncify;
 
 use crate::io;
@@ -14,10 +14,10 @@ use crate::path::Path;
 ///
 /// This is an async version of [`std::fs::rename`].
 pub async fn rename(from: impl AsRef<Path>, to: impl AsRef<Path>) -> io::Result<()> {
-    #[cfg(any(target_os = "trueos", target_os = "zkvm"))]
+    #[cfg(any(feature = "native", target_os = "trueos", target_os = "zkvm"))]
     return crate::fs::trueos::rename(from.as_ref(), to.as_ref()).await;
 
-    #[cfg(not(any(target_os = "trueos", target_os = "zkvm")))]
+    #[cfg(not(any(feature = "native", target_os = "trueos", target_os = "zkvm")))]
     {
         let from = from.as_ref();
         let to = to.as_ref();
@@ -51,7 +51,7 @@ pub async fn rename(from: impl AsRef<Path>, to: impl AsRef<Path>) -> io::Result<
     }
 }
 
-#[cfg(not(any(target_os = "trueos", target_os = "zkvm")))]
+#[cfg(not(any(feature = "native", target_os = "trueos", target_os = "zkvm")))]
 async fn rename_blocking(from: &Path, to: &Path) -> io::Result<()> {
     let [from, to] = [from, to].map(Path::to_owned);
     asyncify(move || std::fs::rename(from, to)).await

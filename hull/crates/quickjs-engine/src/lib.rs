@@ -3,19 +3,32 @@
 //! Native values stay behind an opaque C adapter compiled against the same
 //! upstream header. Engine ownership stays on one local executor task; dropping
 //! an engine releases its context, pending jobs and runtime together.
+#![cfg_attr(target_os = "trueos", no_std)]
+
+#[cfg(all(target_os = "trueos", not(panic = "abort")))]
+compile_error!("the native QuickJS callback boundary requires panic=abort");
+
 // C owns in-place atomics; this adapter only bridges the native wait/clock ABI.
+extern crate alloc;
+
+#[cfg(any(target_os = "trueos", feature = "native-allocator-test"))]
+mod native_alloc;
+
 #[cfg(target_os = "trueos")]
 mod native_wait;
+#[cfg(target_os = "trueos")]
+mod native_time;
+mod platform;
 
-use std::{
+use alloc::{borrow::ToOwned, boxed::Box, ffi::CString, rc::Rc, string::String, vec::Vec};
+use core::{
     cell::{Cell, RefCell},
-    ffi::{CStr, CString, c_char, c_int, c_void},
+    ffi::{CStr, c_char, c_int, c_void},
     marker::PhantomData,
-    panic::{AssertUnwindSafe, catch_unwind},
     ptr::NonNull,
-    rc::Rc,
-    time::{Duration, Instant},
+    time::Duration,
 };
+use platform::{Instant, invoke_host};
 
 #[derive(Clone, Copy, Debug)]
 pub struct Limits {
@@ -63,7 +76,7 @@ unsafe extern "C" fn normalize_module(
 ) -> c_int {
     // SAFETY: C passes terminated strings and the installed stable state.
     let state = unsafe { &*opaque.cast::<ModuleState>() };
-    let result = catch_unwind(AssertUnwindSafe(|| {
+    let result = invoke_host(|| {
         let base = unsafe { CStr::from_ptr(base) }
             .to_str()
             .map_err(|_| "Invalid module base UTF-8".to_owned())?;
@@ -74,7 +87,7 @@ unsafe extern "C" fn normalize_module(
             .normalize
             .try_borrow_mut()
             .map_err(|_| "Module resolver reentry".to_owned())?(base, name)
-    }))
+    })
     .unwrap_or_else(|_| Err("Module resolver panicked".into()));
     let (status, text) = match result {
         Ok(s) => (0, s),
@@ -103,8 +116,8 @@ struct DependencyList {
 }
 unsafe extern "C" fn dependency_item(opaque: *mut c_void, text: *const c_char, length: usize) {
     let list = unsafe { &mut *opaque.cast::<DependencyList>() };
-    let bytes = unsafe { std::slice::from_raw_parts(text.cast::<u8>(), length) };
-    match std::str::from_utf8(bytes) {
+    let bytes = unsafe { core::slice::from_raw_parts(text.cast::<u8>(), length) };
+    match core::str::from_utf8(bytes) {
         Ok(value) if value.len() <= 4096 && list.names.len() < 256 => list.names.push(value.into()),
         _ => list.invalid = true,
     }
@@ -120,17 +133,17 @@ unsafe extern "C" fn host_call(
     // SAFETY: the engine owns this stable Box until after the native context is
     // freed; C supplies valid request storage and output slots for this call.
     let state = unsafe { &*opaque.cast::<HostState>() };
-    let result = catch_unwind(AssertUnwindSafe(|| {
+    let result = invoke_host(|| {
         if length > HOST_JSON_BYTES {
             return Err("host request exceeds 1 MiB".into());
         }
-        let input = unsafe { std::slice::from_raw_parts(input.cast::<u8>(), length) };
+        let input = unsafe { core::slice::from_raw_parts(input.cast::<u8>(), length) };
         let mut handler = state
             .handler
             .try_borrow_mut()
             .map_err(|_| "host handler is already executing".to_owned())?;
         handler(input)
-    }))
+    })
     .unwrap_or_else(|_| Err("host handler panicked".into()));
     let (status, bytes) = match result {
         Ok(bytes) if bytes.len() <= HOST_JSON_BYTES => (0, bytes),
@@ -540,7 +553,7 @@ impl Engine {
             hull_quickjs_import_complete(
                 self.native.as_ptr(),
                 id,
-                error.as_ref().map_or(std::ptr::null(), |s| s.as_ptr()),
+                error.as_ref().map_or(core::ptr::null(), |s| s.as_ptr()),
             )
         };
         self.finish_call(started, status)

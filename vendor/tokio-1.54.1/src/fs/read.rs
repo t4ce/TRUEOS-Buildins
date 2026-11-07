@@ -1,9 +1,9 @@
 #[allow(unused_imports)]
 use crate::alloc_prelude::*;
-#[cfg(not(any(target_os = "trueos", target_os = "zkvm")))]
+#[cfg(not(any(feature = "native", target_os = "trueos", target_os = "zkvm")))]
 use crate::fs::asyncify;
 
-use std::{io, path::Path};
+use crate::{io, path::Path};
 
 /// Reads the entire contents of a file into a bytes vector.
 ///
@@ -57,10 +57,10 @@ use std::{io, path::Path};
 /// }
 /// ```
 pub async fn read(path: impl AsRef<Path>) -> io::Result<Vec<u8>> {
-    #[cfg(any(target_os = "trueos", target_os = "zkvm"))]
+    #[cfg(any(feature = "native", target_os = "trueos", target_os = "zkvm"))]
     return crate::fs::trueos::read(path.as_ref()).await;
 
-    #[cfg(not(any(target_os = "trueos", target_os = "zkvm")))]
+    #[cfg(not(any(feature = "native", target_os = "trueos", target_os = "zkvm")))]
     {
         let path = path.as_ref();
 
@@ -99,7 +99,7 @@ pub async fn read(path: impl AsRef<Path>) -> io::Result<Vec<u8>> {
     }
 }
 
-#[cfg(not(any(target_os = "trueos", target_os = "zkvm")))]
+#[cfg(not(any(feature = "native", target_os = "trueos", target_os = "zkvm")))]
 async fn read_spawn_blocking(path: &Path) -> io::Result<Vec<u8>> {
     let path = path.to_owned();
     asyncify(move || std::fs::read(path)).await

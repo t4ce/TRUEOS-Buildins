@@ -1,6 +1,6 @@
 #[allow(unused_imports)]
 use crate::alloc_prelude::*;
-use std::{
+use ::core::{
     any::TypeId,
     marker::PhantomData,
     mem::{self, ManuallyDrop},

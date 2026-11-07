@@ -9,7 +9,13 @@ pub(crate) mod panic {
 #[cfg(not(feature = "native"))]
 pub(crate) use std::process::abort;
 #[cfg(feature = "native")]
-pub(crate) use trueos_runtime::{abort, env, io, sync, thread};
+pub(crate) use trueos_runtime::{abort, env, sync, thread};
+#[cfg(feature = "native")]
+pub(crate) mod io {
+    pub use trueos_runtime::io::*;
+    #[cfg(feature = "io-std")]
+    pub(crate) use crate::io::native_stdio_backend::{stdin, stdout, stderr, Stdin, Stdout, Stderr};
+}
 #[cfg(feature = "native")]
 pub(crate) mod time {
     pub(crate) use ::core::time::Duration;

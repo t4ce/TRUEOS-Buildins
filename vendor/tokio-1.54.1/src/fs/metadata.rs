@@ -1,12 +1,12 @@
 #[allow(unused_imports)]
 use crate::alloc_prelude::*;
-#[cfg(not(any(target_os = "trueos", target_os = "zkvm")))]
+#[cfg(not(any(feature = "native", target_os = "trueos", target_os = "zkvm")))]
 use crate::fs::asyncify;
 use alloc::borrow::ToOwned;
 
-#[cfg(any(target_os = "trueos", target_os = "zkvm"))]
+#[cfg(any(feature = "native", target_os = "trueos", target_os = "zkvm"))]
 use crate::fs::trueos::Metadata;
-#[cfg(not(any(target_os = "trueos", target_os = "zkvm")))]
+#[cfg(not(any(feature = "native", target_os = "trueos", target_os = "zkvm")))]
 use std::fs::Metadata;
 use crate::io;
 use crate::path::Path;
@@ -49,8 +49,8 @@ use crate::path::Path;
 /// ```
 pub async fn metadata(path: impl AsRef<Path>) -> io::Result<Metadata> {
     let path = path.as_ref().to_owned();
-    #[cfg(any(target_os = "trueos", target_os = "zkvm"))]
+    #[cfg(any(feature = "native", target_os = "trueos", target_os = "zkvm"))]
     return crate::fs::trueos::metadata(&path).await;
-    #[cfg(not(any(target_os = "trueos", target_os = "zkvm")))]
+    #[cfg(not(any(feature = "native", target_os = "trueos", target_os = "zkvm")))]
     asyncify(|| std::fs::metadata(path)).await
 }

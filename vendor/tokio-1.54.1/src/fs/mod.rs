@@ -242,6 +242,13 @@ pub use self::file::File;
 mod file_times;
 pub use self::file_times::FileTimes;
 
+#[cfg(feature = "native")]
+mod native_timestamp;
+#[cfg(feature = "native")]
+pub use self::native_timestamp::FileTimestamp;
+#[cfg(feature = "native")]
+pub use crate::path::{Path, PathBuf};
+
 mod hard_link;
 pub use self::hard_link::hard_link;
 
@@ -262,9 +269,9 @@ pub use self::read_link::read_link;
 
 mod read_to_string;
 pub use self::read_to_string::read_to_string;
-#[cfg(any(target_os = "trueos", target_os = "zkvm"))]
+#[cfg(any(feature = "native", target_os = "trueos", target_os = "zkvm"))]
 mod trueos;
-#[cfg(any(target_os = "trueos", target_os = "zkvm"))]
+#[cfg(any(feature = "native", target_os = "trueos", target_os = "zkvm"))]
 pub use self::trueos::{FileType, Metadata, Permissions};
 
 mod remove_dir;
@@ -329,6 +336,6 @@ where
 {
     match spawn_blocking(f).await {
         Ok(res) => res,
-        Err(_) => Err(io::Error::other("background task failed")),
+        Err(_) => Err(io::Error::new(io::ErrorKind::Other, "background task failed")),
     }
 }

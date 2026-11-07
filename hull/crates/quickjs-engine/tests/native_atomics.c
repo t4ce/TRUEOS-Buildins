@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <malloc.h>
 
 typedef struct { JSRuntime *rt; JSContext *ctx; } Engine;
 static _Alignas(8) _Atomic(int32_t) shared[16];
@@ -119,7 +120,42 @@ static int compare_ids(const void *a, const void *b) {
 }
 
 int main(void) {
+#ifdef HULL_QUICKJS_NATIVE_ALLOC
+    extern void fixture_fail_next_allocation(void);
+    extern uint64_t fixture_live_allocations(void);
+    uint64_t live = fixture_live_allocations();
+    unsigned char *bytes = malloc(101);
+    assert(bytes && (uintptr_t)bytes % 16 == 0 && malloc_usable_size(bytes) == 101);
+    for (unsigned i = 0; i < 101; i++) bytes[i] = i;
+    fixture_fail_next_allocation();
+    assert(!realloc(bytes, 4097));
+    assert(malloc_usable_size(bytes) == 101);
+    for (unsigned i = 0; i < 101; i++) assert(bytes[i] == i);
+    bytes = realloc(bytes, 4097);
+    assert(bytes && malloc_usable_size(bytes) == 4097);
+    for (unsigned i = 0; i < 101; i++) assert(bytes[i] == i);
+    free(bytes);
+    fixture_fail_next_allocation();
+    assert(!calloc(3, 17));
+    bytes = calloc(3, 17);
+    assert(bytes && malloc_usable_size(bytes) == 51);
+    for (unsigned i = 0; i < 51; i++) assert(bytes[i] == 0);
+    assert(!realloc(bytes, 0));
+    free(NULL);
+    assert(fixture_live_allocations() == live);
+    puts("PASS native allocation alignment/exact size/zeroing/real failure ownership/no leaks");
+#endif
     Engine e = engine(); reset();
+#ifdef HULL_QUICKJS_NATIVE_CLOCK
+    equals(&e, "Date.now()", "1700000000123");
+    equals(&e, "new Date().toISOString()", "2023-11-14T22:13:20.123Z");
+    equals(&e, "new Date(1700000000123).getTimezoneOffset()", "-120");
+    equals(&e, "new Date(1699999999123).getTimezoneOffset()", "-60");
+    equals(&e, "new Date(1700000000123).getHours()", "0");
+    equals(&e, "new Date(-1).getTimezoneOffset()", "-60");
+    equals(&e, "(()=>{for(let i=0;i<10000;i++){let n=Math.random();if(!(n>=0&&n<1))return false}return true})()", "true");
+    puts("PASS native epoch milliseconds/civil offset transition/negative epoch/random range");
+#endif
     equals(&e, "Atomics.wait(new Int32Array(buffer),0,9,Infinity)", "not-equal");
     equals(&e, "Atomics.wait(new Int32Array(buffer),0,0,0)", "timed-out");
     equals(&e, "Atomics.wait(new Int32Array(buffer),0,0,-10)", "timed-out");

@@ -1,6 +1,6 @@
 #[allow(unused_imports)]
 use crate::alloc_prelude::*;
-#[cfg(not(any(target_os = "trueos", target_os = "zkvm")))]
+#[cfg(not(any(feature = "native", target_os = "trueos", target_os = "zkvm")))]
 use crate::fs::asyncify;
 use alloc::borrow::ToOwned;
 
@@ -94,7 +94,7 @@ impl DirBuilder {
     /// ```
     pub async fn create(&self, path: impl AsRef<Path>) -> io::Result<()> {
         let path = path.as_ref().to_owned();
-        #[cfg(any(target_os = "trueos", target_os = "zkvm"))]
+        #[cfg(any(feature = "native", target_os = "trueos", target_os = "zkvm"))]
         {
             // TRUEOSFS creates paths through the async filesystem broker and
             // does not store Unix permission bits. `mode` is API compatibility
@@ -105,7 +105,7 @@ impl DirBuilder {
             return crate::fs::trueos::create_dir(&path).await;
         }
 
-        #[cfg(not(any(target_os = "trueos", target_os = "zkvm")))]
+        #[cfg(not(any(feature = "native", target_os = "trueos", target_os = "zkvm")))]
         {
         let mut builder = std::fs::DirBuilder::new();
         builder.recursive(self.recursive);

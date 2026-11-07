@@ -38,6 +38,14 @@ def main():
             raise RuntimeError(log.read_text()[-6000:])
         return log
 
+    # Compile the actual Rust engine's TRUEOS branch, including raw API, with
+    # its no_std attribute active. This is a host-ABI cfg check; the root's
+    # integration build separately checks the real TRUEOS target and resolver.
+    run("nostd-engine-raw", ["rustup", "run", TOOLCHAIN, "rustc", "--edition=2024",
+        "--crate-name=hull_quickjs", "--crate-type=rlib", "--emit=metadata", "-C", "panic=abort",
+        "--cfg", 'target_os="trueos"', "--cfg", 'feature="raw"',
+        "-Aexplicit_builtin_cfgs_in_flags", ENGINE / "src/lib.rs", "-o", output / "native-engine.rmeta"])
+
     for opt in (0, 3):
         work = output / f"O{opt}"
         work.mkdir(exist_ok=True)
@@ -59,7 +67,10 @@ def main():
             flags = ["cc", *(["-std=gnu11"] if opt == 0 else []), f"-O{opt}", "-D_GNU_SOURCE", "-DHULL_QUICKJS_FULL_POINTERS",
                      '-DCONFIG_VERSION="native-sync-test"', "-I", SOURCE, "-fno-stack-protector"]
             if backend == "native":
-                flags.append("-DHULL_QUICKJS_NATIVE_WAIT")
+                flags.extend(["-DHULL_QUICKJS_NATIVE_WAIT", "-DHULL_QUICKJS_NATIVE_CLOCK",
+                    "-DHULL_QUICKJS_NATIVE_ALLOC", "-Dmalloc=hull_quickjs_native_alloc",
+                    "-Dcalloc=hull_quickjs_native_calloc", "-Drealloc=hull_quickjs_native_realloc",
+                    "-Dfree=hull_quickjs_native_free", "-Dmalloc_usable_size=hull_quickjs_native_alloc_size"])
             for file in ("quickjs.c", "libregexp.c", "libunicode.c", "cutils.c", "dtoa.c"):
                 obj = work / (backend + "-" + file + ".o")
                 run(f"O{opt}-{backend}-{file}", [*flags, "-c", SOURCE / file, "-o", obj])
@@ -69,13 +80,15 @@ def main():
             if backend == "native":
                 assert not any(name.startswith("pthread_") for name in engine_imports), engine_imports
                 assert "clock_gettime" not in engine_imports, engine_imports
+                assert not set(engine_imports).intersection({"malloc", "calloc", "realloc", "free",
+                    "malloc_usable_size", "gettimeofday", "localtime_r"}), engine_imports
             binary = work / (backend + "-atomics")
             run(f"O{opt}-{backend}-link", [*flags, ENGINE / "tests/native_atomics.c", *objects,
                 bridge, "-lm", "-lpthread", "-ldl", "-o", binary])
             log = run(f"O{opt}-{backend}-behavior", [binary], timeout=45)
             records.append(dict(label=f"O{opt}-{backend}-actual-engine-imports", imports=engine_imports,
                                 passed_cases=log.read_text().count("PASS ")))
-    sources = [ENGINE / "build.rs", ENGINE / "src/native_wait.rs", SOURCE / "quickjs.c",
+    sources = [ENGINE / "build.rs", *sorted((ENGINE / "src").glob("*.rs")), SOURCE / "quickjs.c",
                SOURCE / "quickjs-thread.h", *sorted((ENGINE / "tests").rglob("*"))]
     receipt = dict(scope=__doc__, toolchain=TOOLCHAIN, records=records,
         sources=[dict(path=str(p), sha256=hashlib.sha256(p.read_bytes()).hexdigest()) for p in sources if p.is_file()])

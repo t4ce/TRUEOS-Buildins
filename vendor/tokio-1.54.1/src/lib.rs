@@ -520,9 +520,19 @@ pub(crate) mod ffi {
     pub(crate) use std::ffi::*;
 }
 
+#[cfg(feature="native")]
+pub(crate) mod ffi {
+    pub(crate) use alloc::string::String as OsString;
+}
+
 #[cfg(not(feature="native"))]
 pub(crate) mod path {
     pub(crate) use std::path::*;
+}
+
+#[cfg(feature="native")]
+pub(crate) mod path {
+    pub use trueos_path::*;
 }
 
 #[cfg(all(

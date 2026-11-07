@@ -8,9 +8,11 @@ default = []
 default-global-allocator = []
 default-panic-handler = []
 tokio-runtime = ["dep:tokio", "tokio/std-compat", "tokio/rt", "tokio/macros", "tokio/sync", "tokio/time", "tokio/io-util", "tokio/io-std", "tokio/fs"]
-# Native scheduler, timers and task primitives share the existing SDK surface.
-# Filesystem/stdio adapters remain explicit work before wider native admission.
-native-runtime = ["dep:tokio", "dep:trueos-runtime", "tokio/native", "tokio/rt", "tokio/macros", "tokio/sync", "tokio/time", "tokio/io-util"]
+# Native execution, filesystem, console and network adapters share the SDK
+# surface with the hosted mode, using core+alloc and owned TRUEOS services.
+native-runtime = ["dep:tokio", "dep:trueos-runtime", "dep:trueos-path", "tokio/native", "tokio/rt", "tokio/macros", "tokio/sync", "tokio/time", "tokio/io-util", "tokio/fs", "tokio/io-std"]
+# Reactor registration is only needed by consumers with native sockets.
+native-net = ["native-runtime", "tokio/net"]
 wc3-x86 = ["v/wc3-x86"]
 tokio-net-probe = ["tokio-runtime", "dep:mio", "dep:socket2", "tokio/net"]
 tracing = ["dep:tracing"]
@@ -31,6 +33,7 @@ path = "src/lib.rs"
 v = { path = "../trueos-v" }
 tokio = { version = "=1.54.1", default-features = false, optional = true }
 trueos-runtime = { path = "../../../TRUEOS/crates/trueos-runtime", optional = true }
+trueos-path = { path = "../../../TRUEOS/crates/trueos-path", optional = true }
 mio = { version = "=1.2.0", default-features = false, features = ["std-compat", "os-poll", "net"], optional = true }
 socket2 = { version = "=0.6.3", default-features = false, optional = true }
 tracing = { version = "=0.1.44", default-features = false, features = ["std"], optional = true }

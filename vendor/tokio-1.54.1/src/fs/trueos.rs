@@ -7,8 +7,20 @@ use ::core::fmt;
 use ::core::future::{Future, poll_fn};
 use ::core::task::{Context, Poll, Waker};
 use alloc::string::String;
+use alloc::sync::Arc;
 use alloc::vec::Vec;
 use crate::platform::io::{Read, Seek, SeekFrom, Write};
+#[cfg(feature = "native")]
+use super::FileTimestamp;
+#[cfg(not(feature = "native"))]
+use std::time::SystemTime as FileTimestamp;
+
+// core3's I/O error vocabulary has no Unsupported variant. Keep the same
+// unsupported-operation messages in native mode rather than inventing errno.
+#[cfg(feature = "native")]
+const UNSUPPORTED: io::ErrorKind = io::ErrorKind::Other;
+#[cfg(not(feature = "native"))]
+const UNSUPPORTED: io::ErrorKind = io::ErrorKind::Unsupported;
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct FileType {
@@ -33,16 +45,18 @@ impl FileType {
 
 // Use the normal I/O permission type on TRUEOS. These Unix mode bits do not
 // encode access keys; read/write authorization belongs in filesystem I/O.
-#[cfg(target_os = "trueos")]
+#[cfg(all(target_os = "trueos", not(feature = "native")))]
 pub use std::fs::Permissions;
 
-#[cfg(not(target_os = "trueos"))]
+#[cfg(any(feature = "native", not(target_os = "trueos")))]
 #[derive(Clone, Copy, Debug, Default)]
+/// A compatibility metadata hint. TRUEOSFS authorizes I/O through access keys;
+/// changing this value does not replace or modify that authority.
 pub struct Permissions {
     readonly: bool,
 }
 
-#[cfg(not(target_os = "trueos"))]
+#[cfg(any(feature = "native", not(target_os = "trueos")))]
 impl Permissions {
     pub fn readonly(&self) -> bool {
         self.readonly
@@ -64,12 +78,12 @@ pub struct Metadata {
 }
 
 fn compatibility_permissions(mode: u32) -> Permissions {
-    #[cfg(target_os = "trueos")]
+    #[cfg(all(target_os = "trueos", not(feature = "native")))]
     {
         use std::os::unix::fs::PermissionsExt;
         Permissions::from_mode(mode)
     }
-    #[cfg(not(target_os = "trueos"))]
+    #[cfg(any(feature = "native", not(target_os = "trueos")))]
     {
         let _ = mode;
         Permissions::default()
@@ -123,8 +137,8 @@ impl Metadata {
     /// Logical revision encoded in Unix time slots; not calendar time.
     pub fn ctime(&self) -> i64 { (self.revision / 1_000_000_000) as i64 }
     pub fn ctime_nsec(&self) -> i64 { (self.revision % 1_000_000_000) as i64 }
-    pub fn created(&self) -> io::Result<std::time::SystemTime> {
-        Err(io::Error::new(io::ErrorKind::Unsupported, "TRUEOSFS creation time is not recorded"))
+    pub fn created(&self) -> io::Result<FileTimestamp> {
+        Err(io::Error::new(UNSUPPORTED, "TRUEOSFS creation time is not recorded"))
     }
     pub fn file_type(&self) -> FileType {
         self.file_type
@@ -151,9 +165,9 @@ impl Metadata {
     }
 
     /// Calendar modification time is not recorded; use revision() for change detection.
-    pub fn modified(&self) -> io::Result<std::time::SystemTime> {
+    pub fn modified(&self) -> io::Result<FileTimestamp> {
         Err(io::Error::new(
-            io::ErrorKind::Unsupported,
+            UNSUPPORTED,
             "TRUEOSFS modification time is not exposed through CABI",
         ))
     }
@@ -320,6 +334,7 @@ impl TrueosPath {
                 Component::CurDir => {}
                 Component::RootDir => anchor = TrueosPathAnchor::Root,
                 Component::Normal(part) => {
+                    #[cfg(not(feature = "native"))]
                     let part = part.to_str().ok_or_else(|| {
                         io::Error::new(
                             io::ErrorKind::InvalidInput,
@@ -340,6 +355,7 @@ impl TrueosPath {
                         "TRUEOS fs path escapes the blueprint app root",
                     ));
                 }
+                #[cfg(not(feature = "native"))]
                 Component::Prefix(_) => {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidInput,
@@ -776,9 +792,9 @@ impl TrueosOpenOptions {
 
         let pos = if self.append { data.len() as u64 } else { 0 };
         Ok(TrueosFile {
-            #[cfg(target_os = "trueos")]
+            #[cfg(all(target_os = "trueos", not(feature = "native")))]
             std_file: None,
-            inner: Mutex::new(TrueosFileInner {
+            inner: Arc::new(Mutex::new(TrueosFileInner {
                 path,
                 data,
                 pos,
@@ -786,7 +802,7 @@ impl TrueosOpenOptions {
                 write: self.write || self.append,
                 append: self.append,
                 dirty: self.truncate || self.create_new,
-            }),
+            })),
         })
     }
 }
@@ -794,9 +810,9 @@ impl TrueosOpenOptions {
 pub struct TrueosFile {
     // Files supplied by std retain their descriptor rather than reopening or
     // copying a snapshot. The descriptor owns its cursor and append flags.
-    #[cfg(target_os = "trueos")]
+    #[cfg(all(target_os = "trueos", not(feature = "native")))]
     std_file: Option<std::fs::File>,
-    inner: Mutex<TrueosFileInner>,
+    inner: Arc<Mutex<TrueosFileInner>>,
 }
 
 struct TrueosFileInner {
@@ -811,7 +827,7 @@ struct TrueosFileInner {
 
 impl TrueosFile {
     pub(crate) fn poll_read_into(&self, dst: &mut ReadBuf<'_>) -> io::Result<()> {
-        #[cfg(target_os = "trueos")]
+        #[cfg(all(target_os = "trueos", not(feature = "native")))]
         if let Some(mut file) = self.std_file.as_ref() {
             let n = file.read(dst.initialize_unfilled())?;
             dst.advance(n);
@@ -836,7 +852,7 @@ impl TrueosFile {
     }
 
     pub(crate) fn poll_write_from(&self, src: &[u8]) -> io::Result<usize> {
-        #[cfg(target_os = "trueos")]
+        #[cfg(all(target_os = "trueos", not(feature = "native")))]
         if let Some(mut file) = self.std_file.as_ref() {
             return file.write(src);
         }
@@ -850,6 +866,9 @@ impl TrueosFile {
                 io::ErrorKind::PermissionDenied,
                 "TRUEOS fs file was not opened for writing",
             ));
+        }
+        if src.is_empty() {
+            return Ok(0);
         }
         if inner.append {
             inner.pos = inner.data.len() as u64;
@@ -873,7 +892,7 @@ impl TrueosFile {
     }
 
     pub(crate) fn seek_inner(&self, pos: SeekFrom) -> io::Result<u64> {
-        #[cfg(target_os = "trueos")]
+        #[cfg(all(target_os = "trueos", not(feature = "native")))]
         if let Some(mut file) = self.std_file.as_ref() {
             return file.seek(pos);
         }
@@ -903,7 +922,7 @@ impl TrueosFile {
     }
 
     pub(crate) fn position(&self) -> io::Result<u64> {
-        #[cfg(target_os = "trueos")]
+        #[cfg(all(target_os = "trueos", not(feature = "native")))]
         if let Some(mut file) = self.std_file.as_ref() {
             return file.stream_position();
         }
@@ -915,7 +934,7 @@ impl TrueosFile {
     }
 
     pub(crate) fn sync_all(&self) -> io::Result<()> {
-        #[cfg(target_os = "trueos")]
+        #[cfg(all(target_os = "trueos", not(feature = "native")))]
         if let Some(file) = self.std_file.as_ref() {
             return file.sync_all();
         }
@@ -932,7 +951,7 @@ impl TrueosFile {
     }
 
     pub(crate) fn sync_data(&self) -> io::Result<()> {
-        #[cfg(target_os = "trueos")]
+        #[cfg(all(target_os = "trueos", not(feature = "native")))]
         if let Some(file) = self.std_file.as_ref() {
             return file.sync_data();
         }
@@ -940,7 +959,7 @@ impl TrueosFile {
     }
 
     pub(crate) fn set_len(&self, size: u64) -> io::Result<()> {
-        #[cfg(target_os = "trueos")]
+        #[cfg(all(target_os = "trueos", not(feature = "native")))]
         if let Some(file) = self.std_file.as_ref() {
             return file.set_len(size);
         }
@@ -959,15 +978,14 @@ impl TrueosFile {
             ));
         }
         inner.data.resize(size, 0);
-        if inner.pos > size as u64 {
-            inner.pos = size as u64;
-        }
+        // Truncating a file does not move an existing cursor. A later write
+        // beyond the new end creates a zero-filled gap.
         inner.dirty = true;
         Ok(())
     }
 
     pub(crate) fn metadata(&self) -> io::Result<Metadata> {
-        #[cfg(target_os = "trueos")]
+        #[cfg(all(target_os = "trueos", not(feature = "native")))]
         if let Some(file) = self.std_file.as_ref() {
             let metadata = file.metadata()?;
             let file_type = metadata.file_type();
@@ -999,46 +1017,35 @@ impl TrueosFile {
     }
 
     pub(crate) fn try_clone(&self) -> io::Result<TrueosFile> {
-        #[cfg(target_os = "trueos")]
+        #[cfg(all(target_os = "trueos", not(feature = "native")))]
         if let Some(file) = self.std_file.as_ref() {
             return file.try_clone().map(Self::from);
         }
 
-        let inner = self
-            .inner
-            .lock()
-            .map_err(|_| io::Error::new(io::ErrorKind::Other, "TRUEOS fs file mutex poisoned"))?;
         Ok(TrueosFile {
-            #[cfg(target_os = "trueos")]
+            #[cfg(all(target_os = "trueos", not(feature = "native")))]
             std_file: None,
-            inner: Mutex::new(TrueosFileInner {
-                path: inner.path.clone(),
-                data: inner.data.clone(),
-                pos: inner.pos,
-                read: inner.read,
-                write: inner.write,
-                append: inner.append,
-                dirty: inner.dirty,
-            }),
+            inner: self.inner.clone(),
         })
     }
 
-    pub(crate) fn set_times(&self, times: std::fs::FileTimes) -> io::Result<()> {
-        #[cfg(target_os = "trueos")]
+    pub(crate) fn set_times(&self, times: super::file_times::PlatformFileTimes) -> io::Result<()> {
+        #[cfg(all(target_os = "trueos", not(feature = "native")))]
         if let Some(file) = self.std_file.as_ref() {
             return file.set_times(times);
         }
 
         let _ = times;
         Err(io::Error::new(
-            io::ErrorKind::Unsupported,
+            UNSUPPORTED,
             "TRUEOSFS does not expose writable file timestamps",
         ))
     }
 
     pub(crate) fn set_permissions(&self, perm: Permissions) -> io::Result<()> {
-        #[cfg(target_os = "trueos")]
+        #[cfg(any(target_os = "trueos", feature = "native"))]
         {
+            #[cfg(not(feature = "native"))]
             if let Some(file) = self.std_file.as_ref() {
                 return file.set_permissions(perm);
             }
@@ -1048,21 +1055,21 @@ impl TrueosFile {
             self.metadata()?;
             Ok(())
         }
-        #[cfg(not(target_os = "trueos"))]
+        #[cfg(not(any(feature = "native", target_os = "trueos")))]
         { let _ = perm; unsupported("permissions") }
     }
 }
 
-#[cfg(target_os = "trueos")]
+#[cfg(all(target_os = "trueos", not(feature = "native")))]
 impl From<std::fs::File> for TrueosFile {
     fn from(file: std::fs::File) -> Self {
         Self {
             std_file: Some(file),
             // This state is used only by files opened through the snapshot API.
-            inner: Mutex::new(TrueosFileInner {
+            inner: Arc::new(Mutex::new(TrueosFileInner {
                 path: PathBuf::new(), data: Vec::new(), pos: 0,
                 read: false, write: false, append: false, dirty: false,
-            }),
+            })),
         }
     }
 }
@@ -1096,7 +1103,7 @@ impl fmt::Debug for TrueosFile {
 
 impl Read for &TrueosFile {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        #[cfg(target_os = "trueos")]
+        #[cfg(all(target_os = "trueos", not(feature = "native")))]
         if let Some(mut file) = self.std_file.as_ref() {
             return file.read(buf);
         }
@@ -1198,7 +1205,7 @@ pub(crate) async fn read_dir(path: &Path) -> io::Result<TrueosReadDir> {
 }
 
 pub(crate) async fn set_permissions(path: &Path, perm: Permissions) -> io::Result<()> {
-    #[cfg(target_os = "trueos")]
+    #[cfg(any(target_os = "trueos", feature = "native"))]
     {
         let _ = perm;
         // Permission copying follows the existing development policy, while
@@ -1206,7 +1213,7 @@ pub(crate) async fn set_permissions(path: &Path, perm: Permissions) -> io::Resul
         stat_async(path).await?;
         Ok(())
     }
-    #[cfg(not(target_os = "trueos"))]
+    #[cfg(not(any(feature = "native", target_os = "trueos")))]
     { let _ = (path, perm); unsupported("permissions") }
 }
 

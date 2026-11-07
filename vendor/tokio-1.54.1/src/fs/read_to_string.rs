@@ -1,6 +1,6 @@
 #[allow(unused_imports)]
 use crate::alloc_prelude::*;
-#[cfg(not(any(target_os = "trueos", target_os = "zkvm")))]
+#[cfg(not(any(feature = "native", target_os = "trueos", target_os = "zkvm")))]
 use crate::fs::asyncify;
 use alloc::borrow::ToOwned;
 
@@ -31,8 +31,8 @@ use crate::path::Path;
 /// ```
 pub async fn read_to_string(path: impl AsRef<Path>) -> io::Result<String> {
     let path = path.as_ref().to_owned();
-    #[cfg(any(target_os = "trueos", target_os = "zkvm"))]
+    #[cfg(any(feature = "native", target_os = "trueos", target_os = "zkvm"))]
     return crate::fs::trueos::read_to_string(&path).await;
-    #[cfg(not(any(target_os = "trueos", target_os = "zkvm")))]
+    #[cfg(not(any(feature = "native", target_os = "trueos", target_os = "zkvm")))]
     asyncify(move || std::fs::read_to_string(path)).await
 }

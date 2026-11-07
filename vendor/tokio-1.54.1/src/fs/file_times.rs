@@ -1,6 +1,14 @@
 #[allow(unused_imports)]
 use crate::alloc_prelude::*;
+#[cfg(not(feature = "native"))]
 use std::time::SystemTime;
+#[cfg(feature = "native")]
+use super::FileTimestamp as SystemTime;
+
+#[cfg(not(feature = "native"))]
+pub(crate) type PlatformFileTimes = std::fs::FileTimes;
+#[cfg(feature = "native")]
+pub(crate) type PlatformFileTimes = FileTimes;
 
 #[cfg(target_vendor = "apple")]
 use std::os::darwin::fs::FileTimesExt;
@@ -64,7 +72,8 @@ impl FileTimes {
         self
     }
 
-    pub(crate) fn into_std(self) -> std::fs::FileTimes {
+    #[cfg(not(feature = "native"))]
+    pub(crate) fn into_platform(self) -> PlatformFileTimes {
         let mut std_times = std::fs::FileTimes::new();
         if let Some(accessed) = self.accessed {
             std_times = std_times.set_accessed(accessed);
@@ -78,4 +87,7 @@ impl FileTimes {
         }
         std_times
     }
+
+    #[cfg(feature = "native")]
+    pub(crate) fn into_platform(self) -> PlatformFileTimes { self }
 }

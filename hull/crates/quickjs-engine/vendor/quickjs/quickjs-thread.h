@@ -3,11 +3,10 @@
 #ifndef QUICKJS_THREAD_H
 #define QUICKJS_THREAD_H
 #include <stdint.h>
-#include <errno.h>
-#include <time.h>
 
 #ifdef HULL_QUICKJS_NATIVE_WAIT
 #include <stdatomic.h>
+enum { JS_OS_WAIT_TIMEOUT = 1 };
 
 extern uint32_t hull_quickjs_native_wait_observe(uint64_t key);
 extern void hull_quickjs_native_wait_after(uint64_t key, uint32_t observed,
@@ -75,7 +74,7 @@ static int js_os_cond_timedwait(JSOSCond *cond, JSOSMutex *mutex,
     uint32_t observed;
     int result = 0;
     if (timeout_ms == 0)
-        return ETIMEDOUT;
+        return JS_OS_WAIT_TIMEOUT;
     start = hull_quickjs_native_monotonic_nanos();
     observed = hull_quickjs_native_wait_observe(key);
     js_os_mutex_unlock(mutex);
@@ -86,7 +85,7 @@ static int js_os_cond_timedwait(JSOSCond *cond, JSOSMutex *mutex,
         if (timeout_ms != INT64_MAX) {
             elapsed = (hull_quickjs_native_monotonic_nanos() - start) / 1000000;
             if (elapsed >= (uint64_t)timeout_ms) {
-                result = ETIMEDOUT;
+                result = JS_OS_WAIT_TIMEOUT;
                 break;
             }
             remaining = (uint64_t)timeout_ms - elapsed;
@@ -111,7 +110,10 @@ static int64_t js_os_monotonic_ms(void)
 }
 
 #else
+#include <errno.h>
+#include <time.h>
 #include <pthread.h>
+#define JS_OS_WAIT_TIMEOUT ETIMEDOUT
 typedef pthread_mutex_t JSOSMutex;
 typedef pthread_cond_t JSOSCond;
 #define JS_OS_MUTEX_INITIALIZER PTHREAD_MUTEX_INITIALIZER
