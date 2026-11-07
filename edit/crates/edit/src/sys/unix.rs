@@ -7,398 +7,370 @@
 
 use std::ffi::{c_char, c_int, c_void};
 use std::fs::File;
-use std::mem::{self, ManuallyDrop, MaybeUninit};
+use std::io;
+#[cfg(not(target_os = "trueos"))]
+use std::mem::MaybeUninit;
+use std::mem::{self, ManuallyDrop};
+#[cfg(not(target_os = "trueos"))]
 use std::os::fd::FromRawFd as _;
 use std::path::Path;
 use std::ptr::NonNull;
 #[cfg(not(target_os = "trueos"))]
 use std::ptr::null_mut;
-use std::{io, thread, time};
-
-use stdext::arena::{Arena, scratch_arena};
-use stdext::arena_format;
-use stdext::collections::{BString, BVec};
-
-use crate::helpers::*;
+#[cfg(not(target_os = "trueos"))]
+use std::{thread, time};
 
 #[cfg(not(target_os = "trueos"))]
 use libc as abi;
+use stdext::arena::{Arena, scratch_arena};
+#[cfg(not(target_os = "trueos"))]
+use stdext::arena_format;
+use stdext::collections::{BString, BVec};
+
 #[cfg(target_os = "trueos")]
 use super::trueos_abi as abi;
-
-struct State {
-    stdin: abi::c_int,
-    stdin_flags: abi::c_int,
-    stdout: abi::c_int,
-    stdout_initial_termios: Option<abi::termios>,
-    inject_resize: bool,
-    #[cfg(target_os = "trueos")]
-    restore_terminal: bool,
-    // Buffer for incomplete UTF-8 sequences (max 4 bytes needed)
-    utf8_buf: [u8; 4],
-    utf8_len: usize,
-}
-
-static mut STATE: State = State {
-    stdin: abi::STDIN_FILENO,
-    stdin_flags: 0,
-    stdout: abi::STDOUT_FILENO,
-    stdout_initial_termios: None,
-    inject_resize: false,
-    #[cfg(target_os = "trueos")]
-    restore_terminal: false,
-    utf8_buf: [0; 4],
-    utf8_len: 0,
-};
-
 #[cfg(not(target_os = "trueos"))]
-extern "C" fn sigwinch_handler(_: abi::c_int) {
-    unsafe {
-        STATE.inject_resize = true;
+use crate::helpers::*;
+
+// Host Unix terminals retain their descriptor/termios implementation. TRUEOS
+// selects its attached-terminal backend in sys/mod.rs.
+#[cfg(not(target_os = "trueos"))]
+mod terminal {
+    use super::*;
+
+    struct State {
+        stdin: abi::c_int,
+        stdin_flags: abi::c_int,
+        stdout: abi::c_int,
+        stdout_initial_termios: Option<abi::termios>,
+        inject_resize: bool,
+        // Buffer for incomplete UTF-8 sequences (max 4 bytes needed)
+        utf8_buf: [u8; 4],
+        utf8_len: usize,
     }
-}
 
-pub fn init() -> Deinit {
-    Deinit
-}
+    static mut STATE: State = State {
+        stdin: abi::STDIN_FILENO,
+        stdin_flags: 0,
+        stdout: abi::STDOUT_FILENO,
+        stdout_initial_termios: None,
+        inject_resize: false,
+        utf8_buf: [0; 4],
+        utf8_len: 0,
+    };
 
-/// Reopen stdin if it's redirected (= piped input).
-pub fn reopen_stdin_if_redirected() -> io::Result<Option<File>> {
-    unsafe {
-        if abi::isatty(STATE.stdin) == 0 {
-            STATE.stdin = check_int_return(abi::open(c"/dev/tty".as_ptr(), abi::O_RDONLY))?;
-            Ok(Some(File::from_raw_fd(abi::STDIN_FILENO)))
-        } else {
-            Ok(None)
-        }
-    }
-}
-
-pub fn switch_modes() -> io::Result<()> {
-    unsafe {
-        // Store the stdin flags so we can more easily toggle `O_NONBLOCK` later on.
-        STATE.stdin_flags = check_int_return(abi::fcntl(STATE.stdin, abi::F_GETFL))?;
-
-        // Set STATE.inject_resize to true whenever we get a SIGWINCH. TRUEOS does
-        // not implement sigaction yet, so it continues to use explicit size queries.
-        #[cfg(not(target_os = "trueos"))]
-        {
-            let mut sigwinch_action: abi::sigaction = mem::zeroed();
-            sigwinch_action.sa_sigaction = sigwinch_handler as *const () as abi::sighandler_t;
-            check_int_return(abi::sigaction(abi::SIGWINCH, &sigwinch_action, null_mut()))?;
-        }
-
-        // Get the original terminal modes so we can disable raw mode on exit.
-        let mut termios = MaybeUninit::<abi::termios>::uninit();
-        check_int_return(abi::tcgetattr(STATE.stdout, termios.as_mut_ptr()))?;
-        let mut termios = termios.assume_init();
-        STATE.stdout_initial_termios = Some(termios);
-
-        termios.c_iflag &= !(
-            // When neither IGNBRK...
-            abi::IGNBRK
-            // ...nor BRKINT are set, a BREAK reads as a null byte ('\0'), ...
-            | abi::BRKINT
-            // ...except when PARMRK is set, in which case it reads as the sequence \377 \0 \0.
-            | abi::PARMRK
-            // Disable input parity checking.
-            | abi::INPCK
-            // Disable stripping of eighth bit.
-            | abi::ISTRIP
-            // Disable mapping of NL to CR on input.
-            | abi::INLCR
-            // Disable ignoring CR on input.
-            | abi::IGNCR
-            // Disable mapping of CR to NL on input.
-            | abi::ICRNL
-            // Disable software flow control.
-            | abi::IXON
-        );
-        // Disable output processing.
-        termios.c_oflag &= !abi::OPOST;
-        termios.c_cflag &= !(
-            // Reset character size mask.
-            abi::CSIZE
-            // Disable parity generation.
-            | abi::PARENB
-        );
-        // Set character size back to 8 bits.
-        termios.c_cflag |= abi::CS8;
-        termios.c_lflag &= !(
-            // Disable signal generation (SIGINT, SIGTSTP, SIGQUIT).
-            abi::ISIG
-            // Disable canonical mode (line buffering).
-            | abi::ICANON
-            // Disable echoing of input characters.
-            | abi::ECHO
-            // Disable echoing of NL.
-            | abi::ECHONL
-            // Disable extended input processing (e.g. Ctrl-V).
-            | abi::IEXTEN
-        );
-
-        // Set the terminal to raw mode.
-        termios.c_lflag &= !(abi::ICANON | abi::ECHO);
-        check_int_return(abi::tcsetattr(STATE.stdout, abi::TCSANOW, &termios))?;
-
-        Ok(())
-    }
-}
-
-pub struct Deinit;
-
-impl Drop for Deinit {
-    fn drop(&mut self) {
+    #[cfg(not(target_os = "trueos"))]
+    extern "C" fn sigwinch_handler(_: abi::c_int) {
         unsafe {
-            #[allow(static_mut_refs)]
-            if let Some(termios) = STATE.stdout_initial_termios.take() {
-                // Restore the original terminal modes.
-                abi::tcsetattr(STATE.stdout, abi::TCSANOW, &termios);
+            STATE.inject_resize = true;
+        }
+    }
+
+    pub fn init() -> Deinit {
+        Deinit
+    }
+
+    /// Reopen stdin if it's redirected (= piped input).
+    pub fn reopen_stdin_if_redirected() -> io::Result<Option<File>> {
+        unsafe {
+            if abi::isatty(STATE.stdin) == 0 {
+                STATE.stdin = check_int_return(abi::open(c"/dev/tty".as_ptr(), abi::O_RDONLY))?;
+                Ok(Some(File::from_raw_fd(abi::STDIN_FILENO)))
+            } else {
+                Ok(None)
             }
         }
     }
-}
 
-#[cfg(target_os = "trueos")]
-unsafe extern "C" {
-    fn trueos_cabi_blueprint_terminal_surface_snapshot_v1(
-        generation: *mut u64,
-        columns: *mut u32,
-        rows: *mut u32,
-    ) -> i32;
-}
+    pub fn switch_modes() -> io::Result<()> {
+        unsafe {
+            // Store the stdin flags so we can more easily toggle `O_NONBLOCK` later on.
+            STATE.stdin_flags = check_int_return(abi::fcntl(STATE.stdin, abi::F_GETFL))?;
 
-// TRUEOS wakes terminal pollers on surface changes instead of sending SIGWINCH.
-// Keep the last good generation across parked/detached terminal leases.
-#[cfg(target_os = "trueos")]
-fn check_terminal_resize() {
-    static mut GENERATION: u64 = 0;
-    let (mut generation, mut columns, mut rows) = (0, 0, 0);
-    unsafe {
-        if trueos_cabi_blueprint_terminal_surface_snapshot_v1(
-            &mut generation, &mut columns, &mut rows,
-        ) == 0 && generation != 0 && columns != 0 && rows != 0 {
-            if generation != GENERATION {
-                STATE.restore_terminal |= GENERATION != 0;
-                GENERATION = generation;
-                STATE.inject_resize = true;
+            // Set STATE.inject_resize to true whenever we get a SIGWINCH.
+            #[cfg(not(target_os = "trueos"))]
+            {
+                let mut sigwinch_action: abi::sigaction = mem::zeroed();
+                sigwinch_action.sa_sigaction = sigwinch_handler as *const () as abi::sighandler_t;
+                check_int_return(abi::sigaction(abi::SIGWINCH, &sigwinch_action, null_mut()))?;
+            }
+
+            // Get the original terminal modes so we can disable raw mode on exit.
+            let mut termios = MaybeUninit::<abi::termios>::uninit();
+            check_int_return(abi::tcgetattr(STATE.stdout, termios.as_mut_ptr()))?;
+            let mut termios = termios.assume_init();
+            STATE.stdout_initial_termios = Some(termios);
+
+            termios.c_iflag &= !(
+                // When neither IGNBRK...
+                abi::IGNBRK
+                // ...nor BRKINT are set, a BREAK reads as a null byte ('\0'), ...
+                | abi::BRKINT
+                // ...except when PARMRK is set, in which case it reads as the sequence \377 \0 \0.
+                | abi::PARMRK
+                // Disable input parity checking.
+                | abi::INPCK
+                // Disable stripping of eighth bit.
+                | abi::ISTRIP
+                // Disable mapping of NL to CR on input.
+                | abi::INLCR
+                // Disable ignoring CR on input.
+                | abi::IGNCR
+                // Disable mapping of CR to NL on input.
+                | abi::ICRNL
+                // Disable software flow control.
+                | abi::IXON
+            );
+            // Disable output processing.
+            termios.c_oflag &= !abi::OPOST;
+            termios.c_cflag &= !(
+                // Reset character size mask.
+                abi::CSIZE
+                // Disable parity generation.
+                | abi::PARENB
+            );
+            // Set character size back to 8 bits.
+            termios.c_cflag |= abi::CS8;
+            termios.c_lflag &= !(
+                // Disable signal generation (SIGINT, SIGTSTP, SIGQUIT).
+                abi::ISIG
+                // Disable canonical mode (line buffering).
+                | abi::ICANON
+                // Disable echoing of input characters.
+                | abi::ECHO
+                // Disable echoing of NL.
+                | abi::ECHONL
+                // Disable extended input processing (e.g. Ctrl-V).
+                | abi::IEXTEN
+            );
+
+            // Set the terminal to raw mode.
+            termios.c_lflag &= !(abi::ICANON | abi::ECHO);
+            check_int_return(abi::tcsetattr(STATE.stdout, abi::TCSANOW, &termios))?;
+
+            Ok(())
+        }
+    }
+
+    pub struct Deinit;
+
+    impl Drop for Deinit {
+        fn drop(&mut self) {
+            unsafe {
+                #[allow(static_mut_refs)]
+                if let Some(termios) = STATE.stdout_initial_termios.take() {
+                    // Restore the original terminal modes.
+                    abi::tcsetattr(STATE.stdout, abi::TCSANOW, &termios);
+                }
             }
         }
     }
-}
 
-#[cfg(target_os = "trueos")]
-pub fn take_terminal_restore() -> bool {
-    unsafe {
-        let restore = STATE.restore_terminal;
-        STATE.restore_terminal = false;
-        restore
-    }
-}
-
-pub fn inject_window_size_into_stdin() {
-    unsafe {
-        STATE.inject_resize = true;
-    }
-}
-
-fn get_window_size() -> (u16, u16) {
-    let mut winsz: abi::winsize = unsafe { mem::zeroed() };
-
-    for attempt in 1.. {
-        let ret = unsafe { abi::ioctl(STATE.stdout, abi::TIOCGWINSZ, &raw mut winsz) };
-        if ret == -1 || (winsz.ws_col != 0 && winsz.ws_row != 0) {
-            break;
+    pub fn inject_window_size_into_stdin() {
+        unsafe {
+            STATE.inject_resize = true;
         }
-
-        if attempt == 10 {
-            winsz.ws_col = 80;
-            winsz.ws_row = 24;
-            break;
-        }
-
-        // Some terminals are bad emulators and don't report TIOCGWINSZ immediately.
-        thread::sleep(time::Duration::from_millis(10 * attempt));
     }
 
-    (winsz.ws_col, winsz.ws_row)
-}
+    fn get_window_size() -> (u16, u16) {
+        let mut winsz: abi::winsize = unsafe { mem::zeroed() };
 
-/// Reads from stdin.
-///
-/// Returns `None` if there was an error reading from stdin.
-/// Returns `Some("")` if the given timeout was reached.
-/// Otherwise, it returns the read, non-empty string.
-pub fn read_stdin(arena: &Arena, mut timeout: time::Duration) -> Option<BString<'_>> {
-    unsafe {
-        #[cfg(target_os = "trueos")]
-        check_terminal_resize();
-        if STATE.inject_resize {
-            timeout = time::Duration::ZERO;
-        }
-
-        // TRUEOS delivers terminal lifecycle changes through the poll wake.
-        // A blocking read cannot acknowledge re-entry while waiting for bytes.
-        let read_poll = cfg!(target_os = "trueos") || timeout != time::Duration::MAX;
-        let mut buf = BVec::empty();
-
-        // We don't know if the input is valid UTF8, so we first use a Vec and then
-        // later turn it into UTF8 using `from_utf8_lossy_owned`.
-        // It is important that we allocate the buffer with an explicit capacity,
-        // because we later use `spare_capacity_mut` to access it.
-        buf.reserve(arena, 4 * KIBI);
-
-        // We got some leftover broken UTF8 from a previous read? Prepend it.
-        if STATE.utf8_len != 0 {
-            buf.extend_from_slice(arena, &STATE.utf8_buf[..STATE.utf8_len]);
-            STATE.utf8_len = 0;
-        }
-
-        loop {
-            if read_poll {
-                let beg = time::Instant::now();
-
-                let mut pollfd = abi::pollfd { fd: STATE.stdin, events: abi::POLLIN, revents: 0 };
-                let ret;
-                #[cfg(target_os = "linux")]
-                {
-                    let ts = abi::timespec {
-                        tv_sec: timeout.as_secs() as abi::time_t,
-                        tv_nsec: timeout.subsec_nanos() as abi::c_long,
-                    };
-                    ret = abi::ppoll(&mut pollfd, 1, &ts, std::ptr::null());
-                }
-                #[cfg(not(target_os = "linux"))]
-                {
-                    let millis = if timeout == time::Duration::MAX { -1 }
-                        else { timeout.as_millis().min(abi::c_int::MAX as u128) as abi::c_int };
-                    ret = abi::poll(&mut pollfd, 1, millis);
-                }
-                #[cfg(target_os = "trueos")]
-                check_terminal_resize();
-                if ret < 0 {
-                    return None; // Error? Let's assume it's an EOF.
-                }
-                if ret == 0 {
-                    break; // Timeout? We can stop reading.
-                }
-
-                timeout = timeout.saturating_sub(beg.elapsed());
-            };
-
-            // If we're asked for a non-blocking read we need
-            // to manipulate `O_NONBLOCK` and vice versa.
-            set_tty_nonblocking(read_poll);
-
-            // Read from stdin.
-            let spare = buf.spare_capacity_mut();
-            let ret = abi::read(STATE.stdin, spare.as_mut_ptr().cast(), spare.len());
-            if ret > 0 {
-                buf.set_len(buf.len() + ret as usize);
+        for attempt in 1.. {
+            let ret = unsafe { abi::ioctl(STATE.stdout, abi::TIOCGWINSZ, &raw mut winsz) };
+            if ret == -1 || (winsz.ws_col != 0 && winsz.ws_row != 0) {
                 break;
             }
-            if ret == 0 {
-                return None; // EOF
+
+            if attempt == 10 {
+                winsz.ws_col = 80;
+                winsz.ws_row = 24;
+                break;
             }
-            if ret < 0 {
-                match errno() {
-                    abi::EINTR if STATE.inject_resize => break,
-                    abi::EAGAIN if timeout == time::Duration::ZERO => break,
-                    abi::EINTR | abi::EAGAIN => {}
-                    _ => return None,
+
+            // Some terminals are bad emulators and don't report TIOCGWINSZ immediately.
+            thread::sleep(time::Duration::from_millis(10 * attempt));
+        }
+
+        (winsz.ws_col, winsz.ws_row)
+    }
+
+    /// Reads from stdin.
+    ///
+    /// Returns `None` if there was an error reading from stdin.
+    /// Returns `Some("")` if the given timeout was reached.
+    /// Otherwise, it returns the read, non-empty string.
+    pub fn read_stdin(arena: &Arena, mut timeout: time::Duration) -> Option<BString<'_>> {
+        unsafe {
+            if STATE.inject_resize {
+                timeout = time::Duration::ZERO;
+            }
+
+            let read_poll = timeout != time::Duration::MAX;
+            let mut buf = BVec::empty();
+
+            // We don't know if the input is valid UTF8, so we first use a Vec and then
+            // later turn it into UTF8 using `from_utf8_lossy_owned`.
+            // It is important that we allocate the buffer with an explicit capacity,
+            // because we later use `spare_capacity_mut` to access it.
+            buf.reserve(arena, 4 * KIBI);
+
+            // We got some leftover broken UTF8 from a previous read? Prepend it.
+            if STATE.utf8_len != 0 {
+                buf.extend_from_slice(arena, &STATE.utf8_buf[..STATE.utf8_len]);
+                STATE.utf8_len = 0;
+            }
+
+            loop {
+                if read_poll {
+                    let beg = time::Instant::now();
+
+                    let mut pollfd =
+                        abi::pollfd { fd: STATE.stdin, events: abi::POLLIN, revents: 0 };
+                    let ret;
+                    #[cfg(target_os = "linux")]
+                    {
+                        let ts = abi::timespec {
+                            tv_sec: timeout.as_secs() as abi::time_t,
+                            tv_nsec: timeout.subsec_nanos() as abi::c_long,
+                        };
+                        ret = abi::ppoll(&mut pollfd, 1, &ts, std::ptr::null());
+                    }
+                    #[cfg(not(target_os = "linux"))]
+                    {
+                        let millis = if timeout == time::Duration::MAX {
+                            -1
+                        } else {
+                            timeout.as_millis().min(abi::c_int::MAX as u128) as abi::c_int
+                        };
+                        ret = abi::poll(&mut pollfd, 1, millis);
+                    }
+                    if ret < 0 {
+                        return None; // Error? Let's assume it's an EOF.
+                    }
+                    if ret == 0 {
+                        break; // Timeout? We can stop reading.
+                    }
+
+                    timeout = timeout.saturating_sub(beg.elapsed());
+                };
+
+                // If we're asked for a non-blocking read we need
+                // to manipulate `O_NONBLOCK` and vice versa.
+                set_tty_nonblocking(read_poll);
+
+                // Read from stdin.
+                let spare = buf.spare_capacity_mut();
+                let ret = abi::read(STATE.stdin, spare.as_mut_ptr().cast(), spare.len());
+                if ret > 0 {
+                    buf.set_len(buf.len() + ret as usize);
+                    break;
+                }
+                if ret == 0 {
+                    return None; // EOF
+                }
+                if ret < 0 {
+                    match errno() {
+                        abi::EINTR if STATE.inject_resize => break,
+                        abi::EAGAIN if timeout == time::Duration::ZERO => break,
+                        abi::EINTR | abi::EAGAIN => {}
+                        _ => return None,
+                    }
                 }
             }
-        }
 
-        if !buf.is_empty() {
-            // We only need to check the last 3 bytes for UTF-8 continuation bytes,
-            // because we should be able to assume that any 4 byte sequence is complete.
-            let lim = buf.len().saturating_sub(3);
-            let mut off = buf.len() - 1;
+            if !buf.is_empty() {
+                // We only need to check the last 3 bytes for UTF-8 continuation bytes,
+                // because we should be able to assume that any 4 byte sequence is complete.
+                let lim = buf.len().saturating_sub(3);
+                let mut off = buf.len() - 1;
 
-            // Find the start of the last potentially incomplete UTF-8 sequence.
-            while off > lim && buf[off] & 0b1100_0000 == 0b1000_0000 {
-                off -= 1;
+                // Find the start of the last potentially incomplete UTF-8 sequence.
+                while off > lim && buf[off] & 0b1100_0000 == 0b1000_0000 {
+                    off -= 1;
+                }
+
+                let seq_len = match buf[off] {
+                    b if b & 0b1000_0000 == 0 => 1,
+                    b if b & 0b1110_0000 == 0b1100_0000 => 2,
+                    b if b & 0b1111_0000 == 0b1110_0000 => 3,
+                    b if b & 0b1111_1000 == 0b1111_0000 => 4,
+                    // If the lead byte we found isn't actually one, we don't cache it.
+                    // `from_utf8_lossy_owned` will replace it with U+FFFD.
+                    _ => 0,
+                };
+
+                // Cache incomplete sequence if any.
+                if off + seq_len > buf.len() {
+                    STATE.utf8_len = buf.len() - off;
+                    STATE.utf8_buf[..STATE.utf8_len].copy_from_slice(&buf[off..]);
+                    buf.truncate(off);
+                }
             }
 
-            let seq_len = match buf[off] {
-                b if b & 0b1000_0000 == 0 => 1,
-                b if b & 0b1110_0000 == 0b1100_0000 => 2,
-                b if b & 0b1111_0000 == 0b1110_0000 => 3,
-                b if b & 0b1111_1000 == 0b1111_0000 => 4,
-                // If the lead byte we found isn't actually one, we don't cache it.
-                // `from_utf8_lossy_owned` will replace it with U+FFFD.
-                _ => 0,
-            };
+            let mut result = BString::from_utf8_lossy(arena, buf);
 
-            // Cache incomplete sequence if any.
-            if off + seq_len > buf.len() {
-                STATE.utf8_len = buf.len() - off;
-                STATE.utf8_buf[..STATE.utf8_len].copy_from_slice(&buf[off..]);
-                buf.truncate(off);
+            // We received a SIGWINCH? Add a fake window size sequence for our input parser.
+            // I prepend it so that on startup, the TUI system gets first initialized with a size.
+            if STATE.inject_resize {
+                STATE.inject_resize = false;
+                let (w, h) = get_window_size();
+                if w > 0 && h > 0 {
+                    let scratch = scratch_arena(Some(arena));
+                    let seq = arena_format!(&*scratch, "\x1b[8;{h};{w}t");
+                    result.replace_range(arena, 0..0, &seq);
+                }
             }
+
+            Some(result)
         }
-
-        let mut result = BString::from_utf8_lossy(arena, buf);
-
-        // We received a SIGWINCH? Add a fake window size sequence for our input parser.
-        // I prepend it so that on startup, the TUI system gets first initialized with a size.
-        if STATE.inject_resize {
-            STATE.inject_resize = false;
-            let (w, h) = get_window_size();
-            if w > 0 && h > 0 {
-                let scratch = scratch_arena(Some(arena));
-                let seq = arena_format!(&*scratch, "\x1b[8;{h};{w}t");
-                result.replace_range(arena, 0..0, &seq);
-            }
-        }
-
-        Some(result)
-    }
-}
-
-pub fn write_stdout(text: &str) {
-    if text.is_empty() {
-        return;
     }
 
-    // If we don't set the TTY to blocking mode,
-    // the write will potentially fail with EAGAIN.
-    set_tty_nonblocking(false);
-
-    let buf = text.as_bytes();
-    let mut written = 0;
-
-    while written < buf.len() {
-        let w = &buf[written..];
-        let w = &buf[..w.len().min(GIBI)];
-        let n = unsafe { abi::write(STATE.stdout, w.as_ptr().cast(), w.len()) };
-
-        if n >= 0 {
-            written += n as usize;
-            continue;
-        }
-
-        let err = errno();
-        if err != abi::EINTR {
+    pub fn write_stdout(text: &str) {
+        if text.is_empty() {
             return;
         }
-    }
-}
 
-/// Sets/Resets `O_NONBLOCK` on the TTY handle.
-///
-/// Note that setting this flag applies to both stdin and stdout, because the
-/// TTY is a bidirectional device and both handles refer to the same thing.
-fn set_tty_nonblocking(nonblock: bool) {
-    unsafe {
-        let is_nonblock = (STATE.stdin_flags & abi::O_NONBLOCK) != 0;
-        if is_nonblock != nonblock {
-            STATE.stdin_flags ^= abi::O_NONBLOCK;
-            let _ = abi::fcntl(STATE.stdin, abi::F_SETFL, STATE.stdin_flags);
+        // If we don't set the TTY to blocking mode,
+        // the write will potentially fail with EAGAIN.
+        set_tty_nonblocking(false);
+
+        let buf = text.as_bytes();
+        let mut written = 0;
+
+        while written < buf.len() {
+            let w = &buf[written..];
+            let w = &buf[..w.len().min(GIBI)];
+            let n = unsafe { abi::write(STATE.stdout, w.as_ptr().cast(), w.len()) };
+
+            if n >= 0 {
+                written += n as usize;
+                continue;
+            }
+
+            let err = errno();
+            if err != abi::EINTR {
+                return;
+            }
+        }
+    }
+
+    /// Sets/Resets `O_NONBLOCK` on the TTY handle.
+    ///
+    /// Note that setting this flag applies to both stdin and stdout, because the
+    /// TTY is a bidirectional device and both handles refer to the same thing.
+    fn set_tty_nonblocking(nonblock: bool) {
+        unsafe {
+            let is_nonblock = (STATE.stdin_flags & abi::O_NONBLOCK) != 0;
+            if is_nonblock != nonblock {
+                STATE.stdin_flags ^= abi::O_NONBLOCK;
+                let _ = abi::fcntl(STATE.stdin, abi::F_SETFL, STATE.stdin_flags);
+            }
         }
     }
 }
+
+#[cfg(not(target_os = "trueos"))]
+pub use terminal::*;
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct FileId {
