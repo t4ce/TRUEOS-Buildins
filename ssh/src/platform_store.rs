@@ -6,31 +6,13 @@ const MAX_CONFIG_BYTES: u64 = 16 * 1024 * 1024;
 #[cfg(target_os = "trueos")]
 impl Store for NativeStore {
     async fn snapshot(&mut self, path: &str) -> core::result::Result<Option<Snapshot>, StoreError> {
-        use trueos::async_fs as fs;
-        for _ in 0..3 {
-            let before = match fs::metadata_v2(path.as_bytes()).await {
-                Ok(m) => m,
-                Err(fs::ERR_NOT_FOUND) => return Ok(None),
-                Err(c) => return Err(status("read SSH metadata", c)),
-            };
-            if !before.is_file() || before.len > MAX_CONFIG_BYTES {
-                return Err(StoreError::Other(
-                    "ssh: configuration is not a file or exceeds16MiB".into(),
-                ));
-            }
-            let bytes = Zeroizing::new(
-                fs::read_file(path.as_bytes())
-                    .await
-                    .map_err(|c| status("read SSH configuration", c))?,
-            );
-            let after = fs::metadata_v2(path.as_bytes())
-                .await
-                .map_err(|c| status("read SSH metadata", c))?;
-            if before == after && bytes.len() as u64 == before.len {
-                return Ok(Some(Snapshot { bytes }));
-            }
-        }
-        Err(StoreError::Conflict)
+        self.read_snapshot(path, MAX_CONFIG_BYTES).await
+    }
+    async fn identity_snapshot(
+        &mut self,
+        path: &str,
+    ) -> core::result::Result<Option<Snapshot>, StoreError> {
+        self.read_snapshot(path, 1024 * 1024).await
     }
     async fn ensure_parent(&mut self, path: &str) -> core::result::Result<(), StoreError> {
         if let Some((parent, _)) = path.rsplit_once('/').filter(|(p, _)| !p.is_empty()) {
@@ -56,6 +38,40 @@ impl Store for NativeStore {
         )
         .await
         .map_err(|c| status("publish SSH configuration", c))
+    }
+}
+#[cfg(target_os = "trueos")]
+impl NativeStore {
+    async fn read_snapshot(
+        &mut self,
+        path: &str,
+        limit: u64,
+    ) -> core::result::Result<Option<Snapshot>, StoreError> {
+        use trueos::async_fs as fs;
+        for _ in 0..3 {
+            let before = match fs::metadata_v2(path.as_bytes()).await {
+                Ok(m) => m,
+                Err(fs::ERR_NOT_FOUND) => return Ok(None),
+                Err(c) => return Err(status("read SSH metadata", c)),
+            };
+            if !before.is_file() || before.len > limit {
+                return Err(StoreError::Other(
+                    "ssh: configuration is not a file or exceeds its size limit".into(),
+                ));
+            }
+            let bytes = Zeroizing::new(
+                fs::read_file(path.as_bytes())
+                    .await
+                    .map_err(|c| status("read SSH configuration", c))?,
+            );
+            let after = fs::metadata_v2(path.as_bytes())
+                .await
+                .map_err(|c| status("read SSH metadata", c))?;
+            if before == after && bytes.len() as u64 == before.len {
+                return Ok(Some(Snapshot { bytes }));
+            }
+        }
+        Err(StoreError::Conflict)
     }
 }
 #[cfg(target_os = "trueos")]
@@ -100,7 +116,7 @@ mod host {
             let metadata = file.metadata().map_err(error)?;
             if !metadata.is_file() || metadata.len() > MAX_CONFIG_BYTES {
                 return Err(StoreError::Other(
-                    "ssh: configuration is not a file or exceeds16MiB".into(),
+                    "ssh: configuration is not a file or exceeds 16MiB".into(),
                 ));
             }
             let mut bytes = Zeroizing::new(alloc::vec::Vec::new());
@@ -108,7 +124,7 @@ mod host {
                 .read_to_end(&mut bytes)
                 .map_err(error)?;
             if bytes.len() as u64 > MAX_CONFIG_BYTES {
-                return Err(StoreError::Other("ssh: configuration exceeds16MiB".into()));
+                return Err(StoreError::Other("ssh: configuration exceeds 16MiB".into()));
             }
             Ok(Some(Snapshot { bytes }))
         }

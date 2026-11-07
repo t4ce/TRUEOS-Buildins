@@ -126,7 +126,7 @@ impl<C: Console> Terminal<C> {
                 0..=31 => {}
                 _ => {
                     if bytes.len() >= 32 * 1024 {
-                        return Err("ssh: terminal response exceeds32KiB".into());
+                        return Err("ssh: terminal response exceeds 32KiB".into());
                     }
                     bytes
                         .try_reserve(1)

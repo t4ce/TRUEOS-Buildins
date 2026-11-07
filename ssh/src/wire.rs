@@ -21,7 +21,7 @@ impl TcpWire {
     pub async fn connect(host: &str, port: u16, deadline: Instant) -> Result<Self> {
         tokio::time::timeout_at(deadline, TcpStream::connect((host, port)))
             .await
-            .map_err(|_| String::from("ssh: connect timed out after15 seconds"))?
+            .map_err(|_| String::from("ssh: connect timed out after 15 seconds"))?
             .map(Self)
             .map_err(|e| format!("ssh: connect failed: {e}"))
     }

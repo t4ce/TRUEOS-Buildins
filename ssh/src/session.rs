@@ -63,7 +63,16 @@ impl State {
 fn engine(error: sunset::Error) -> String {
     format!("ssh: {error}")
 }
-fn blocked(error: &sunset::Error) -> bool {
+// Used only while the caller still owns the exact request/bytes. A consumed
+// authentication-response guard must surface its error instead of retrying.
+fn retry_owned_send(error: &sunset::Error) -> bool {
+    matches!(
+        error,
+        sunset::Error::NoRoom { .. } | sunset::Error::BusySend { .. }
+    )
+}
+
+fn retry_channel_data(error: &sunset::Error) -> bool {
     matches!(
         error,
         sunset::Error::NoRoom { .. }
@@ -260,7 +269,7 @@ async fn drive<W: Wire, S: Store, C: Console>(
             if state.authenticated && state.channel.is_none() {
                 match runner.open_client_session() {
                     Ok(channel) => state.channel = Some(channel),
-                    Err(e) if blocked(&e) => {}
+                    Err(e) if retry_owned_send(&e) => {}
                     Err(e) => return Err(engine(e)),
                 }
             }
@@ -292,7 +301,7 @@ async fn drive<W: Wire, S: Store, C: Console>(
                             state.pty_sent = true;
                             state.sent_size = (cols, rows)
                         }
-                        Err(e) if blocked(&e) => {}
+                        Err(e) if retry_owned_send(&e) => {}
                         Err(e) => return Err(engine(e)),
                     }
                 }
@@ -302,7 +311,7 @@ async fn drive<W: Wire, S: Store, C: Console>(
                             state.shell_sent = true;
                             terminal.write_all(b"ssh: authenticated; local escape is ~. at the start of a line\r\n",None).await?;
                         }
-                        Err(e) if blocked(&e) => {}
+                        Err(e) if retry_owned_send(&e) => {}
                         Err(e) => return Err(engine(e)),
                     }
                 }
@@ -357,7 +366,7 @@ async fn drive<W: Wire, S: Store, C: Console>(
             if !state.local.is_empty() {
                 let n = match runner.write_channel(channel, ChanData::Normal, state.local.bytes()) {
                     Ok(n) => n,
-                    Err(e) if blocked(&e) => 0,
+                    Err(e) if retry_channel_data(&e) => 0,
                     Err(sunset::Error::ChannelEOF) => return Ok(()),
                     Err(e) => return Err(engine(e)),
                 };
@@ -381,7 +390,7 @@ async fn drive<W: Wire, S: Store, C: Console>(
                         progress = true;
                         state.last_activity = Instant::now()
                     }
-                    Err(e) if blocked(&e) => {}
+                    Err(e) if retry_owned_send(&e) => {}
                     Err(e) => return Err(engine(e)),
                 }
             }
@@ -534,14 +543,14 @@ async fn close<W: Wire, C: Console>(
             if !sent_eof {
                 match runner.send_channel_eof(channel) {
                     Ok(()) => sent_eof = true,
-                    Err(e) if blocked(&e) => {}
+                    Err(e) if retry_owned_send(&e) => {}
                     Err(_) => sent_eof = true,
                 }
             }
             if sent_eof && !sent_close {
                 match runner.close_channel(channel) {
                     Ok(()) => sent_close = true,
-                    Err(e) if blocked(&e) => {}
+                    Err(e) if retry_owned_send(&e) => {}
                     Err(_) => sent_close = true,
                 }
             }
@@ -551,7 +560,7 @@ async fn close<W: Wire, C: Console>(
         if sent_close && !disconnected {
             match runner.disconnect() {
                 Ok(()) => disconnected = true,
-                Err(e) if blocked(&e) => {}
+                Err(e) if retry_owned_send(&e) => {}
                 Err(_) => disconnected = true,
             }
         }

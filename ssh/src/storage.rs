@@ -34,6 +34,19 @@ impl core::fmt::Display for StoreError {
 #[allow(async_fn_in_trait)]
 pub trait Store {
     async fn snapshot(&mut self, path: &str) -> core::result::Result<Option<Snapshot>, StoreError>;
+    async fn identity_snapshot(
+        &mut self,
+        path: &str,
+    ) -> core::result::Result<Option<Snapshot>, StoreError> {
+        let snapshot = self.snapshot(path).await?;
+        if snapshot
+            .as_ref()
+            .is_some_and(|value| value.bytes.len() > 1024 * 1024)
+        {
+            return Err(StoreError::Other("ssh: identity exceeds 1MiB".into()));
+        }
+        Ok(snapshot)
+    }
     async fn ensure_parent(&mut self, path: &str) -> core::result::Result<(), StoreError>;
     async fn publish(
         &mut self,
@@ -132,7 +145,11 @@ pub struct Identity {
 }
 pub async fn load_or_create_identity<S: Store>(store: &mut S, path: &str) -> Result<Identity> {
     for _ in 0..4 {
-        if let Some(snapshot) = store.snapshot(path).await.map_err(|e| e.to_string())? {
+        if let Some(snapshot) = store
+            .identity_snapshot(path)
+            .await
+            .map_err(|e| e.to_string())?
+        {
             let key = SignKey::import_private(&snapshot.bytes)
                 .map_err(|_| "ssh: identity is unsupported, encrypted, or invalid")?;
             return Ok(Identity {

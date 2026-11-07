@@ -23,7 +23,11 @@ fn main() {
     stage_log("main-enter");
     let mut terminal = Terminal::new(PlatformConsole::new());
     #[cfg(target_os = "trueos")]
-    let runtime = trueos::runtime::current_thread_net().build();
+    let runtime = {
+        let mut builder = trueos::runtime::current_thread();
+        builder.enable_io();
+        builder.build()
+    };
     #[cfg(not(target_os = "trueos"))]
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
