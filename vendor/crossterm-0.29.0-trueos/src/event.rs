@@ -197,6 +197,16 @@ pub fn discard_buffered_input() -> crate::io::Result<InputDiscardStatus> {
     lock_internal_event_reader().discard_buffered_input()
 }
 
+/// Replay user input consumed by an exclusive native terminal probe.
+///
+/// The caller must pause event streams and supply the lease that read the bytes.
+/// Completed terminal responses are filtered by the existing event parser. An
+/// inactive or changed lease fails instead of replaying bytes into a new session.
+#[cfg(target_os = "trueos")]
+pub fn buffer_input_for_lease(input: &[u8], lease: u64) -> crate::io::Result<()> {
+    lock_internal_event_reader().buffer_input_for_lease(input, lease)
+}
+
 /// Checks if there is an [`Event`](enum.Event.html) available.
 ///
 /// Returns `Ok(true)` if an [`Event`](enum.Event.html) is available otherwise it returns `Ok(false)`.

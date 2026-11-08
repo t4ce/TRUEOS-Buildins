@@ -25,6 +25,17 @@ pub(crate) trait EventSource: Sync + Send {
     #[cfg(any(unix, target_os = "trueos"))]
     fn discard_buffered_input(&mut self) -> super::InputDiscardStatus;
 
+    /// Replay raw probe input only within its captured native terminal lease.
+    #[cfg(target_os = "trueos")]
+    fn buffer_input_for_lease(
+        &mut self,
+        _input: &[u8],
+        _lease: u64,
+        _events: &mut alloc::collections::VecDeque<InternalEvent>,
+    ) -> io::Result<()> {
+        Err(io::Error::new(io::ErrorKind::Other, "terminal source does not support native probe replay"))
+    }
+
     /// Returns a `Waker` allowing to wake/force the `try_read` method to return `Ok(None)`.
     #[cfg(feature = "event-stream")]
     fn waker(&self) -> Waker;

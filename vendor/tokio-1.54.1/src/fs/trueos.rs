@@ -839,6 +839,18 @@ struct TrueosFileInner {
 }
 
 impl TrueosFile {
+    /// Borrow the retained native file capability. Snapshot-backed files have
+    /// no such capability and cannot participate in native access-policy checks.
+    #[cfg(all(target_os = "trueos", not(feature = "native")))]
+    pub fn as_native_file(&self) -> io::Result<&std::fs::File> {
+        self.std_file.as_ref().ok_or_else(|| {
+            io::Error::new(
+                UNSUPPORTED,
+                "snapshot-backed file has no native file capability",
+            )
+        })
+    }
+
     pub(crate) fn poll_read_into(&self, dst: &mut ReadBuf<'_>) -> io::Result<()> {
         #[cfg(all(target_os = "trueos", not(feature = "native")))]
         if let Some(mut file) = self.std_file.as_ref() {

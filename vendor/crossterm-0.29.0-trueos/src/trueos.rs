@@ -50,6 +50,16 @@ pub(crate) fn claim() -> io::Result<()> {
     }
 }
 
+pub(crate) fn check_lease(expected: u64) -> io::Result<()> {
+    let mut epoch = 0;
+    let code = unsafe { trueos_cabi_blueprint_terminal_lease_current_v1(expected, &mut epoch) };
+    if code == 0 && expected != 0 && epoch == expected {
+        Ok(())
+    } else {
+        Err(error("terminal replay lease", code))
+    }
+}
+
 pub(crate) fn surface() -> io::Result<Option<(u64, u32, u32)>> {
     let (mut generation, mut columns, mut rows) = (0, 0, 0);
     let code = unsafe {

@@ -88,6 +88,26 @@ fn timeout_ms(duration: Option<Duration>) -> u64 {
 }
 
 impl<T: TerminalTransport> EventSource for TerminalEventSource<T> {
+    #[cfg(target_os = "trueos")]
+    fn buffer_input_for_lease(
+        &mut self,
+        input: &[u8],
+        lease: u64,
+        events: &mut alloc::collections::VecDeque<InternalEvent>,
+    ) -> io::Result<()> {
+        if let Some(event) = self.surface_event()? {
+            events.push_back(event);
+        }
+        crate::trueos::check_lease(lease)?;
+        self.parser.advance(input, false);
+        while let Some(event) = self.parser.next() {
+            if matches!(event, InternalEvent::Event(_)) {
+                events.push_back(event);
+            }
+        }
+        Ok(())
+    }
+
     fn try_read(&mut self, timeout: Option<Duration>) -> io::Result<Option<InternalEvent>> {
         let timeout = PollTimeout::new(timeout);
         loop {

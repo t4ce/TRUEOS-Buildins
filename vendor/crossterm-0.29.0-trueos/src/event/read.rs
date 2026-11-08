@@ -58,6 +58,14 @@ impl InternalEventReader {
     }
 
 
+    #[cfg(target_os = "trueos")]
+    pub(crate) fn buffer_input_for_lease(&mut self, input: &[u8], lease: u64) -> io::Result<()> {
+        let source = self.source.as_mut().ok_or_else(|| {
+            io::Error::new(io::ErrorKind::Other, "Failed to initialize input reader")
+        })?;
+        source.buffer_input_for_lease(input, lease, &mut self.events)
+    }
+
     /// Returns a `Waker` allowing to wake/force the `poll` method to return `Ok(false)`.
     #[cfg(feature = "event-stream")]
     pub(crate) fn waker(&self) -> Waker {
