@@ -393,6 +393,7 @@ def input_roots(kernel: Path):
             kernel / "vendor/infer", kernel / "crates/trueos-v/src/bp_abi.rs", kernel / "crates/trueos-v/src/worker_abi.rs",
             kernel / "src/hv/blueprint/blueprint.rs", kernel / "src/hv/blueprint/prebind.rs", kernel / "src/unix_compat.rs",
             kernel / "tools/appdb-seed",
+            kernel.parent / "TRUEOS-Blueprints/appbundle.json",
             kernel / "Cargo.toml",
             kernel / "tools/testpy/apply_trueos_rust_std_thread_backend.py", kernel / "tools/rust-std/trueos_thread.rs",
             kernel / "tools/rust-std/trueos_futex.rs", kernel / "tools/rust-std/trueos_tls_key.rs",
@@ -548,6 +549,12 @@ def build_database(output: Path, kernel: Path, cargo: Path, env: dict, names):
     if kernel_version != host_version or not host_version.startswith("="):
         raise ValueError("kernel and app.db builder must pin the same exact redb version")
     inputs = hashlib.sha256(json.dumps(packages).encode())
+    bundle_manifest = kernel.parent / "TRUEOS-Blueprints/appbundle.json"
+    inputs.update(bundle_manifest.read_bytes())
+    bundle_crate = kernel.parent / "TRUEOS-Blueprints/crates/trueos-appbundle"
+    for path in sorted(bundle_crate.rglob("*")):
+        if path.is_file() and not any(part in IGNORED for part in path.relative_to(bundle_crate).parts):
+            inputs.update(str(path).encode() + b"\0" + path.read_bytes())
     for path in sorted(tool.rglob("*")):
         if path.is_file() and not any(part in IGNORED for part in path.relative_to(tool).parts):
             inputs.update(str(path).encode() + b"\0" + path.read_bytes())
@@ -573,7 +580,7 @@ def build_database(output: Path, kernel: Path, cargo: Path, env: dict, names):
     # An external working directory keeps the host helper out of kernel Cargo config.
     with tempfile.TemporaryDirectory(prefix="trueos-appdb-host-") as directory:
         run([cargo, "run", "--quiet", "--release", "--target", "x86_64-unknown-linux-gnu",
-             "--manifest-path", tool / "Cargo.toml", "--", manifest, output / "dist", output / "app.db", updated],
+             "--manifest-path", tool / "Cargo.toml", "--", manifest, output / "dist", output / "app.db", updated, bundle_manifest],
             cwd=directory, env=host_env)
     write_changed(output / "app.db.lz4", lz4_frame((output / "app.db").read_bytes()), durable=True)
     database = {name: hashlib.sha256((output / name).read_bytes()).hexdigest() for name in ("app.db", "app.db.lz4")}

@@ -1,7 +1,10 @@
 extern crate alloc;
-use alloc::{string::{String, ToString}, vec::Vec};
+use alloc::{
+    string::{String, ToString},
+    vec::Vec,
+};
 use core::fmt::Write;
-use sha2::{Digest,Sha256};
+use sha2::{Digest, Sha256};
 #[derive(Clone)]
 pub(crate) struct OnlineApp {
     pub(crate) name: String,
@@ -250,10 +253,15 @@ fn online_app_sha256_matches(app: &OnlineApp, bytes: &[u8]) -> bool {
     actual.eq_ignore_ascii_case(app.sha256.as_str())
 }
 
-
-pub fn parse(html: &str) -> Vec<OnlineApp> { parse_online_apps(html, OnlineCatalog::Apps) }
-pub fn verify(app: &OnlineApp, bytes: &[u8]) -> bool { online_app_sha256_matches(app, bytes) }
-pub fn url(app: &OnlineApp) -> &str { &app.url }
+pub fn parse(html: &str) -> Vec<OnlineApp> {
+    parse_online_apps(html, OnlineCatalog::Apps)
+}
+pub fn verify(app: &OnlineApp, bytes: &[u8]) -> bool {
+    online_app_sha256_matches(app, bytes)
+}
+pub fn url(app: &OnlineApp) -> &str {
+    &app.url
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -267,7 +275,10 @@ mod tests {
             let html = "<li><a href=\"tokio_mrt.bp\">tokio_mrt.bp</a></li>";
             let apps = parse_online_apps(html, catalog);
             assert_eq!(apps.len(), 1);
-            assert_eq!(apps[0].url, alloc::format!("https://trueos.eu/{directory}/tokio_mrt.bp"));
+            assert_eq!(
+                apps[0].url,
+                alloc::format!("https://trueos.eu/{directory}/tokio_mrt.bp")
+            );
         }
     }
 
@@ -294,7 +305,10 @@ mod tests {
             "https://trueos.eu/probes/tokio_mrt.bp"
         );
         assert_eq!(
-            absolutize_online_url("https://trueos.eu/probes/tokio_mrt.bp", OnlineCatalog::Probes),
+            absolutize_online_url(
+                "https://trueos.eu/probes/tokio_mrt.bp",
+                OnlineCatalog::Probes
+            ),
             "https://trueos.eu/probes/tokio_mrt.bp"
         );
     }
@@ -311,4 +325,6 @@ mod tests {
     }
 }
 
-pub fn resolve<'a>(apps: &'a [OnlineApp], selector: &str) -> Option<&'a OnlineApp> { resolve_online_app(apps, selector) }
+pub fn resolve<'a>(apps: &'a [OnlineApp], selector: &str) -> Option<&'a OnlineApp> {
+    resolve_online_app(apps, selector)
+}

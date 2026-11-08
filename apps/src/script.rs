@@ -1,9 +1,13 @@
 //! One-shot stream: `pull [--sh3 | --headless] NAME_OR_ID` or `install NAME_OR_ID`.
 //! Install downloads, verifies and imports into AppDB without launching the app.
 //! Empty lines and # comments are ignored; duplicates intentionally launch twice.
-use alloc::{format, string::{String, ToString}, vec::Vec};
 #[cfg(test)]
 use alloc::vec;
+use alloc::{
+    format,
+    string::{String, ToString},
+    vec::Vec,
+};
 #[derive(Debug, PartialEq, Eq)]
 pub struct Request {
     pub selector: String,
@@ -24,20 +28,31 @@ pub fn requests(script: &str) -> Vec<Result<Request, String>> {
                 return None;
             }
             Some(match line.split_once(char::is_whitespace) {
-                Some(("install", selector)) if !selector.trim().is_empty()
-                    && !selector.trim().chars().any(char::is_whitespace)
-                    && !selector.trim().starts_with('-') => Ok(Request {
-                        selector: selector.trim().to_string(), install_only: true,
-                        start_script: String::new(), new_shell3: false, headless: false,
-                    }),
+                Some(("install", selector))
+                    if !selector.trim().is_empty()
+                        && !selector.trim().chars().any(char::is_whitespace)
+                        && !selector.trim().starts_with('-') =>
+                {
+                    Ok(Request {
+                        selector: selector.trim().to_string(),
+                        install_only: true,
+                        start_script: String::new(),
+                        new_shell3: false,
+                        headless: false,
+                    })
+                }
                 Some(("pull" | "launch", value)) if !value.trim().is_empty() => {
                     let value = value.trim();
                     let (new_shell3, value) = match value.strip_prefix("--sh3") {
-                        Some(rest) if rest.is_empty() || rest.starts_with(char::is_whitespace) => (true, rest.trim()),
+                        Some(rest) if rest.is_empty() || rest.starts_with(char::is_whitespace) => {
+                            (true, rest.trim())
+                        }
                         _ => (false, value),
                     };
                     let (headless, value) = match value.strip_prefix("--headless") {
-                        Some(rest) if rest.is_empty() || rest.starts_with(char::is_whitespace) => (true, rest.trim()),
+                        Some(rest) if rest.is_empty() || rest.starts_with(char::is_whitespace) => {
+                            (true, rest.trim())
+                        }
                         _ => (false, value),
                     };
                     let (selector, command) = value
@@ -46,7 +61,10 @@ pub fn requests(script: &str) -> Vec<Result<Request, String>> {
                         .map_or((value.trim(), ""), |(selector, command)| {
                             (selector.trim(), command.trim())
                         });
-                    if (new_shell3 && headless) || selector.is_empty() || (value.contains(" -- ") && command.is_empty()) {
+                    if (new_shell3 && headless)
+                        || selector.is_empty()
+                        || (value.contains(" -- ") && command.is_empty())
+                    {
                         Err(format!("invalid request: {line}"))
                     } else {
                         Ok(Request {
@@ -75,7 +93,8 @@ mod tests {
             selector: selector.into(),
             install_only: false,
             start_script: String::new(),
-            new_shell3: false, headless: false,
+            new_shell3: false,
+            headless: false,
         })
     }
     #[test]
@@ -86,7 +105,8 @@ mod tests {
                 selector: "Frog".into(),
                 install_only: false,
                 start_script: "weather -74.123456 40.987654\n".into(),
-                new_shell3: false, headless: false,
+                new_shell3: false,
+                headless: false,
             })]
         );
     }
@@ -106,10 +126,33 @@ mod tests {
     #[test]
     fn shell_destination_does_not_change_the_child_script() {
         let batch = requests("launch --sh3 Frog -- weather 13 51\npull --sh3 12\nlaunch --sh3\n");
-        assert_eq!(batch[0], Ok(Request { selector: "Frog".into(), install_only: false, start_script: "weather 13 51\n".into(), new_shell3: true, headless: false }));
-        assert_eq!(batch[1], Ok(Request { selector: "12".into(), install_only: false, start_script: String::new(), new_shell3: true, headless: false }));
+        assert_eq!(
+            batch[0],
+            Ok(Request {
+                selector: "Frog".into(),
+                install_only: false,
+                start_script: "weather 13 51\n".into(),
+                new_shell3: true,
+                headless: false
+            })
+        );
+        assert_eq!(
+            batch[1],
+            Ok(Request {
+                selector: "12".into(),
+                install_only: false,
+                start_script: String::new(),
+                new_shell3: true,
+                headless: false
+            })
+        );
         assert!(batch[2].is_err());
-        assert!(!requests("launch Frog -- weather --sh3 51\n")[0].as_ref().unwrap().new_shell3);
+        assert!(
+            !requests("launch Frog -- weather --sh3 51\n")[0]
+                .as_ref()
+                .unwrap()
+                .new_shell3
+        );
     }
 
     #[test]
@@ -128,9 +171,16 @@ mod tests {
     }
     #[test]
     fn headless_autostart_forwards_the_child_script() {
-        assert_eq!(requests("pull --headless voxy\n"), vec![Ok(Request {
-            selector: "voxy".into(), install_only: false, start_script: String::new(), new_shell3: false, headless: true,
-        })]);
+        assert_eq!(
+            requests("pull --headless voxy\n"),
+            vec![Ok(Request {
+                selector: "voxy".into(),
+                install_only: false,
+                start_script: String::new(),
+                new_shell3: false,
+                headless: true,
+            })]
+        );
         let batch = requests("pull --headless Frog -- weather 13 51\n");
         assert_eq!(batch[0].as_ref().unwrap().start_script, "weather 13 51\n");
         assert!(batch[0].as_ref().unwrap().headless);
@@ -142,11 +192,22 @@ mod tests {
     }
     #[test]
     fn install_fetches_without_launch_options_or_commands() {
-        assert_eq!(requests("install odin-son\n"), vec![Ok(Request {
-            selector: "odin-son".into(), install_only: true, start_script: String::new(),
-            new_shell3: false, headless: false,
-        })]);
-        for invalid in ["install", "install --headless odin-son", "install odin-son -- build", "install --sh3"] {
+        assert_eq!(
+            requests("install odin-son\n"),
+            vec![Ok(Request {
+                selector: "odin-son".into(),
+                install_only: true,
+                start_script: String::new(),
+                new_shell3: false,
+                headless: false,
+            })]
+        );
+        for invalid in [
+            "install",
+            "install --headless odin-son",
+            "install odin-son -- build",
+            "install --sh3",
+        ] {
             assert!(requests(invalid)[0].is_err(), "{invalid}");
         }
     }

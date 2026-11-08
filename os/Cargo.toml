@@ -13,6 +13,7 @@ test = false
 bench = false
 
 [dependencies]
+serde_json = { version = "1", default-features = false, features = ["alloc"] }
 crossterm = { path = "../../vendor/crossterm-0.29.0-trueos", default-features = false, features = ["events", "native-core"] }
 trueos = { path = "../../api", features = ["native-runtime"] }
 

@@ -625,6 +625,37 @@ class CargoObjects(unittest.TestCase):
         self.compress.assert_not_called()
 
 
+class DatabaseBundles(unittest.TestCase):
+    def test_bundle_metadata_changes_rebuild_the_seed_without_changed_packages(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            kernel = root / "TRUEOS"
+            tool = kernel / "tools/appdb-seed"
+            tool.mkdir(parents=True)
+            manifest = '[dependencies]\nredb={version="=4.4.0"}\n'
+            (kernel / "Cargo.toml").write_text(manifest)
+            (tool / "Cargo.toml").write_text(manifest)
+            blueprints = root / "TRUEOS-Blueprints"
+            blueprints.mkdir()
+            bundles = blueprints / "appbundle.json"
+            bundles.write_text('{"version":1,"bundles":{}}')
+            output = root / "output"
+            (output / "dist").mkdir(parents=True)
+            (output / "dist/apps.bp").write_bytes(b"TRBP fixture")
+
+            def seed(command, **kwargs):
+                self.assertEqual(command[-1], bundles)
+                (output / "app.db").write_bytes(bundles.read_bytes())
+
+            with patch.object(build, "run", side_effect=seed) as run, patch.object(build, "lz4_frame", side_effect=lambda b: b):
+                before = build.build_database(output, kernel, Path("/bin/cargo"), {}, ["apps"])
+                self.assertEqual(build.build_database(output, kernel, Path("/bin/cargo"), {}, ["apps"]), before)
+                self.assertEqual(run.call_count, 1)
+                bundles.write_text('{"version":1,"bundles":{"codex.bp":{"requires":["sqlite.bp"]}}}')
+                self.assertNotEqual(build.build_database(output, kernel, Path("/bin/cargo"), {}, ["apps"]), before)
+                self.assertEqual(run.call_count, 2)
+
+
 class SharedKernelSources(unittest.TestCase):
     def test_direct_kernel_vendor_dependency_is_fingerprinted(self):
         with tempfile.TemporaryDirectory() as directory:

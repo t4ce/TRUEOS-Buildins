@@ -50,3 +50,41 @@ The one-shot startup command `install NAME_OR_ID` uses the normal
 `https://trueos.eu/apps` catalog, download verification and AppDB import, then
 exits without starting the downloaded app. IDE compiler jobs use this when
 their compiler is missing from AppDB and then retry the original build.
+
+## App bundles
+
+`TRUEOS-Blueprints/appbundle.json` declares one-way runtime requirements:
+
+```json
+{
+  "version": 1,
+  "bundles": {
+    "codex.bp": { "requires": ["sqlite.bp"] }
+  }
+}
+```
+
+Keys and requirements are Blueprint archive names. The key is the app to start;
+requirements are installed, and the app starts its services when needed.
+Requesting SQLite alone does not request Codex. Requirements may have their own
+requirements; shared members are fetched once, and cycles are rejected.
+
+The host AppDB seed builder validates and stores this JSON in the database's
+`metadata` table under `appbundle.json`. It is separate from the built-in app
+selection. Reprepare the kernel and builtins after editing the bundle file.
+Apps reads the embedded definition through `vFile:appbundle.json`; there is no
+metadata file to fetch from the app server.
+
+Interactive launch, Space-to-install, and pullbot `pull`, `launch` and `install`
+all resolve every member before downloading anything. Every member must be
+available, downloaded, verified and saved before the bundle is imported in one
+AppDB transaction. A failed request preserves previous AppDB entries and never
+starts the requested app. Staged files may remain on disk for a failed request.
+The bottom TUI status line names the unavailable member and reason, for example:
+`codex: required sqlite.bp unavailable in app catalog`.
+Pullbot reports the same message through its normal error output.
+
+`vFile:appdb-install` accepts one pathname or a newline-separated batch of up to
+64 paths. The kernel resolves and authorizes each path, checks every Blueprint,
+and commits the apps, hashes and update dates together. Missing bundle
+requirements reject the transaction. Importing a bundle does not start helpers.

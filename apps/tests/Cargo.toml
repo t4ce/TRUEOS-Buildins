@@ -7,6 +7,7 @@ edition = "2024"
 
 [dependencies]
 sha2 = { version = "=0.10.9", default-features = false }
+trueos-appbundle = { path = "../../../TRUEOS-Blueprints/crates/trueos-appbundle" }
 
 [[test]]
 name = "native_fetch"
@@ -19,3 +20,7 @@ path = "download_publication.rs"
 [[test]]
 name = "script_and_mouse"
 path = "script_and_mouse.rs"
+
+[[test]]
+name = "appbundle"
+path = "appbundle.rs"

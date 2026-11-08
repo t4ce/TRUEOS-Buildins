@@ -1,6 +1,6 @@
 //! Execute an ordered one-shot install/launch batch through native services.
+use super::script::{Request, requests};
 use alloc::{format, string::String};
-use super::script::{requests, Request};
 
 pub fn report(message: &str) {
     let _ = trueos::logl::log_record(
@@ -50,10 +50,8 @@ pub async fn drain(bytes: &[u8]) {
             } = request?;
             let app = super::catalog::resolve(&catalog, &selector)
                 .ok_or_else(|| format!("not in catalog: {selector}"))?;
-            let path = super::download(app).await?;
+            let path = super::bundle::download(&catalog, app, install_only).await?;
             if install_only {
-                trueos::async_fs::write_file(b"vFile:appdb-install", path.as_bytes()).await
-                    .map_err(|error| format!("AppDB import failed: {error}"))?;
                 report(&format!("installed {}", app.archive_name));
                 return Ok::<(), String>(());
             }

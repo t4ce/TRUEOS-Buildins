@@ -7,7 +7,7 @@ mod script;
 mod mouse;
 mod fetch;
 mod download;
-use download::download;
+mod bundle;
 use crossterm::io::{self, Write};
 use core::time::Duration;
 use crossterm::{execute, queue, cursor::{MoveTo, Hide, Show}, style::{Color, SetForegroundColor, SetBackgroundColor, ResetColor, Print}, terminal::{self, Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen, DisableLineWrap, EnableLineWrap}, event::{self, Event, KeyCode, KeyEventKind, KeyModifiers, EnableMouseCapture, DisableMouseCapture, MouseButton, MouseEventKind}};
@@ -142,13 +142,8 @@ async fn run() -> Result<Option<String>, String> {
                     let app = &apps[*id];
                     draw(&apps,&query,selected,&format!("Downloading {}…",app.name)).map_err(|e|e.to_string())?;
                     dirty = true;
-                    match download(app).await {
-                        Ok(path) if save => {
-                            message = match trueos::async_fs::write_file(b"vFile:appdb-install", path.as_bytes()).await {
-                                Ok(()) => format!("Added {} to AppDB; not started.", app.name),
-                                Err(error) => format!("AppDB import failed: {error}"),
-                            };
-                        }
+                    match bundle::download(&apps, app, save).await {
+                        Ok(_) if save => message = format!("Added {} to AppDB; not started.", app.name),
                         Ok(path) => return Ok(Some(path)),
                         Err(error) => message = error,
                     }

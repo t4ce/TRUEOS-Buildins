@@ -14,6 +14,7 @@ use crossterm::{
 use trueos::{env, platform, runtime, task, vshell};
 
 mod pxeproc;
+mod releases;
 
 const PINK: Color = Color::Rgb {
     r: 255,
@@ -57,6 +58,7 @@ enum InstallSource {
 enum Action {
     Install { disk: usize, source: InstallSource },
     LiveUpdate,
+    Release(usize),
     LiveUpdateLan,
     Shutdown,
     Reboot,
@@ -65,6 +67,7 @@ enum Action {
 enum Screen {
     Home,
     Disks,
+    Releases,
     Source { disk: usize },
     PxeprocSource { disk: usize },
     Confirm(Action),
@@ -72,6 +75,9 @@ enum Screen {
 
 struct App {
     disks: Vec<Disk>,
+    releases: Vec<releases::Release>,
+    release_error: Option<String>,
+    load_releases: bool,
     non_replicatable_vms: Vec<NonReplicatableVm>,
     screen: Screen,
     selected: usize,
@@ -81,6 +87,9 @@ impl App {
     fn new(disks: Vec<Disk>, non_replicatable_vms: Vec<NonReplicatableVm>) -> Self {
         Self {
             disks,
+            releases: Vec::new(),
+            release_error: None,
+            load_releases: false,
             non_replicatable_vms,
             screen: Screen::Home,
             selected: 0,
@@ -90,6 +99,7 @@ impl App {
     fn item_count(&self) -> usize {
         match self.screen {
             Screen::Home => 6,
+            Screen::Releases => self.releases.len() + 2,
             Screen::Disks => self.disks.len().max(1),
             Screen::Source { .. } => 3,
             Screen::PxeprocSource { .. } => 2,
@@ -113,6 +123,16 @@ impl App {
     fn back(&mut self) -> bool {
         match self.screen {
             Screen::Home => true,
+            Screen::Releases => {
+                self.screen = Screen::Home;
+                self.selected = 1;
+                false
+            }
+            Screen::Confirm(Action::Release(_)) => {
+                self.screen = Screen::Releases;
+                self.selected = 0;
+                false
+            }
             Screen::Disks => {
                 self.screen = Screen::Home;
                 self.selected = 0;
@@ -162,7 +182,8 @@ impl App {
                     None
                 }
                 1 => {
-                    self.screen = Screen::Confirm(Action::LiveUpdate);
+                    self.screen = Screen::Releases;
+                    self.load_releases = true;
                     self.selected = 0;
                     None
                 }
@@ -183,6 +204,18 @@ impl App {
                 }
                 _ => Some(String::from("os:quit")),
             },
+            Screen::Releases => {
+                if self.selected < self.releases.len() {
+                    self.screen = Screen::Confirm(Action::Release(self.selected));
+                    self.selected = 0;
+                } else if self.selected == self.releases.len() {
+                    self.screen = Screen::Confirm(Action::LiveUpdate);
+                    self.selected = 0;
+                } else {
+                    self.load_releases = true;
+                }
+                None
+            }
             Screen::Disks => {
                 if self.disks.is_empty() {
                     return None;
@@ -230,6 +263,7 @@ impl App {
                                 Screen::Source { disk }
                             }
                         }
+                        Action::Release(_) => self.screen = Screen::Releases,
                         Action::LiveUpdate
                         | Action::LiveUpdateLan
                         | Action::Shutdown
@@ -239,6 +273,10 @@ impl App {
                     return None;
                 }
                 Some(match action {
+                    Action::Release(index) => match self.releases.get(index) {
+                        Some(release) => format!("os:update:github:{}", release.url),
+                        None => return Some(String::from("os:cancel")),
+                    },
                     Action::LiveUpdate => String::from("os:update:live"),
                     Action::LiveUpdateLan => String::from("os:update:lan"),
                     Action::Shutdown => String::from("os:shutdown"),
@@ -360,6 +398,7 @@ async fn run(
         if let Some(reason) = handle_key(&mut app, KeyEvent::new(code, event::KeyModifiers::NONE)) {
             return Ok(reason);
         }
+        refresh_releases(&mut app).await?;
         draw(&app)?;
     }
 
@@ -373,6 +412,7 @@ async fn run(
                     if let Some(reason) = handle_key(&mut app, key) {
                         return Ok(reason);
                     }
+                    refresh_releases(&mut app).await?;
                     draw(&app)?;
                 }
                 _ => {}
@@ -470,6 +510,7 @@ fn draw(app: &App) -> io::Result<()> {
 
     match app.screen {
         Screen::Home => draw_home(&mut out, app.selected)?,
+        Screen::Releases => draw_releases(&mut out, app)?,
         Screen::Disks => draw_disks(&mut out, app)?,
         Screen::Source { disk } => draw_sources(&mut out, app, disk)?,
         Screen::PxeprocSource { disk } => draw_pxeproc_sources(&mut out, app, disk)?,
@@ -593,16 +634,25 @@ fn draw_pxeproc_sources(out: &mut io::Stdout, app: &App, disk: usize) -> io::Res
 fn draw_confirm(out: &mut io::Stdout, app: &App, action: Action) -> io::Result<()> {
     heading(out, "CONFIRM")?;
     match action {
-        Action::LiveUpdate | Action::LiveUpdateLan => {
+        Action::LiveUpdate | Action::LiveUpdateLan | Action::Release(_) => {
             queue!(
                 out,
                 Print(if matches!(action, Action::LiveUpdateLan) {
                     "    Fetch the LAN image from 192.168.178.111 and replace the running kernel.\r\n"
                 } else {
-                    "    Fetch the current release and replace the running kernel.\r\n"
+                    "    Fetch the selected image and replace the running kernel.\r\n"
                 }),
                 Print("    No disk installation will be performed.\r\n")
             )?;
+            match action {
+                Action::Release(index) => {
+                    if let Some(release) = app.releases.get(index) {
+                        queue!(out, Print(format!("    {} · {}\r\n", release.version, release.asset)))?;
+                    }
+                }
+                Action::LiveUpdate => queue!(out, Print("    Nightly from trueos · https://trueos.eu/TrueOS.tar.lz4\r\n"))?,
+                _ => {}
+            }
             if app.non_replicatable_vms.is_empty() {
                 queue!(out, Print("\r\n"))?;
             } else {
@@ -661,7 +711,7 @@ fn draw_confirm(out: &mut io::Stdout, app: &App, action: Action) -> io::Result<(
     row(
         out,
         app.selected == 1,
-        if matches!(action, Action::LiveUpdate | Action::LiveUpdateLan)
+        if matches!(action, Action::LiveUpdate | Action::LiveUpdateLan | Action::Release(_))
             && !app.non_replicatable_vms.is_empty()
         {
             "Discard apps and proceed"
@@ -669,4 +719,30 @@ fn draw_confirm(out: &mut io::Stdout, app: &App, action: Action) -> io::Result<(
             "Proceed"
         },
     )
+}
+
+async fn refresh_releases(app: &mut App) -> io::Result<()> {
+    if !app.load_releases { return Ok(()); }
+    app.load_releases = false;
+    app.release_error = Some(String::from("Loading GitHub releases…"));
+    draw(app)?;
+    match releases::fetch().await {
+        Ok(releases) => { app.releases = releases; app.release_error = None; }
+        Err(error) => { app.releases.clear(); app.release_error = Some(error); }
+    }
+    app.selected = 0;
+    Ok(())
+}
+
+fn draw_releases(out: &mut io::Stdout, app: &App) -> io::Result<()> {
+    heading(out, "LIVE UPDATE · SOURCE")?;
+    for (index, release) in app.releases.iter().enumerate() {
+        row(out, app.selected == index, format!("GitHub · {}", release.version))?;
+    }
+    row(out, app.selected == app.releases.len(), "Nightly from trueos")?;
+    row(out, app.selected == app.releases.len() + 1, "Refresh GitHub releases")?;
+    if let Some(error) = &app.release_error {
+        queue!(out, Print(format!("\r\n    {error}\r\n")))?;
+    }
+    Ok(())
 }
