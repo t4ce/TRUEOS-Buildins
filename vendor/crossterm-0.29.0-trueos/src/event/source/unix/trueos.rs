@@ -100,11 +100,10 @@ impl<T: TerminalTransport> EventSource for TerminalEventSource<T> {
         }
         crate::trueos::check_lease(lease)?;
         self.parser.advance(input, false);
-        while let Some(event) = self.parser.next() {
-            if matches!(event, InternalEvent::Event(_)) {
-                events.push_back(event);
-            }
-        }
+        // Keep decoded replay inside the source. try_read checks the surface
+        // epoch before delivering it and clears the parser after reentry.
+        // Moving keys into the reader's outer queue would bypass that check.
+        self.parser.retain_replayed_user_events();
         Ok(())
     }
 

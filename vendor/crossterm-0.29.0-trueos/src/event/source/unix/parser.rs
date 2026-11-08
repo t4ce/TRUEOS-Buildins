@@ -51,6 +51,14 @@ impl Default for Parser {
 }
 
 impl Parser {
+    /// Keep replayed user input in this parser's transport incarnation. Query
+    /// responses were already consumed by the probe and must not be replayed.
+    #[cfg(target_os = "trueos")]
+    pub(super) fn retain_replayed_user_events(&mut self) {
+        self.internal_events
+            .retain(|event| matches!(event, InternalEvent::Event(_)));
+    }
+
     pub(super) fn discard_buffered_input(&mut self) -> InputDiscardStatus {
         if self.discarded_sequence.is_none() {
             if self.buffer.starts_with(BRACKETED_PASTE_START) {
