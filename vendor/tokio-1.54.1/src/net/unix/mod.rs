@@ -9,6 +9,7 @@ pub mod datagram;
 
 pub(crate) mod listener;
 
+#[cfg_attr(all(target_os = "trueos", feature = "native-net"), path = "socket_trueos.rs")]
 pub(crate) mod socket;
 
 mod split;

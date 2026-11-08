@@ -151,7 +151,7 @@ mod tests {
         *crate::event::INTERNAL_EVENT_READER.lock() = None;
         {
             let mut state = STATE.lock().unwrap();
-            state.claim_status = 0; state.surface_status = 0; state.surface = (1, 120, 40);
+            state.claim_status = 0; state.lease = 1; state.surface_status = 0; state.surface = (1, 120, 40);
             state.wait_status = 0; state.bytes.clear();
         }
         let mut stream = EventStream::new();
@@ -169,7 +169,20 @@ mod tests {
             assert!(std::time::Instant::now() < deadline, "native event worker lost its wake");
             std::thread::yield_now();
         }
-        for expected in ['a', 'b'] {
+        // The worker has queued `a` and the parser holds `b` under lease 1.
+        // Reentry before poll_next must invalidate both queues, independently
+        // of the (unchanged) surface generation and dimensions.
+        {
+            let mut state = STATE.lock().unwrap();
+            state.lease = 2;
+            state.bytes.extend(b"cd");
+            state.generation += 1;
+        }
+        match Pin::new(&mut stream).poll_next(&mut cx) {
+            Poll::Ready(Some(Ok(Event::Resize(120, 40)))) => {},
+            other => panic!("expected native reentry resize: {other:?}"),
+        }
+        for expected in ['c', 'd'] {
             match Pin::new(&mut stream).poll_next(&mut cx) {
                 Poll::Ready(Some(Ok(Event::Key(key)))) => assert_eq!(key.code, KeyCode::Char(expected)),
                 other => panic!("unexpected native stream result: {other:?}"),

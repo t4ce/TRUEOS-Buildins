@@ -20,6 +20,8 @@ pub(crate) struct InternalEventReader {
     events: VecDeque<InternalEvent>,
     source: Option<Box<dyn EventSource>>,
     skipped_events: Vec<InternalEvent>,
+    #[cfg(target_os = "trueos")]
+    native_epoch: Option<Option<(u64, u64)>>,
 }
 
 impl Default for InternalEventReader {
@@ -40,11 +42,35 @@ impl Default for InternalEventReader {
             source,
             events: VecDeque::with_capacity(32),
             skipped_events: Vec::with_capacity(32),
+            #[cfg(target_os = "trueos")]
+            native_epoch: None,
         }
     }
 }
 
 impl InternalEventReader {
+    /// Invalidate all outer queues whenever native input ownership disappears
+    /// or changes. The returned value checks the last event returned by source,
+    /// so an ownership race during a wait cannot relabel an old event as new.
+    #[cfg(target_os = "trueos")]
+    fn validate_native_epoch(&mut self) -> io::Result<bool> {
+        let state = match self.source.as_mut() {
+            Some(source) => source.input_epoch()?,
+            None => return Ok(false),
+        };
+        match state {
+            crate::event::source::NativeInputEpoch::Untracked => Ok(true),
+            crate::event::source::NativeInputEpoch::Tracked { current, event } => {
+                if current.is_none() || self.native_epoch != Some(current) {
+                    self.events.clear();
+                    self.skipped_events.clear();
+                    self.native_epoch = Some(current);
+                }
+                Ok(current.is_some() && event == current)
+            }
+        }
+    }
+
     #[cfg(any(unix, target_os = "trueos"))]
     pub(crate) fn discard_buffered_input(&mut self) -> io::Result<InputDiscardStatus> {
         let source = self
@@ -60,6 +86,7 @@ impl InternalEventReader {
 
     #[cfg(target_os = "trueos")]
     pub(crate) fn buffer_input_for_lease(&mut self, input: &[u8], lease: u64) -> io::Result<()> {
+        self.validate_native_epoch()?;
         let source = self.source.as_mut().ok_or_else(|| {
             io::Error::new(io::ErrorKind::Other, "Failed to initialize input reader")
         })?;
@@ -76,26 +103,30 @@ impl InternalEventReader {
     where
         F: Filter,
     {
+        #[cfg(target_os = "trueos")]
+        self.validate_native_epoch()?;
         for event in &self.events {
             if filter.eval(event) {
                 return Ok(true);
             }
         }
 
-        let event_source = match self.source.as_mut() {
-            Some(source) => source,
-            None => {
-                return Err(crate::io::Error::new(
-                    crate::io::ErrorKind::Other,
-                    "Failed to initialize input reader",
-                ))
-            }
-        };
+        if self.source.is_none() {
+            return Err(crate::io::Error::new(
+                crate::io::ErrorKind::Other,
+                "Failed to initialize input reader",
+            ));
+        }
 
         let poll_timeout = PollTimeout::new(timeout);
 
         loop {
-            let maybe_event = match event_source.try_read(poll_timeout.leftover()) {
+            let result = self.source.as_mut().unwrap().try_read(poll_timeout.leftover());
+            #[cfg(target_os = "trueos")]
+            let source_is_current = self.validate_native_epoch()?;
+            let maybe_event = match result {
+                #[cfg(target_os = "trueos")]
+                Ok(Some(_)) if !source_is_current => None,
                 Ok(None) => None,
                 Ok(Some(event)) => {
                     if filter.eval(&event) {
@@ -132,9 +163,21 @@ impl InternalEventReader {
         F: Filter,
     {
         let mut skipped_events = VecDeque::new();
+        #[cfg(target_os = "trueos")]
+        let mut read_epoch = self.native_epoch;
 
         loop {
-            while let Some(event) = self.events.pop_front() {
+            #[cfg(target_os = "trueos")]
+            {
+                self.validate_native_epoch()?;
+                // poll may already have refreshed self.native_epoch while this
+                // read kept skipped events on its stack. Track it separately.
+                if read_epoch != self.native_epoch || self.native_epoch == Some(None) {
+                    skipped_events.clear();
+                    read_epoch = self.native_epoch;
+                }
+            }
+            if let Some(event) = self.events.pop_front() {
                 if filter.eval(&event) {
                     while let Some(event) = skipped_events.pop_front() {
                         self.events.push_back(event);
@@ -151,9 +194,9 @@ impl InternalEventReader {
                     // and then when the filter is fulfilled write all events back in order.
                     skipped_events.push_back(event);
                 }
+            } else {
+                let _ = self.poll(None, filter)?;
             }
-
-            let _ = self.poll(None, filter)?;
         }
     }
 }
@@ -190,6 +233,8 @@ mod tests {
                 Event::Resize(20, 20),
             )]))),
             skipped_events: vec![InternalEvent::CursorPosition(4, 8)],
+            #[cfg(target_os = "trueos")]
+            native_epoch: None,
         };
 
         assert_eq!(
@@ -217,6 +262,8 @@ mod tests {
             events: VecDeque::new(),
             source: None,
             skipped_events: Vec::with_capacity(32),
+            #[cfg(target_os = "trueos")]
+            native_epoch: None,
         };
 
         assert!(reader.poll(None, &InternalEventFilter).is_err());
@@ -234,6 +281,8 @@ mod tests {
             events: vec![InternalEvent::Event(Event::Resize(10, 10))].into(),
             source: None,
             skipped_events: Vec::with_capacity(32),
+            #[cfg(target_os = "trueos")]
+            native_epoch: None,
         };
 
         assert!(reader.poll(None, &InternalEventFilter).unwrap());
@@ -250,6 +299,8 @@ mod tests {
             .into(),
             source: None,
             skipped_events: Vec::with_capacity(32),
+            #[cfg(target_os = "trueos")]
+            native_epoch: None,
         };
 
         assert!(reader.poll(None, &CursorPositionFilter).unwrap());
@@ -263,6 +314,8 @@ mod tests {
             events: vec![EVENT].into(),
             source: None,
             skipped_events: Vec::with_capacity(32),
+            #[cfg(target_os = "trueos")]
+            native_epoch: None,
         };
 
         assert_eq!(reader.read(&InternalEventFilter).unwrap(), EVENT);
@@ -277,6 +330,8 @@ mod tests {
             events: vec![InternalEvent::Event(Event::Resize(10, 10)), CURSOR_EVENT].into(),
             source: None,
             skipped_events: Vec::with_capacity(32),
+            #[cfg(target_os = "trueos")]
+            native_epoch: None,
         };
 
         assert_eq!(reader.read(&CursorPositionFilter).unwrap(), CURSOR_EVENT);
@@ -292,6 +347,8 @@ mod tests {
             events: vec![SKIPPED_EVENT, CURSOR_EVENT].into(),
             source: None,
             skipped_events: Vec::with_capacity(32),
+            #[cfg(target_os = "trueos")]
+            native_epoch: None,
         };
 
         assert_eq!(reader.read(&CursorPositionFilter).unwrap(), CURSOR_EVENT);
@@ -306,6 +363,8 @@ mod tests {
             events: VecDeque::new(),
             source: Some(Box::new(source)),
             skipped_events: Vec::with_capacity(32),
+            #[cfg(target_os = "trueos")]
+            native_epoch: None,
         };
 
         assert!(!reader
@@ -321,6 +380,8 @@ mod tests {
             events: VecDeque::new(),
             source: Some(Box::new(source)),
             skipped_events: Vec::with_capacity(32),
+            #[cfg(target_os = "trueos")]
+            native_epoch: None,
         };
 
         assert!(reader.poll(None, &InternalEventFilter).unwrap());
@@ -339,6 +400,8 @@ mod tests {
             events: VecDeque::new(),
             source: Some(Box::new(source)),
             skipped_events: Vec::with_capacity(32),
+            #[cfg(target_os = "trueos")]
+            native_epoch: None,
         };
 
         assert_eq!(reader.read(&InternalEventFilter).unwrap(), EVENT);
@@ -354,6 +417,8 @@ mod tests {
             events: VecDeque::new(),
             source: Some(Box::new(source)),
             skipped_events: Vec::with_capacity(32),
+            #[cfg(target_os = "trueos")]
+            native_epoch: None,
         };
 
         assert_eq!(reader.read(&InternalEventFilter).unwrap(), EVENT);
@@ -371,6 +436,8 @@ mod tests {
             events: VecDeque::new(),
             source: Some(Box::new(source)),
             skipped_events: Vec::with_capacity(32),
+            #[cfg(target_os = "trueos")]
+            native_epoch: None,
         };
 
         assert_eq!(reader.read(&InternalEventFilter).unwrap(), EVENT);
@@ -387,6 +454,8 @@ mod tests {
             events: VecDeque::new(),
             source: Some(Box::new(FakeSource::new(&[]))),
             skipped_events: Vec::with_capacity(32),
+            #[cfg(target_os = "trueos")]
+            native_epoch: None,
         };
 
         assert_eq!(
@@ -404,6 +473,8 @@ mod tests {
             events: VecDeque::new(),
             source: Some(Box::new(FakeSource::new(&[]))),
             skipped_events: Vec::with_capacity(32),
+            #[cfg(target_os = "trueos")]
+            native_epoch: None,
         };
 
         assert_eq!(
@@ -425,6 +496,8 @@ mod tests {
             events: VecDeque::new(),
             source: Some(Box::new(source)),
             skipped_events: Vec::with_capacity(32),
+            #[cfg(target_os = "trueos")]
+            native_epoch: None,
         };
 
         assert_eq!(reader.read(&InternalEventFilter).unwrap(), EVENT);
@@ -444,11 +517,92 @@ mod tests {
             events: VecDeque::new(),
             source: Some(Box::new(source)),
             skipped_events: Vec::with_capacity(32),
+            #[cfg(target_os = "trueos")]
+            native_epoch: None,
         };
 
         assert_eq!(reader.read(&InternalEventFilter).unwrap(), EVENT);
         assert!(reader.read(&InternalEventFilter).is_err());
         assert_eq!(reader.read(&InternalEventFilter).unwrap(), EVENT);
+    }
+
+    #[cfg(target_os = "trueos")]
+    mod native_epochs {
+        use super::*;
+        use crate::event::{filter::EventFilter, source::NativeInputEpoch, KeyCode};
+        use std::sync::{Arc, Mutex};
+
+        struct EpochSource {
+            state: Arc<Mutex<(Option<(u64, u64)>, Option<(u64, u64)>)>>,
+            // Current lease, producing lease, result. This exercises a handoff
+            // inside try_read as well as a handoff after an earlier poll.
+            actions: VecDeque<(Option<(u64, u64)>, Option<(u64, u64)>, io::Result<Option<InternalEvent>>)>,
+        }
+        impl EventSource for EpochSource {
+            fn input_epoch(&mut self) -> io::Result<NativeInputEpoch> {
+                let (current, event) = *self.state.lock().unwrap();
+                Ok(NativeInputEpoch::Tracked { current, event })
+            }
+            fn try_read(&mut self, _: Option<Duration>) -> io::Result<Option<InternalEvent>> {
+                let Some((current, event, result)) = self.actions.pop_front() else { return Ok(None); };
+                *self.state.lock().unwrap() = (current, event);
+                result
+            }
+            fn discard_buffered_input(&mut self) -> InputDiscardStatus { InputDiscardStatus::Complete }
+            #[cfg(feature = "event-stream")]
+            fn waker(&self) -> crate::event::sys::Waker { unimplemented!() }
+        }
+        fn key(c: char) -> InternalEvent { InternalEvent::Event(Event::Key(KeyCode::Char(c).into())) }
+        fn reader(actions: VecDeque<(Option<(u64, u64)>, Option<(u64, u64)>, io::Result<Option<InternalEvent>>)>)
+            -> (InternalEventReader, Arc<Mutex<(Option<(u64, u64)>, Option<(u64, u64)>)>>)
+        {
+            let state = Arc::new(Mutex::new((Some((1, 1)), Some((1, 1)))));
+            (InternalEventReader {
+                events: VecDeque::new(),
+                source: Some(Box::new(EpochSource { state: state.clone(), actions })),
+                skipped_events: Vec::new(), native_epoch: Some(Some((1, 1))),
+            }, state)
+        }
+        #[test]
+        fn read_local_skips_are_not_restored_after_a_handoff_inside_poll() {
+            let cursor = InternalEvent::CursorPosition(9, 19);
+            let (mut reader, _) = reader(vec![(Some((2, 1)), Some((2, 1)), Ok(Some(cursor.clone())))].into());
+            reader.events.push_back(key('a'));
+            assert_eq!(reader.read(&CursorPositionFilter).unwrap(), cursor);
+            assert!(reader.events.is_empty(), "old read-local skips escaped after handoff");
+            assert!(!reader.poll(Some(Duration::ZERO), &EventFilter).unwrap());
+        }
+        #[test]
+        fn persistent_skips_surviving_an_interrupt_are_cleared_at_handoff() {
+            let cursor = InternalEvent::CursorPosition(9, 19);
+            let (mut reader, state) = reader(vec![
+                (Some((1, 1)), Some((1, 1)), Ok(Some(key('a')))),
+                (Some((1, 1)), Some((1, 1)), Err(io::Error::new(io::ErrorKind::Interrupted, "wake"))),
+                (Some((2, 1)), Some((2, 1)), Ok(Some(cursor.clone()))),
+            ].into());
+            assert!(!reader.poll(None, &CursorPositionFilter).unwrap());
+            assert_eq!(reader.skipped_events.len(), 1);
+            *state.lock().unwrap() = (Some((2, 1)), Some((1, 1)));
+            assert!(reader.poll(Some(Duration::ZERO), &CursorPositionFilter).unwrap());
+            assert_eq!(reader.read(&CursorPositionFilter).unwrap(), cursor);
+            assert!(!reader.poll(Some(Duration::ZERO), &EventFilter).unwrap());
+        }
+        #[test]
+        fn an_event_produced_before_a_racing_handoff_is_discarded() {
+            let (mut reader, _) = reader(vec![(Some((2, 1)), Some((1, 1)), Ok(Some(key('a'))))].into());
+            assert!(!reader.poll(Some(Duration::ZERO), &EventFilter).unwrap());
+            assert!(reader.events.is_empty());
+        }
+        #[test]
+        fn inactive_input_clears_outer_queues_before_delivery() {
+            let (mut reader, state) = reader(VecDeque::new());
+            reader.events.push_back(key('a'));
+            reader.skipped_events.push(key('b'));
+            *state.lock().unwrap() = (None, Some((1, 1)));
+            assert!(!reader.poll(Some(Duration::ZERO), &EventFilter).unwrap());
+            assert!(reader.events.is_empty());
+            assert!(reader.skipped_events.is_empty());
+        }
     }
 
     #[derive(Default)]

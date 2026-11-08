@@ -9,6 +9,16 @@ use super::InternalEvent;
 
 #[cfg(any(unix, target_os = "trueos"))]
 pub(crate) mod unix;
+/// Native input identity includes the lease and underlying surface generation,
+/// independently of geometry. `event` identifies the source event's identity,
+/// even if refreshing `current`
+/// has already invalidated the source's buffered bytes.
+#[cfg(target_os = "trueos")]
+pub(crate) enum NativeInputEpoch {
+    Untracked,
+    Tracked { current: Option<(u64, u64)>, event: Option<(u64, u64)> },
+}
+
 /// An interface for trying to read an `InternalEvent` within an optional `Duration`.
 pub(crate) trait EventSource: Sync + Send {
     /// Tries to read an `InternalEvent` within the given duration.
@@ -20,6 +30,12 @@ pub(crate) trait EventSource: Sync + Send {
     ///
     /// Returns `Ok(None)` if there's no event available and timeout expires.
     fn try_read(&mut self, timeout: Option<Duration>) -> io::Result<Option<InternalEvent>>;
+
+    /// Refresh native input ownership before delivering any queued event.
+    #[cfg(target_os = "trueos")]
+    fn input_epoch(&mut self) -> io::Result<NativeInputEpoch> {
+        Ok(NativeInputEpoch::Untracked)
+    }
 
     /// Clear decoded input and quarantine unfinished control sequences.
     #[cfg(any(unix, target_os = "trueos"))]

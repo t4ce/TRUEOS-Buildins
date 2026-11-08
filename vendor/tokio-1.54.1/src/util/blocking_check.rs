@@ -1,9 +1,9 @@
 #[allow(unused_imports)]
 use crate::alloc_prelude::*;
-#[cfg(all(not(feature="native"),unix))]
+#[cfg(all(not(feature = "native"), unix, not(target_os = "trueos")))]
 use std::os::fd::AsFd;
 
-#[cfg(all(not(feature="native"),unix))]
+#[cfg(all(not(feature = "native"), unix, not(target_os = "trueos")))]
 #[allow(unused_variables)]
 #[track_caller]
 pub(crate) fn check_socket_for_blocking<S: AsFd>(s: &S) -> crate::io::Result<()> {
@@ -22,10 +22,18 @@ pub(crate) fn check_socket_for_blocking<S: AsFd>(s: &S) -> crate::io::Result<()>
     Ok(())
 }
 
-#[cfg(any(feature="native",not(unix)))]
+#[cfg(any(feature = "native", not(unix)))]
 #[allow(unused_variables)]
 pub(crate) fn check_socket_for_blocking<S>(s: &S) -> crate::io::Result<()> {
     // we cannot retrieve the nonblocking status on windows
     // and i don't know how to support wasi yet
     Ok(())
+}
+
+#[cfg(all(target_os = "trueos", not(feature = "native")))]
+pub(crate) fn check_socket_for_blocking<S>(_: &S) -> crate::io::Result<()> {
+    Err(crate::io::Error::new(
+        crate::io::ErrorKind::Unsupported,
+        "native sockets cannot be imported through Unix descriptor validation",
+    ))
 }

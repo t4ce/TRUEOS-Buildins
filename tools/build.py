@@ -117,13 +117,14 @@ def private_sysroot(output: Path, kernel: Path, rustc: Path, env: dict) -> Path:
     tls_guard_reference = kernel / "tools/rust-std/trueos_tls_guard.rs"
     environment_backend = kernel / "tools/testpy/apply_trueos_rust_std_environment_backend.py"
     filesystem_backend = kernel / "tools/testpy/apply_trueos_rust_std_fs_backend.py"
+    networking_backend = kernel / "tools/testpy/apply_trueos_rust_std_net_backend.py"
     native_references = [kernel / "tools/rust-std" / name for name in (
         "trueos_env.rs", "trueos_args.rs", "trueos_stdio.rs", "trueos_is_terminal.rs",
-        "trueos_paths.rs", "trueos_exit.rs", "trueos_fs.rs",
+        "trueos_paths.rs", "trueos_exit.rs", "trueos_fs.rs", "trueos_net.rs",
     )]
     key = hashlib.sha256()
     for path in (patch, backend, reference, sync_reference, tls_reference, tls_guard_reference,
-                 environment_backend, filesystem_backend, *native_references):
+                 environment_backend, filesystem_backend, networking_backend, *native_references):
         key.update(path.read_bytes())
     key.update(str(installed).encode())
     destination = output / "sysroots" / key.hexdigest()[:16]
@@ -150,6 +151,7 @@ def private_sysroot(output: Path, kernel: Path, rustc: Path, env: dict) -> Path:
         run([sys.executable, backend, sources])
         run([sys.executable, environment_backend, sources])
         run([sys.executable, filesystem_backend, sources])
+        run([sys.executable, networking_backend, sources])
         (stage / ".ready").write_text(COMMIT + "\n")
         if destination.exists():
             shutil.rmtree(destination)
@@ -397,9 +399,10 @@ def input_roots(kernel: Path):
             kernel / "tools/rust-std/trueos_tls_guard.rs",
             kernel / "tools/testpy/apply_trueos_rust_std_environment_backend.py",
             kernel / "tools/testpy/apply_trueos_rust_std_fs_backend.py",
+            kernel / "tools/testpy/apply_trueos_rust_std_net_backend.py",
             *(kernel / "tools/rust-std" / name for name in (
                 "trueos_env.rs", "trueos_args.rs", "trueos_stdio.rs", "trueos_is_terminal.rs",
-                "trueos_paths.rs", "trueos_exit.rs", "trueos_fs.rs"))]
+                "trueos_paths.rs", "trueos_exit.rs", "trueos_fs.rs", "trueos_net.rs"))]
 
 
 def external_dependency_roots():

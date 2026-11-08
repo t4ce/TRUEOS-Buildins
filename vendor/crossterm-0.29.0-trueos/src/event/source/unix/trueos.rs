@@ -12,6 +12,7 @@ const BUFFER_SIZE: usize = 1024;
 
 pub(crate) trait TerminalTransport: Send + Sync {
     fn observe(&self) -> u32;
+    fn lease(&self) -> io::Result<Option<u64>>;
     fn surface(&self) -> io::Result<Option<(u64, u32, u32)>>;
     fn read(&self, bytes: &mut [u8]) -> io::Result<usize>;
     fn wait_after(&self, observed: u32, timeout_ms: u64) -> io::Result<()>;
@@ -23,6 +24,7 @@ pub(crate) struct AttachedTerminal;
 #[cfg(target_os = "trueos")]
 impl TerminalTransport for AttachedTerminal {
     fn observe(&self) -> u32 { crate::trueos::observe() }
+    fn lease(&self) -> io::Result<Option<u64>> { crate::trueos::lease() }
     fn surface(&self) -> io::Result<Option<(u64, u32, u32)>> { crate::trueos::surface() }
     fn read(&self, bytes: &mut [u8]) -> io::Result<usize> { crate::trueos::read(bytes) }
     fn wait_after(&self, observed: u32, timeout_ms: u64) -> io::Result<()> {
@@ -35,6 +37,9 @@ pub(crate) struct TerminalEventSource<T> {
     parser: Parser,
     buffer: [u8; BUFFER_SIZE],
     surface: Option<(u64, u32, u32)>,
+    epoch: Option<(u64, u64)>,
+    event_epoch: Option<(u64, u64)>,
+    resize_pending: bool,
     #[cfg(feature = "event-stream")]
     waker: Waker,
 }
@@ -53,31 +58,54 @@ impl NativeInternalEventSource {
 impl<T: TerminalTransport> TerminalEventSource<T> {
     fn with_transport(transport: T) -> io::Result<Self> {
         let surface = transport.surface()?;
+        let epoch = transport.lease()?.zip(surface.map(|surface| surface.0));
         Ok(Self {
             transport,
             parser: Parser::default(),
             buffer: [0; BUFFER_SIZE],
             surface,
+            epoch,
+            event_epoch: None,
+            resize_pending: false,
             #[cfg(feature = "event-stream")]
             waker: Waker::new(),
         })
     }
 
+    fn refresh_lease(&mut self) -> io::Result<()> {
+        // Surface polling can acknowledge an explicit reentry. Read the lease
+        // afterward so both fields refer to the newly active route. A later
+        // race is checked again by the reader before it delivers the event.
+        let surface = self.transport.surface()?;
+        let current = self.transport.lease()?.zip(surface.map(|surface| surface.0));
+        if self.epoch != current {
+            self.parser = Parser::default();
+            self.epoch = current;
+            self.resize_pending = current.is_some();
+        }
+        if current.is_none() {
+            self.surface = None;
+        }
+        Ok(())
+    }
+
     fn surface_event(&mut self) -> io::Result<Option<InternalEvent>> {
         let Some(current) = self.transport.surface()? else { return Ok(None); };
         let previous = self.surface.replace(current);
-        if previous.is_some_and(|previous| previous != current) {
-            if previous.is_some_and(|previous| previous.0 != current.0) {
-                // Bytes and partial escapes belong to the transport incarnation
-                // that supplied them. Never replay them after lease reentry.
-                self.parser = Parser::default();
-            }
+        if core::mem::take(&mut self.resize_pending)
+            || previous.is_some_and(|previous| previous != current)
+        {
             return Ok(Some(InternalEvent::Event(Event::Resize(
                 current.1.min(u32::from(u16::MAX)) as u16,
                 current.2.min(u32::from(u16::MAX)) as u16,
             ))));
         }
         Ok(None)
+    }
+
+    fn emit(&mut self, event: InternalEvent) -> Option<InternalEvent> {
+        self.event_epoch = self.epoch;
+        Some(event)
     }
 }
 
@@ -89,19 +117,32 @@ fn timeout_ms(duration: Option<Duration>) -> u64 {
 
 impl<T: TerminalTransport> EventSource for TerminalEventSource<T> {
     #[cfg(target_os = "trueos")]
+    fn input_epoch(&mut self) -> io::Result<crate::event::source::NativeInputEpoch> {
+        self.refresh_lease()?;
+        Ok(crate::event::source::NativeInputEpoch::Tracked {
+            current: self.epoch,
+            event: self.event_epoch,
+        })
+    }
+
+    #[cfg(target_os = "trueos")]
     fn buffer_input_for_lease(
         &mut self,
         input: &[u8],
         lease: u64,
         events: &mut alloc::collections::VecDeque<InternalEvent>,
     ) -> io::Result<()> {
+        self.refresh_lease()?;
+        crate::trueos::check_lease(lease)?;
+        if self.epoch.map(|epoch| epoch.0) != Some(lease) {
+            return Err(io::Error::new(io::ErrorKind::Other, "terminal replay route is inactive"));
+        }
         if let Some(event) = self.surface_event()? {
             events.push_back(event);
         }
-        crate::trueos::check_lease(lease)?;
         self.parser.advance(input, false);
-        // Keep decoded replay inside the source. try_read checks the surface
-        // epoch before delivering it and clears the parser after reentry.
+        // Keep decoded replay inside the source. try_read checks the actual
+        // lease before delivering it and clears the parser after reentry.
         // Moving keys into the reader's outer queue would bypass that check.
         self.parser.retain_replayed_user_events();
         Ok(())
@@ -114,20 +155,34 @@ impl<T: TerminalTransport> EventSource for TerminalEventSource<T> {
             // The subsequent wait cannot lose input, resize, or reentry that
             // races either probe or registration of the native wait.
             let observed = self.transport.observe();
-            if let Some(event) = self.surface_event()? { return Ok(Some(event)); }
-            if let Some(event) = self.parser.next() { return Ok(Some(event)); }
+            self.refresh_lease()?;
+            if self.epoch.is_some() {
+                if let Some(event) = self.surface_event()? { return Ok(self.emit(event)); }
+                if let Some(event) = self.parser.next() { return Ok(self.emit(event)); }
+            }
             #[cfg(feature = "event-stream")]
             if self.waker.take() {
                 return Err(io::Error::new(io::ErrorKind::Interrupted, "terminal poll was woken"));
             }
 
+            if self.epoch.is_none() {
+                if timeout.elapsed() { return Ok(None); }
+                self.transport.wait_after(observed, timeout_ms(timeout.leftover()))?;
+                continue;
+            }
+            let read_epoch = self.epoch;
             let count = self.transport.read(&mut self.buffer)?;
+            self.refresh_lease()?;
+            if self.epoch != read_epoch {
+                if timeout.elapsed() { return Ok(None); }
+                continue;
+            }
             if count > self.buffer.len() {
                 return Err(io::Error::new(io::ErrorKind::InvalidData, "invalid terminal read count"));
             }
             if count != 0 {
                 self.parser.advance(&self.buffer[..count], count == self.buffer.len());
-                if let Some(event) = self.parser.next() { return Ok(Some(event)); }
+                if let Some(event) = self.parser.next() { return Ok(self.emit(event)); }
                 if timeout.elapsed() { return Ok(None); }
                 continue;
             }
@@ -155,6 +210,7 @@ mod tests {
     #[derive(Default)]
     struct State {
         generation: u32,
+        lease: Option<u64>,
         surface: Option<(u64, u32, u32)>,
         bytes: VecDeque<u8>,
         after_observe: Option<Vec<u8>>,
@@ -178,6 +234,7 @@ mod tests {
             }
             observed
         }
+        fn lease(&self) -> io::Result<Option<u64>> { Ok(self.0.lock().unwrap().lease) }
         fn surface(&self) -> io::Result<Option<(u64, u32, u32)>> {
             Ok(self.0.lock().unwrap().surface)
         }
@@ -204,6 +261,7 @@ mod tests {
     fn source() -> (TerminalEventSource<Transport>, Transport) {
         let transport = Transport::default();
         transport.0.lock().unwrap().surface = Some((1, 120, 40));
+        transport.0.lock().unwrap().lease = Some(1);
         (TerminalEventSource::with_transport(transport.clone()).unwrap(), transport)
     }
 
@@ -242,6 +300,7 @@ mod tests {
         let (mut source, transport) = source();
         source.parser.advance(b"old", false);
         transport.0.lock().unwrap().surface = Some((2, 120, 40));
+        transport.0.lock().unwrap().lease = Some(2);
         assert_eq!(source.try_read(Some(Duration::ZERO)).unwrap(),
             Some(InternalEvent::Event(Event::Resize(120, 40))));
         assert_eq!(source.try_read(Some(Duration::ZERO)).unwrap(), None);
@@ -263,8 +322,34 @@ mod tests {
         transport.0.lock().unwrap().surface = None;
         assert_eq!(source.try_read(Some(Duration::ZERO)).unwrap(), None);
         transport.0.lock().unwrap().surface = Some((2, 120, 40));
+        transport.0.lock().unwrap().lease = Some(2);
         assert_eq!(source.try_read(Some(Duration::ZERO)).unwrap(),
             Some(InternalEvent::Event(Event::Resize(120, 40))));
+    }
+
+    #[test]
+    fn inactive_surface_discards_batched_input_even_before_a_new_lease_exists() {
+        let (mut source, transport) = source();
+        transport.0.lock().unwrap().bytes.extend(b"ab");
+        assert_eq!(source.try_read(Some(Duration::ZERO)).unwrap(), key('a'));
+        transport.0.lock().unwrap().surface = None;
+        assert_eq!(source.try_read(Some(Duration::ZERO)).unwrap(), None);
+        // Even if attachment resumes under the same reported lease, bytes
+        // retired during the inactive interval must never reappear.
+        transport.0.lock().unwrap().surface = Some((1, 120, 40));
+        assert_eq!(source.try_read(Some(Duration::ZERO)).unwrap(),
+            Some(InternalEvent::Event(Event::Resize(120, 40))));
+        assert_eq!(source.try_read(Some(Duration::ZERO)).unwrap(), None);
+    }
+
+    #[test]
+    fn surface_replacement_without_lease_change_discards_input() {
+        let (mut source, transport) = source();
+        source.parser.advance(b"x", false);
+        transport.0.lock().unwrap().surface = Some((2, 120, 40));
+        assert_eq!(source.try_read(Some(Duration::ZERO)).unwrap(),
+            Some(InternalEvent::Event(Event::Resize(120, 40))));
+        assert_eq!(source.try_read(Some(Duration::ZERO)).unwrap(), None);
     }
 
     #[test]

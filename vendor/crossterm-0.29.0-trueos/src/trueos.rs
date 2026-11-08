@@ -50,6 +50,19 @@ pub(crate) fn claim() -> io::Result<()> {
     }
 }
 
+/// A parked or detached input route has no live lease. This is distinct from
+/// surface generation, which may change during an ordinary resize.
+pub(crate) fn lease() -> io::Result<Option<u64>> {
+    let mut epoch = 0;
+    let code = unsafe { trueos_cabi_blueprint_terminal_lease_current_v1(0, &mut epoch) };
+    match code {
+        0 if epoch != 0 => Ok(Some(epoch)),
+        -5..=-1 => Ok(None),
+        0 => Err(io::Error::new(io::ErrorKind::InvalidData, "invalid TRUEOS terminal lease")),
+        _ => Err(error("terminal lease", code)),
+    }
+}
+
 pub(crate) fn check_lease(expected: u64) -> io::Result<()> {
     let mut epoch = 0;
     let code = unsafe { trueos_cabi_blueprint_terminal_lease_current_v1(expected, &mut epoch) };
@@ -163,6 +176,7 @@ pub(crate) mod test_support {
     pub(crate) static ATTACHED_READY: std::sync::Condvar = std::sync::Condvar::new();
     pub(crate) struct State {
         pub claim_status: i32,
+        pub lease: u64,
         pub surface_status: i32,
         pub surface: (u64, u32, u32),
         pub generation: u32,
@@ -174,15 +188,16 @@ pub(crate) mod test_support {
     }
 
     pub(crate) static STATE: Mutex<State> = Mutex::new(State {
-        claim_status: 0, surface_status: 0, surface: (1, 120, 40),
+        claim_status: 0, lease: 1, surface_status: 0, surface: (1, 120, 40),
         generation: 1, bytes: VecDeque::new(), output: Vec::new(),
         write_limit: usize::MAX, wait_status: 0, logs: Vec::new(),
     });
 
     #[unsafe(no_mangle)]
-    unsafe extern "C" fn trueos_cabi_blueprint_terminal_lease_current_v1(_: u64, epoch: *mut u64) -> i32 {
+    unsafe extern "C" fn trueos_cabi_blueprint_terminal_lease_current_v1(expected: u64, epoch: *mut u64) -> i32 {
         let state = STATE.lock().unwrap();
-        if state.claim_status == 0 { unsafe { epoch.write(state.surface.0); } }
+        if state.lease == 0 || expected != 0 && expected != state.lease { return -3; }
+        if state.claim_status == 0 { unsafe { epoch.write(state.lease); } }
         state.claim_status
     }
 

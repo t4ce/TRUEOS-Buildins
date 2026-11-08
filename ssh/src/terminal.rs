@@ -81,6 +81,7 @@ impl<C: Console> Terminal<C> {
         deadline: Option<Instant>,
     ) -> Result<Zeroizing<String>> {
         let mut surface_generation = self.console.surface_generation();
+        let mut surface_size = self.console.size();
         self.write_all(prompt.as_bytes(), deadline).await?;
         let mut bytes = Zeroizing::new(Vec::new());
         let mut echoed = 0;
@@ -90,8 +91,10 @@ impl<C: Console> Terminal<C> {
             let mut byte = [0];
             let count = self.read(&mut byte)?;
             let current = self.console.surface_generation();
-            if current.is_some() && current != surface_generation {
+            let current_size = self.console.size();
+            if (current.is_some() && current != surface_generation) || current_size != surface_size {
                 surface_generation = current;
+                surface_size = current_size;
                 self.write_all(b"\r\x1b[2K", deadline).await?;
                 self.write_all(prompt.as_bytes(), deadline).await?;
                 // Only the complete UTF8 prefix already shown to the user is
@@ -352,5 +355,81 @@ mod tests {
                 .unwrap_err()
                 .contains("timed out")
         );
+    }
+
+    struct ChangingSurface {
+        inner: Fake,
+        reads: usize,
+        resize_at: Option<usize>,
+        replace_at: Option<usize>,
+        generation: Option<u64>,
+    }
+    impl ChangingSurface {
+        fn new(input: &[u8]) -> Self {
+            let mut inner = Fake::new(input);
+            inner.block_once = false;
+            inner.write_limit = usize::MAX;
+            Self {
+                inner,
+                reads: 0,
+                resize_at: None,
+                replace_at: None,
+                generation: Some(7),
+            }
+        }
+    }
+    impl Console for ChangingSurface {
+        fn read(&mut self, out: &mut [u8]) -> usize {
+            self.reads += 1;
+            self.inner.read(out)
+        }
+        fn write(&mut self, bytes: &[u8]) -> usize {
+            self.inner.write(bytes)
+        }
+        fn size(&self) -> (u32, u32) {
+            if self.resize_at.is_some_and(|at| self.reads >= at) {
+                (132, 48)
+            } else {
+                (80, 24)
+            }
+        }
+        fn surface_generation(&self) -> Option<u64> {
+            self.generation.map(|generation| {
+                generation + u64::from(self.replace_at.is_some_and(|at| self.reads >= at))
+            })
+        }
+    }
+    #[tokio::test]
+    async fn resize_redraws_complete_utf8_without_requiring_a_new_identity() {
+        for generation in [Some(7), None] {
+            let mut console = ChangingSurface::new("éok\r".as_bytes());
+            console.generation = generation;
+            console.resize_at = Some(3);
+            let mut t = Terminal::new(console);
+            assert_eq!(t.line("next> ", true, None).await.unwrap().as_str(), "éok");
+            assert_eq!(t.console.inner.output, "next> é\r\x1b[2Knext> éok\r\n".as_bytes());
+        }
+    }
+    #[tokio::test]
+    async fn resize_does_not_reveal_secret_answers() {
+        let mut console = ChangingSurface::new(b"secret\r");
+        console.resize_at = Some(4);
+        let mut t = Terminal::new(console);
+        assert_eq!(t.line("Password: ", false, None).await.unwrap().as_str(), "secret");
+        assert_eq!(t.console.inner.output, b"Password: \r\x1b[2KPassword: \r\n");
+    }
+    #[tokio::test]
+    async fn replacement_still_redraws_at_unchanged_geometry() {
+        let mut console = ChangingSurface::new(b"ok\r");
+        console.replace_at = Some(2);
+        let mut t = Terminal::new(console);
+        assert_eq!(t.line("> ", true, None).await.unwrap().as_str(), "ok");
+        assert_eq!(t.console.inner.output, b"> o\r\x1b[2K> ok\r\n");
+    }
+    #[tokio::test]
+    async fn unchanged_surface_does_not_repeat_prompt() {
+        let mut t = Terminal::new(ChangingSurface::new(b"ok\r"));
+        assert_eq!(t.line("> ", true, None).await.unwrap().as_str(), "ok");
+        assert_eq!(t.console.inner.output, b"> ok\r\n");
     }
 }
