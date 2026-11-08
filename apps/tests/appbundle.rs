@@ -160,9 +160,35 @@ fn missing_sqlite_fails_before_downloading_or_launching_codex() {
 }
 
 #[test]
-fn either_unavailable_member_reports_the_member_and_prevents_install_and_launch() {
-    for member in ["sqlite.bp", "codex.bp"] {
-        reset(&["codex", "sqlite"]);
+fn missing_xerj_fails_before_downloading_or_launching_codex() {
+    reset(&["codex", "sqlite", "xerj-service"]);
+    run(pullbot::drain(b"pull codex\n"));
+    state(|s| {
+        assert_eq!(
+            s.errors,
+            ["codex: required xerj.bp unavailable in app catalog"]
+        );
+        assert!(s.fetched.is_empty() && s.imports.is_empty() && s.launches.is_empty());
+    });
+}
+
+#[test]
+fn missing_xerj_service_fails_before_downloading_or_launching_codex() {
+    reset(&["codex", "sqlite", "xerj"]);
+    run(pullbot::drain(b"pull codex\n"));
+    state(|s| {
+        assert_eq!(
+            s.errors,
+            ["codex: required xerj-service.bp unavailable in app catalog"]
+        );
+        assert!(s.fetched.is_empty() && s.imports.is_empty() && s.launches.is_empty());
+    });
+}
+
+#[test]
+fn any_unavailable_member_reports_the_member_and_prevents_install_and_launch() {
+    for member in ["sqlite.bp", "xerj.bp", "xerj-service.bp", "codex.bp"] {
+        reset(&["codex", "sqlite", "xerj", "xerj-service"]);
         state(|s| s.fail_fetch = Some(member.into()));
         run(pullbot::drain(b"pull codex\n"));
         state(|s| {
@@ -178,15 +204,20 @@ fn either_unavailable_member_reports_the_member_and_prevents_install_and_launch(
 }
 
 #[test]
-fn bundle_installs_both_before_launching_only_codex_with_original_script() {
-    reset(&["codex", "sqlite"]);
+fn bundle_installs_all_before_launching_only_codex_with_original_script() {
+    reset(&["codex", "sqlite", "xerj", "xerj-service"]);
     run(pullbot::drain(b"launch --sh3 codex -- ide-endpoint 42\n"));
     state(|s| {
         assert!(s.errors.is_empty());
-        assert_eq!(s.fetched, ["sqlite.bp", "codex.bp"]);
+        assert_eq!(
+            s.fetched,
+            ["sqlite.bp", "xerj.bp", "xerj-service.bp", "codex.bp"]
+        );
         assert_eq!(
             s.imports,
-            ["common/dl/apps/sqlite.bp\ncommon/dl/apps/codex.bp"]
+            [
+                "common/dl/apps/sqlite.bp\ncommon/dl/apps/xerj.bp\ncommon/dl/apps/xerj-service.bp\ncommon/dl/apps/codex.bp"
+            ]
         );
         assert_eq!(
             s.launches,
@@ -197,7 +228,7 @@ fn bundle_installs_both_before_launching_only_codex_with_original_script() {
 
 #[test]
 fn install_only_imports_the_complete_bundle_without_launching() {
-    reset(&["codex", "sqlite"]);
+    reset(&["codex", "sqlite", "xerj", "xerj-service"]);
     run(pullbot::drain(b"install codex\n"));
     state(|s| {
         assert_eq!(s.imports.len(), 1);
@@ -217,6 +248,31 @@ fn sqlite_on_its_own_does_not_request_codex() {
 }
 
 #[test]
+fn xerj_on_its_own_does_not_request_codex_or_sqlite() {
+    reset(&["xerj"]);
+    run(pullbot::drain(b"install xerj\n"));
+    state(|s| {
+        assert_eq!(s.fetched, ["xerj.bp"]);
+        assert_eq!(s.imports, ["common/dl/apps/xerj.bp"]);
+        assert!(s.errors.is_empty() && s.launches.is_empty());
+    });
+}
+
+#[test]
+fn xerj_service_installs_its_engine_without_starting_either() {
+    reset(&["xerj", "xerj-service"]);
+    run(pullbot::drain(b"install xerj-service\n"));
+    state(|s| {
+        assert_eq!(s.fetched, ["xerj.bp", "xerj-service.bp"]);
+        assert_eq!(
+            s.imports,
+            ["common/dl/apps/xerj.bp\ncommon/dl/apps/xerj-service.bp"]
+        );
+        assert!(s.errors.is_empty() && s.launches.is_empty());
+    });
+}
+
+#[test]
 fn interactive_fetch_returns_the_same_missing_member_status() {
     reset(&["codex"]);
     let apps = state(|s| catalog::parse(&s.catalog));
@@ -228,7 +284,7 @@ fn interactive_fetch_returns_the_same_missing_member_status() {
 
 #[test]
 fn failed_verification_and_failed_import_do_not_launch() {
-    reset(&["codex", "sqlite"]);
+    reset(&["codex", "sqlite", "xerj", "xerj-service"]);
     let hash = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
     state(|s| {
         s.catalog = s
@@ -240,7 +296,7 @@ fn failed_verification_and_failed_import_do_not_launch() {
         assert!(s.errors[0].contains("codex.bp unavailable: Blueprint SHA-256 mismatch"));
         assert!(s.imports.is_empty() && s.launches.is_empty());
     });
-    reset(&["codex", "sqlite"]);
+    reset(&["codex", "sqlite", "xerj", "xerj-service"]);
     state(|s| s.fail_import = true);
     run(pullbot::drain(b"pull codex\n"));
     state(|s| {
