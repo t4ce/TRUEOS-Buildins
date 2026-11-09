@@ -56,6 +56,14 @@ Requires a kernel built with the additive
 Paper is registered in `buildins.json` and embedded in the kernel AppDB by
 normal builds with built-ins enabled; it does not need an online catalog entry.
 
+Paper declares `filesystem-independent = true` in
+`package.metadata.trueos-blueprint`. Its launch settings and font tiles use
+RAM-backed `vFile` requests, so importing the async filesystem API must not
+make launch wait for a mounted TRUEOSFS or create on-disk app directories.
+The capability skips those startup dependencies; normal filesystem access
+checks still apply to any actual disk request. Paper's documents currently
+live only in memory.
+
 The one-shot `vFile:launch` runscript is read before opening the UI4 frame:
 
 ```text
