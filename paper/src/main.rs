@@ -54,17 +54,8 @@ fn run() -> Result<(), i32> {
         Err(error) => return Err(error),
     };
     let scale = settings.scale;
-    let glyph_scale = if settings.mode == paper::Mode::Gridpaper {
-        scale
-    } else {
-        1
-    };
     let (width_mm, height_mm) = settings.sheet.dimensions();
     let page = ui4_scene::physical_extent(width_mm, height_mm).map_err(ui)?;
-    // Warm only small complete atlases. Large sizes remain strictly demand-only.
-    if glyph_scale <= 4 {
-        let _ = glyph_pixels(glyph_scale, '?')?;
-    }
     let output = ui4_scene::output_dimensions().map_err(ui)?;
     let mut frame = Frame::open_immutable(
         (output.0 as i32 - page.0 as i32) / 2,
