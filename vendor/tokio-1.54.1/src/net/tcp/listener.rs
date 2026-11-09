@@ -246,7 +246,16 @@ impl TcpListener {
     #[track_caller]
     #[cfg(not(feature="native"))]
     pub fn from_std(listener: net::TcpListener) -> io::Result<TcpListener> {
-        #[cfg(all(any(target_os = "trueos", target_os = "zkvm"), feature = "native-net"))]
+        #[cfg(all(target_os = "trueos", feature = "native-net"))]
+        {
+            if !listener.native_socket().nonblocking() {
+                return Err(io::Error::new(io::ErrorKind::InvalidInput,
+                    "native Tokio requires a nonblocking std socket"));
+            }
+            let io = mio::net::TcpListener::from_std(listener);
+            PollEvented::new(io).map(|io| TcpListener { io })
+        }
+        #[cfg(all(target_os = "zkvm", feature = "native-net"))]
         {
             Err(io::Error::new(io::ErrorKind::Unsupported, "native socket IDs cannot transfer ownership to or from Unix descriptors"))
         }
@@ -286,7 +295,11 @@ impl TcpListener {
     /// [`set_nonblocking`]: fn@std::net::TcpListener::set_nonblocking
     #[cfg(not(feature="native"))]
     pub fn into_std(self) -> io::Result<std::net::TcpListener> {
-        #[cfg(all(any(target_os = "trueos", target_os = "zkvm"), feature = "native-net"))]
+        #[cfg(all(target_os = "trueos", feature = "native-net"))]
+        {
+            self.io.into_inner()?.into_std()
+        }
+        #[cfg(all(target_os = "zkvm", feature = "native-net"))]
         {
             Err(io::Error::new(io::ErrorKind::Unsupported, "native socket IDs cannot transfer ownership to or from Unix descriptors"))
         }

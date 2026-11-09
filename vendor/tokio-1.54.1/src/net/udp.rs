@@ -230,7 +230,16 @@ impl UdpSocket {
     #[track_caller]
     #[cfg(not(feature="native"))]
     pub fn from_std(socket: net::UdpSocket) -> io::Result<UdpSocket> {
-        #[cfg(all(any(target_os = "trueos", target_os = "zkvm"), feature = "native-net"))]
+        #[cfg(all(target_os = "trueos", feature = "native-net"))]
+        {
+            if !socket.native_socket().nonblocking() {
+                return Err(io::Error::new(io::ErrorKind::InvalidInput,
+                    "native Tokio requires a nonblocking std socket"));
+            }
+            let io = mio::net::UdpSocket::from_std(socket);
+            UdpSocket::new(io)
+        }
+        #[cfg(all(target_os = "zkvm", feature = "native-net"))]
         {
             Err(io::Error::new(io::ErrorKind::Unsupported, "native socket IDs cannot transfer ownership to or from Unix descriptors"))
         }
@@ -269,7 +278,11 @@ impl UdpSocket {
     /// [`set_nonblocking`]: fn@std::net::UdpSocket::set_nonblocking
     #[cfg(not(feature="native"))]
     pub fn into_std(self) -> io::Result<std::net::UdpSocket> {
-        #[cfg(all(any(target_os = "trueos", target_os = "zkvm"), feature = "native-net"))]
+        #[cfg(all(target_os = "trueos", feature = "native-net"))]
+        {
+            self.io.into_inner()?.into_std()
+        }
+        #[cfg(all(target_os = "zkvm", feature = "native-net"))]
         {
             Err(io::Error::new(io::ErrorKind::Unsupported, "native socket IDs cannot transfer ownership to or from Unix descriptors"))
         }
