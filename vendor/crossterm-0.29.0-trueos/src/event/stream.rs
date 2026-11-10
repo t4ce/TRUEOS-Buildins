@@ -8,13 +8,17 @@ use std::{
     },
     task::{Context, Poll},
     thread,
-    time::Duration,
 };
 
 use futures_core::stream::Stream;
 
+#[cfg(not(target_os = "trueos"))]
+use std::time::Duration;
+#[cfg(not(target_os = "trueos"))]
+use crate::event::read_internal;
+
 use crate::event::{
-    filter::EventFilter, lock_internal_event_reader, poll_internal, read_internal, sys::Waker,
+    filter::EventFilter, lock_internal_event_reader, poll_internal, sys::Waker,
     Event, InternalEvent,
 };
 
@@ -102,14 +106,17 @@ impl Stream for EventStream {
     type Item = io::Result<Event>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let result = match poll_internal(Some(Duration::from_secs(0)), &EventFilter) {
-            Ok(true) => match read_internal(&EventFilter) {
-                Ok(InternalEvent::Event(event)) => Poll::Ready(Some(Ok(event))),
-                Err(e) => Poll::Ready(Some(Err(e))),
-                #[cfg(unix)]
-                _ => unreachable!(),
-            },
-            Ok(false) => {
+        #[cfg(target_os = "trueos")]
+        let ready = crate::event::try_read_internal(&EventFilter);
+        #[cfg(not(target_os = "trueos"))]
+        let ready = poll_internal(Some(Duration::ZERO), &EventFilter).and_then(|ready| {
+            if ready { read_internal(&EventFilter).map(Some) } else { Ok(None) }
+        });
+        let result = match ready {
+            Ok(Some(InternalEvent::Event(event))) => Poll::Ready(Some(Ok(event))),
+            #[cfg(any(unix, target_os = "trueos"))]
+            Ok(Some(_)) => unreachable!(),
+            Ok(None) => {
                 if !self
                     .stream_wake_task_executed
                     .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)

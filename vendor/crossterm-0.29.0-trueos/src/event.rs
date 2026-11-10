@@ -317,6 +317,20 @@ where
     reader.poll(timeout, filter)
 }
 
+/// Native async streams must never enter the blocking public read path after
+/// a readiness probe. Keep the zero-timeout probe and extraction under one
+/// reader guard; lost ownership or a busy reader simply leaves them pending.
+#[cfg(all(target_os = "trueos", feature = "event-stream"))]
+pub(crate) fn try_read_internal<F>(filter: &F) -> crate::io::Result<Option<InternalEvent>>
+where
+    F: Filter,
+{
+    let Some(mut reader) = try_lock_internal_event_reader_for(Duration::ZERO) else {
+        return Ok(None);
+    };
+    reader.try_read(filter)
+}
+
 /// Reads a single `InternalEvent`.
 pub(crate) fn read_internal<F>(filter: &F) -> crate::io::Result<InternalEvent>
 where

@@ -4,12 +4,13 @@ use core::ffi::c_void;
 use core::pin::Pin;
 use core::sync::atomic::{AtomicBool, Ordering};
 use core::task::{Context, Poll, Waker as TaskWaker};
+#[cfg(test)]
 use core::time::Duration;
 
 use futures_core::stream::Stream;
 
 use crate::event::{
-    filter::EventFilter, lock_internal_event_reader, poll_internal, read_internal,
+    filter::EventFilter, lock_internal_event_reader, poll_internal, try_read_internal,
     sys::Waker, Event, InternalEvent,
 };
 use crate::{io, platform::Mutex};
@@ -101,13 +102,10 @@ impl EventStream {
 impl Stream for EventStream {
     type Item = io::Result<Event>;
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        match poll_internal(Some(Duration::ZERO), &EventFilter) {
-            Ok(true) => match read_internal(&EventFilter) {
-                Ok(InternalEvent::Event(event)) => Poll::Ready(Some(Ok(event))),
-                Err(error) => Poll::Ready(Some(Err(error))),
-                _ => unreachable!(),
-            },
-            Ok(false) => {
+        match try_read_internal(&EventFilter) {
+            Ok(Some(InternalEvent::Event(event))) => Poll::Ready(Some(Ok(event))),
+            Ok(Some(_)) => unreachable!(),
+            Ok(None) => {
                 *self.state.task_waker.lock() = Some(cx.waker().clone());
                 if !self.state.queued.swap(true, Ordering::AcqRel) {
                     self.state.wake_worker();

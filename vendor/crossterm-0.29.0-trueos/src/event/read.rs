@@ -158,6 +158,21 @@ impl InternalEventReader {
         }
     }
 
+    /// Probe and extract without ever waiting for a later event. Native input
+    /// ownership may change after readiness, so revalidate before dequeueing.
+    #[cfg(all(target_os = "trueos", feature = "event-stream"))]
+    pub(crate) fn try_read<F>(&mut self, filter: &F) -> io::Result<Option<InternalEvent>>
+    where
+        F: Filter,
+    {
+        if !self.poll(Some(Duration::ZERO), filter)? {
+            return Ok(None);
+        }
+        self.validate_native_epoch()?;
+        let matching = self.events.iter().position(|event| filter.eval(event));
+        Ok(matching.and_then(|index| self.events.remove(index)))
+    }
+
     pub(crate) fn read<F>(&mut self, filter: &F) -> io::Result<InternalEvent>
     where
         F: Filter,
@@ -563,6 +578,93 @@ mod tests {
                 skipped_events: Vec::new(), native_epoch: Some(Some((1, 1))),
             }, state)
         }
+        #[cfg(feature = "event-stream")]
+        #[test]
+        fn nonblocking_read_preserves_filtered_keys_and_queue_order() {
+            let cursor = InternalEvent::CursorPosition(9, 19);
+            let (mut reader, _) = reader(VecDeque::new());
+            reader.events.extend([key('a'), cursor.clone(), key('b')]);
+            assert_eq!(reader.try_read(&CursorPositionFilter).unwrap(), Some(cursor));
+            assert_eq!(reader.try_read(&EventFilter).unwrap(), Some(key('a')));
+            assert_eq!(reader.try_read(&EventFilter).unwrap(), Some(key('b')));
+            assert_eq!(reader.try_read(&EventFilter).unwrap(), None);
+        }
+
+        // EventSource models a route change precisely between the readiness
+        // probe and event extraction. A blocking call on the polling thread is
+        // reported as an error instead of hanging the regression test.
+        #[cfg(feature = "event-stream")]
+        #[test]
+        fn async_stream_never_waits_when_a_ready_event_loses_its_route() {
+            use core::pin::Pin;
+            use core::sync::atomic::{AtomicUsize, Ordering};
+            use core::task::{Context, Poll, Waker};
+            use futures_core::stream::Stream;
+            use crate::event::stream::EventStream;
+
+            struct RouteRace {
+                current: Option<(u64, u64)>,
+                checks: usize,
+                caller: std::thread::ThreadId,
+                caller_waits: Arc<AtomicUsize>,
+            }
+            impl EventSource for RouteRace {
+                fn input_epoch(&mut self) -> io::Result<NativeInputEpoch> {
+                    self.checks += 1;
+                    Ok(NativeInputEpoch::Tracked {
+                        current: if self.checks == 1 { Some((1, 1)) } else { self.current },
+                        event: Some((1, 1)),
+                    })
+                }
+                fn try_read(&mut self, timeout: Option<Duration>) -> io::Result<Option<InternalEvent>> {
+                    if timeout.is_none() && std::thread::current().id() == self.caller {
+                        self.caller_waits.fetch_add(1, Ordering::SeqCst);
+                    }
+                    Err(io::Error::new(io::ErrorKind::Other, "bounded would-block witness"))
+                }
+                fn discard_buffered_input(&mut self) -> InputDiscardStatus { InputDiscardStatus::Complete }
+                fn waker(&self) -> crate::event::sys::Waker { crate::event::sys::Waker::new() }
+            }
+            struct WakeCount(AtomicUsize);
+            impl std::task::Wake for WakeCount {
+                fn wake(self: Arc<Self>) { self.0.fetch_add(1, Ordering::SeqCst); }
+            }
+
+            for current in [None, Some((2, 1)), Some((1, 2))] {
+                let serial = crate::trueos::test_support::SERIAL.lock().unwrap();
+                let caller_waits = Arc::new(AtomicUsize::new(0));
+                *crate::event::INTERNAL_EVENT_READER.lock() = Some(InternalEventReader {
+                    events: vec![key('x')].into(),
+                    source: Some(Box::new(RouteRace {
+                        current, checks: 0, caller: std::thread::current().id(),
+                        caller_waits: caller_waits.clone(),
+                    })),
+                    skipped_events: Vec::new(), native_epoch: Some(Some((1, 1))),
+                });
+                let mut stream = EventStream::new();
+                let wakes = Arc::new(WakeCount(AtomicUsize::new(0)));
+                let waker = Waker::from(wakes.clone());
+                let result = Pin::new(&mut stream).poll_next(&mut Context::from_waker(&waker));
+                drop(stream);
+                // The std stream worker exits after observing shutdown and
+                // acknowledging its queued task; native-core Drop joins it.
+                #[cfg(not(feature = "native-core"))]
+                if matches!(result, Poll::Pending) {
+                    let deadline = std::time::Instant::now() + Duration::from_secs(2);
+                    while wakes.0.load(Ordering::SeqCst) == 0 {
+                        assert!(std::time::Instant::now() < deadline, "event worker did not stop");
+                        std::thread::yield_now();
+                    }
+                }
+                *crate::event::INTERNAL_EVENT_READER.lock() = None;
+                drop(serial);
+                assert_eq!(caller_waits.load(Ordering::SeqCst), 0,
+                    "async poll entered a blocking input read after route {current:?}");
+                assert!(matches!(result, Poll::Pending),
+                    "revoked readiness must leave the async caller pending: {result:?}");
+            }
+        }
+
         #[test]
         fn read_local_skips_are_not_restored_after_a_handoff_inside_poll() {
             let cursor = InternalEvent::CursorPosition(9, 19);
