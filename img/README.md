@@ -1,7 +1,11 @@
 # UI4 image viewer
 
-Run `img apps/common/images` in Shell2, or select the img Matrix slot and enter
-`show apps/common/images` on the normal Shell2 prompt row. The Blueprint never
+Launch `img` in Shell3, then enter `apps/common/images` or
+`show apps/common/images` on the selected img Matrix slot's prompt row. A native
+launchscript can supply the same image source rows. Bare path rows preserve
+spaces and use the default centered, hit-testable view; explicit `show` retains
+its existing alignment and hit options. Legacy filename argv remain supported.
+The Blueprint never
 claims a terminal TUI. Inferred PNG and JPEG files are sorted by name. Left/Up selects the
 previous image; Right/Down selects the next; both ends wrap. Folder browsing
 reuses one window and fits the complete image within it. Transparent pixels
@@ -27,7 +31,7 @@ reports file-read time, the complete media-service decode/readback call, and
 time through UI4 publish. Publish is submission, not proof of display scanout.
 
 `list`, `show`, `convert`, `close all`, and `exit` are VMX-minishell commands entered on
-the persistent Shell2 prompt row. UI4 Escape closes the selected image frame.
+the persistent Shell3 app prompt row. UI4 Escape closes the selected image frame.
 
 The gallery retains only its current decoded image; navigation reads and
 decodes each selection, so measurements do not hide work behind a cache.

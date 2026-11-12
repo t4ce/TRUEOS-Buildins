@@ -120,7 +120,7 @@ fn service_command_channel(command: &mut Vec<u8>, frames: &mut Vec<OpenFrame>) -
                 match line.trim() {
                     "" => {}
                     "help" => terminal_line(
-                        "img: list | show PATH [alignment] [hit|nohit] | convert | close all | exit",
+                        "img: PATH | show PATH [alignment] [hit|nohit] | list | convert | close all | exit",
                     ),
                     "list" => list_frames(frames),
                     "convert" => convert_frame(frames),
@@ -131,8 +131,7 @@ fn service_command_channel(command: &mut Vec<u8>, frames: &mut Vec<OpenFrame>) -
                     "exit" | "quit" => {
                         return true;
                     }
-                    line if line.starts_with("show ") => run_line(line, frames),
-                    _ => terminal_line("img: unknown command; use `help`"),
+                    line => run_line(line, frames),
                 }
             }
             8 | 127 if !command.is_empty() => {
@@ -231,8 +230,14 @@ fn run_line(line: &str, frames: &mut Vec<OpenFrame>) {
     if line.is_empty() || line.starts_with('#') || line == "fs-scope trueosfs" {
         return;
     }
+    if line == "show" {
+        logl::log(level::WARN, format_args!("img: show requires a source"));
+        return;
+    }
     let Some(command) = line.strip_prefix("show ") else {
-        logl::log(level::WARN, format_args!("img: ignored command={line}"));
+        // A native startup or prompt row may be just a source. Preserve the
+        // complete path, including spaces; only explicit show has options.
+        show_source(line, Alignment::Center, true, frames);
         return;
     };
     let mut words = command.split_ascii_whitespace();
