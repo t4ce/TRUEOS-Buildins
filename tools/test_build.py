@@ -617,6 +617,14 @@ class CargoObjects(unittest.TestCase):
         self.assertEqual(self.run.call_count, 2)
         self.assertNotEqual(package.read_bytes(), previous)
 
+    def test_remote_input_controller_role_requires_explicit_metadata(self):
+        package = self.package()
+        self.assertFalse(build.struct.unpack_from("<H", package.read_bytes(), 6)[0] & (1 << 12))
+        self.doc["package"] = {"metadata": {"trueos-blueprint": {"remote-input-controller": True}}}
+        self.package()
+        self.assertTrue(build.struct.unpack_from("<H", package.read_bytes(), 6)[0] & (1 << 12))
+        self.assertEqual(self.run.call_count, 2)
+
     def test_failed_cargo_does_not_package_a_preexisting_object(self):
         self.status = 1
         with self.assertRaises(ValueError):

@@ -3,6 +3,9 @@ name = "commander"
 version = "0.1.0"
 edition = "2024"
 
+[package.metadata.trueos-blueprint]
+remote-input-controller = true
+
 [[bin]]
 name = "commander"
 path = "src/main.rs"

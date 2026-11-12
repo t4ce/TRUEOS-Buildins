@@ -670,7 +670,8 @@ def build_app(name: str, output: Path, profile: str, cargo: Path, binaries: Path
     stripped = work / "module.stripped.o"
     metadata = doc.get("package", {}).get("metadata", {}).get("trueos-blueprint", {})
     flags = sum(bit for key, value, bit in [("replicatable", True, 1 << 8), ("entry-abi", "argv-v1", 1 << 9),
-                ("filesystem-independent", True, 1 << 10), ("fs-scope", "trueosfs", 1 << 11)] if metadata.get(key) == value)
+                ("filesystem-independent", True, 1 << 10), ("fs-scope", "trueosfs", 1 << 11),
+                ("remote-input-controller", True, 1 << 12)] if metadata.get(key) == value)
     layout = "original"
     if profile == "release":
         layout = hashlib.sha256((ROOT / "tools/rel-coalesce.ld").read_bytes()
