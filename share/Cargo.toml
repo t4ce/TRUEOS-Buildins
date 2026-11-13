@@ -16,7 +16,7 @@ tokio = { version = "=1.54.1", default-features = false, features = ["io-util", 
 trueos = { path = "../vendor/trueos", features = ["native-net"] }
 trueos-runtime = { path = "../../TRUEOS/crates/trueos-runtime" }
 trueos-path = { path = "../../TRUEOS/crates/trueos-path" }
-sha2 = { version = "=0.11.1", default-features = false }
+sha2 = { version = "=0.10.9", default-features = false }
 
 [target.'cfg(not(target_os = "trueos"))'.dependencies]
 tokio = { version = "=1.54.1", default-features = false, features = ["fs", "macros"] }

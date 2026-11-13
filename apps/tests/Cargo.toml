@@ -6,7 +6,7 @@ edition = "2024"
 [workspace]
 
 [dependencies]
-sha2 = { version = "=0.11.1", default-features = false }
+sha2 = { version = "=0.10.9", default-features = false }
 trueos-appbundle = { path = "../../../TRUEOS-Blueprints/crates/trueos-appbundle" }
 
 [[test]]

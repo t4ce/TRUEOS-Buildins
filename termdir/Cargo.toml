@@ -14,7 +14,7 @@ path = "src/main.rs"
 
 [dependencies]
 crossterm = { path = "../vendor/crossterm-0.29.0-trueos", default-features = false, features = ["events"] }
-sha2 = { version = "=0.11.1", default-features = false }
+sha2 = { version = "=0.10.9", default-features = false }
 trueos = { path = "../vendor/trueos" }
 trueos-path = { path = "../../TRUEOS/crates/trueos-path" }
 trueos-runtime = { path = "../../TRUEOS/crates/trueos-runtime" }

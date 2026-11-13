@@ -9,7 +9,7 @@ default = ["native-fixture"]
 native-fixture = []
 [dependencies]
 futures-util = { version = "=0.3.32", default-features = false, features = ["alloc", "async-await"] }
-sha2 = { version = "=0.11.1", default-features = false }
+sha2 = { version = "=0.10.9", default-features = false }
 http = "=1.4.0"
 url = { version = "=2.5.8", default-features = false }
 trueos-path = { path = "../../../TRUEOS/crates/trueos-path" }
