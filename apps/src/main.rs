@@ -8,9 +8,11 @@ mod mouse;
 mod fetch;
 mod download;
 mod bundle;
+mod view;
+use view::{View, visible};
 use crossterm::io::{self, Write};
 use core::time::Duration;
-use crossterm::{execute, queue, cursor::{MoveTo, Hide, Show}, style::{Color, SetForegroundColor, SetBackgroundColor, ResetColor, Print}, terminal::{self, Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen, DisableLineWrap, EnableLineWrap}, event::{self, Event, KeyCode, KeyEventKind, KeyModifiers, EnableMouseCapture, DisableMouseCapture, MouseButton, MouseEventKind}};
+use crossterm::{execute, cursor::{Hide, Show}, style::{Color, ResetColor}, terminal::{self, EnterAlternateScreen, LeaveAlternateScreen, DisableLineWrap, EnableLineWrap}, event::{self, Event, KeyCode, KeyEventKind, KeyModifiers, EnableMouseCapture, DisableMouseCapture, MouseButton, MouseEventKind}};
 use trueos::{runtime, task::LocalSet};
 const CATALOG: &str = "https://trueos.eu/apps";
 // Match Shell3's three control rows; the content inherits the terminal background.
@@ -34,47 +36,17 @@ impl Drop for Terminal {
         let _ = terminal::disable_raw_mode();
     }
 }
-fn visible(apps: &[catalog::OnlineApp], query: &str) -> Vec<usize> {
-    if let Ok(id) = query.parse::<usize>() { return (id < apps.len()).then_some(id).into_iter().collect(); }
-    let query = query.to_ascii_lowercase();
-    apps.iter().enumerate().filter_map(|(id, app)| app.name.to_ascii_lowercase().contains(&query).then_some(id)).collect()
-}
-fn draw(apps: &[catalog::OnlineApp], query: &str, selected: usize, message: &str) -> io::Result<()> {
-    let (width, height) = terminal::size()?;
-    let width = width as usize;
-    let rows = mouse::page_size(height);
-    let ids = visible(apps, query);
-    let start = selected / rows * rows;
-    let mut out = io::stdout().lock();
-    queue!(out, ResetColor, Clear(ClearType::All), SetBackgroundColor(CONTROL_BACKGROUND),
-        MoveTo(0,0), Clear(ClearType::CurrentLine),
-        MoveTo(0,1), Clear(ClearType::CurrentLine),
-        MoveTo(0,2), Clear(ClearType::CurrentLine),
-        MoveTo(0,0), SetForegroundColor(Color::Cyan), Print("TRUEOS APPS"), SetForegroundColor(Color::Reset),
-        MoveTo(0,1), Print(format!("{} apps · {} matches", apps.len(), ids.len())), ResetColor,
-        MoveTo(0,3), Print(format!("Search / ID: {query}").chars().take(width).collect::<String>()))?;
-    for (offset, (position, id)) in ids.iter().enumerate().skip(start).take(rows).enumerate() {
-        let (x, y, cell_width) = mouse::cell(width as u16, offset);
-        queue!(out, MoveTo(x, y))?;
-        if position == selected { queue!(out, SetBackgroundColor(Color::DarkCyan), SetForegroundColor(Color::White))?; }
-        let text = format!(" {:>2}  {}", id, apps[*id].name);
-        let text = text.chars().take(cell_width).collect::<String>();
-        queue!(out, Print(format!("{text}{}", " ".repeat(cell_width.saturating_sub(text.chars().count())))), ResetColor)?;
-    }
-    queue!(out, MoveTo(0,height.saturating_sub(2)), SetForegroundColor(Color::DarkGrey), Print("Hover select · Click/Enter launch online · Space → AppDB only · Esc quit".chars().take(width).collect::<String>()), ResetColor,
-        MoveTo(0,height.saturating_sub(1)), Print(message.chars().take(width).collect::<String>()))?;
-    out.flush()
-}
 async fn run() -> Result<Option<String>, String> {
+    let mut view = View::default();
     let mut apps = Vec::new();
     let mut query = String::new();
     let mut selected = 0;
-    draw(&apps, &query, selected, "Loading catalog…").map_err(|e|e.to_string())?;
+    view.draw(&apps, &query, selected, "Loading catalog…").map_err(|e|e.to_string())?;
     loop {
         match fetch::bytes(CATALOG, fetch::CATALOG_LIMIT).await {
             Ok(html) => { apps = catalog::parse(core::str::from_utf8(&html).map_err(|e| e.to_string())?); break; }
             Err(error) => {
-                draw(&apps, &query, selected, &format!("{error} · R retry / Esc quit")).map_err(|e|e.to_string())?;
+                view.draw(&apps, &query, selected, &format!("{error} · R retry / Esc quit")).map_err(|e|e.to_string())?;
                 loop {
                     if event::poll(Duration::from_millis(0)).map_err(|e|e.to_string())? {
                         if let Event::Key(key) = event::read().map_err(|e|e.to_string())? {
@@ -91,7 +63,7 @@ async fn run() -> Result<Option<String>, String> {
     let mut dirty = true;
     loop {
         if dirty {
-            draw(&apps, &query, selected, &message).map_err(|e|e.to_string())?;
+            view.draw(&apps, &query, selected, &message).map_err(|e|e.to_string())?;
             dirty = false;
         }
         // Batch input before rendering, but yield regularly under mouse traffic.
@@ -140,7 +112,7 @@ async fn run() -> Result<Option<String>, String> {
             if launch || save {
                 if let Some(id) = ids.get(selected) {
                     let app = &apps[*id];
-                    draw(&apps,&query,selected,&format!("Downloading {}…",app.name)).map_err(|e|e.to_string())?;
+                    view.draw(&apps,&query,selected,&format!("Downloading {}…",app.name)).map_err(|e|e.to_string())?;
                     dirty = true;
                     match bundle::download(&apps, app, save).await {
                         Ok(_) if save => message = format!("Added {} to AppDB; not started.", app.name),

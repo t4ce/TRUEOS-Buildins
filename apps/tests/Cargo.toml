@@ -8,6 +8,11 @@ edition = "2024"
 [dependencies]
 sha2 = { version = "=0.10.9", default-features = false }
 trueos-appbundle = { path = "../../../TRUEOS-Blueprints/crates/trueos-appbundle" }
+crossterm = { path = "../../vendor/crossterm-0.29.0-trueos", default-features = false, features = ["events", "native-core"] }
+trueos-terminal = { path = "../../../TRUEOS/crates/trueos-terminal" }
+
+[patch.crates-io]
+mio = { path = "../../../TRUEOS/vendor/mio-1.2.0" }
 
 [[test]]
 name = "native_fetch"
@@ -24,3 +29,7 @@ path = "script_and_mouse.rs"
 [[test]]
 name = "appbundle"
 path = "appbundle.rs"
+
+[[test]]
+name = "view"
+path = "view.rs"
