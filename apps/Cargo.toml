@@ -12,7 +12,7 @@ path = "src/main.rs"
 [dependencies]
 trueos = { path = "../vendor/trueos", features = ["native-runtime"] }
 crossterm = { path = "../vendor/crossterm-0.29.0-trueos", default-features = false, features = ["events", "native-core"] }
-sha2 = { version = "=0.10.9", default-features = false }
+sha2 = { version = "=0.11.1", default-features = false }
 trueos-appbundle = { path = "../../TRUEOS-Blueprints/crates/trueos-appbundle" }
 
 # Archive verification remains local to Apps; transport and TLS belong to the kernel.

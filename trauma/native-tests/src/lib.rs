@@ -923,3 +923,9 @@ mod tests {
         assert!(invalid.read_line(|_| {}).await.is_err());
     }
 }
+
+#[test]
+fn checkpoint_fingerprint_preserves_sha256_hex_encoding() {
+    let url = transport::Url::parse("https://example.com/file?token=secret").unwrap();
+    assert_eq!(checkpoint::fingerprint(&url), "8d68e42509d4c27891ef41d3f4195196f31aada5320ddef6c2c7177ef70fa5b8");
+}

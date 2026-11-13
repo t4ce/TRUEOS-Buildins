@@ -31,7 +31,14 @@ pub(crate) struct Checkpoint {
 
 pub(crate) fn fingerprint(url: &Url) -> String {
     // Never persist credentials, query parameters, or redirects as plaintext.
-    format!("{:x}", Sha256::digest(url.as_str().as_bytes()))
+    let digest = Sha256::digest(url.as_str().as_bytes());
+    let mut hex = String::with_capacity(64);
+    const DIGITS: &[u8; 16] = b"0123456789abcdef";
+    for byte in digest {
+        hex.push(DIGITS[(byte >> 4) as usize] as char);
+        hex.push(DIGITS[(byte & 0xf) as usize] as char);
+    }
+    hex
 }
 
 pub(crate) fn strong_etag(headers: &HeaderMap) -> Option<String> {

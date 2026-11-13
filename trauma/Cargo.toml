@@ -12,7 +12,7 @@ keywords = ["http", "download", "async", "tokio"]
 
 [dependencies]
 futures-util = { version = "=0.3.32", default-features = false, features = ["alloc", "async-await"] }
-sha2 = { version = "=0.10.9", default-features = false }
+sha2 = { version = "=0.11.1", default-features = false }
 tokio = { path = "../vendor/tokio-1.54.1", version = "=1.54.1", default-features = false, features = ["rt", "time"] }
 bon = { version = "=3.9.3", default-features = false, features = ["alloc"] }
 http = { version = "=1.4.0", default-features = false }

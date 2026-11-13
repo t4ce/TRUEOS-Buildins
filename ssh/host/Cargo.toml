@@ -15,7 +15,7 @@ path = "../src/main.rs"
 [dependencies]
 sunset = { path = "../../../TRUEOS/vendor/sunset", default-features = false, features = ["alloc", "larger", "ecdsa-all", "key-import", "mlkem"] }
 tokio = { version = "=1.54.1", default-features = false, features = ["io-util", "io-std", "net", "rt", "time", "macros", "sync"] }
-sha2 = { version = "=0.10.9", default-features = false }
+sha2 = { version = "=0.11.1", default-features = false }
 zeroize = { version = "1", default-features = false, features = ["alloc"] }
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("trueos", "zkvm"))'] }
