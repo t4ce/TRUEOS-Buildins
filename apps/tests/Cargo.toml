@@ -33,3 +33,7 @@ path = "appbundle.rs"
 [[test]]
 name = "view"
 path = "view.rs"
+
+[[test]]
+name = "fetched"
+path = "fetched.rs"

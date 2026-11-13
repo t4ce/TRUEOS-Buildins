@@ -1,6 +1,8 @@
 //! A download becomes visible only after verification and durable publication.
 use alloc::{format, string::String};
 
+pub const DIRECTORY: &str = "common/dl/apps";
+
 pub async fn download(app: &super::catalog::OnlineApp) -> Result<String, String> {
     let bytes = super::fetch::bytes(super::catalog::url(app), super::fetch::ARCHIVE_LIMIT).await?;
     let verify_started = trueos::time::Instant::now();
@@ -13,7 +15,7 @@ pub async fn download(app: &super::catalog::OnlineApp) -> Result<String, String>
         bytes.len()
     ));
     let save_started = trueos::time::Instant::now();
-    let dir = "common/dl/apps";
+    let dir = DIRECTORY;
     trueos::async_fs::create_dir_all(dir.as_bytes())
         .await
         .map_err(|e| format!("Create download directory: {e}"))?;

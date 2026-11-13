@@ -98,7 +98,67 @@ fn page_search_and_resize_repaint_the_correct_list_with_one_marker() {
         assert_eq!(highlighted,if query == "no-match" {0} else {2});
         if query == "79" {
             let row = terminal.cells()[size.0 as usize*5..size.0 as usize*6].iter().map(|c| c.glyph).collect::<String>();
-            assert!(row.starts_with(" 79  app79"),"{row}");
+            assert!(row.starts_with("  app79"),"{row}");
         }
+    }
+}
+
+#[test]
+fn search_matches_names_without_interpreting_numeric_ids() {
+    let apps = apps(25);
+    assert_eq!(view::visible(&apps,"1"),vec![1,10,11,12,13,14,15,16,17,18,19,21]);
+    assert_eq!(view::visible(&apps,"APP2"),vec![2,20,21,22,23,24]);
+}
+
+#[test]
+fn fetched_names_and_legend_share_gray_and_leave_other_names_unchanged() {
+    let apps = apps(2);
+    let mut view = view::View::default();
+    view.set_fetched(["app1.bp".into()].into_iter().collect());
+    let mut bytes = Vec::new();
+    view.draw_to(&mut bytes,(80,24),&apps,"",0,"Ready").unwrap();
+    let mut terminal = Terminal::new(80,24);
+    terminal.feed(&bytes);
+    let fetched_x = mouse::cell(80,1).0 as usize + 2;
+    let cells = terminal.cells();
+    assert_eq!(cells[5*80+fetched_x].glyph,'a');
+    assert_eq!(cells[5*80+fetched_x].style.foreground,TerminalColor::Indexed(7));
+    assert_eq!(cells[22*80].style.foreground,TerminalColor::Indexed(7));
+    assert_eq!(cells[5*80+2].style.foreground,TerminalColor::Default);
+    assert_eq!(cells[22*80..22*80+7].iter().map(|c| c.glyph).collect::<String>(),"fetched");
+    // Shell3 currently ignores bold weight; ensure the app still emits it for
+    // terminals that render it, for both the name and the legend.
+    assert_eq!(bytes.windows(4).filter(|b| *b == b"\x1b[1m").count(),2);
+}
+
+#[test]
+fn hover_hash_is_centered_and_loses_characters_in_the_middle_on_narrow_windows() {
+    let mut apps = apps(2);
+    apps[0].sha256 = "daffe2fc8d3bab24bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbba04a1c264b0e8c55".into();
+    apps[1].sha256 = "c".repeat(64);
+    for width in [20,27,40,60,80] {
+        let mut view = view::View::default();
+        let mut terminal = Terminal::new(width as usize,24);
+        let mut bytes = Vec::new();
+        view.draw_to(&mut bytes,(width,24),&apps,"",0,"Ready").unwrap();
+        terminal.feed(&bytes);
+        let header = terminal.cells()[..width as usize].iter().map(|c| c.glyph).collect::<String>();
+        assert!(header.starts_with("TRUEOS APPS"));
+        let available = width.saturating_sub(26).min(33) as usize;
+        if available > 0 {
+            let hash = header.chars().skip((width as usize-available)/2).take(available).collect::<String>();
+            assert_eq!(hash.chars().count(),available);
+            assert!(hash.contains('…'));
+            if width >= 60 { assert_eq!(hash,"daffe2fc8d3bab24…a04a1c264b0e8c55"); }
+        }
+        let before = terminal.cells().to_vec();
+        bytes.clear();
+        view.draw_to(&mut bytes,(width,24),&apps,"",1,"Ready").unwrap();
+        assert!(!bytes.windows(4).any(|b| b == b"\x1b[2J"));
+        for (i,byte) in bytes.iter().enumerate() {
+            terminal.feed(core::slice::from_ref(byte));
+            if i+1 < bytes.len() { assert_eq!(terminal.cells(),before); }
+        }
+        assert!(changes(&before,terminal.cells()).iter().all(|i| *i < width as usize || *i / width as usize == 5));
     }
 }

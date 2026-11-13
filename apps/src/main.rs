@@ -9,6 +9,7 @@ mod fetch;
 mod download;
 mod bundle;
 mod view;
+mod fetched;
 use view::{View, visible};
 use crossterm::io::{self, Write};
 use core::time::Duration;
@@ -59,7 +60,13 @@ async fn run() -> Result<Option<String>, String> {
             }
         }
     }
-    let mut message = String::from("Click an app to download and launch; Space adds it to AppDB without starting.");
+    let mut message = match fetched::load().await {
+        Ok(names) => {
+            view.set_fetched(names);
+            String::from("Click an app to download and launch; Space adds it to AppDB without starting.")
+        }
+        Err(error) => error,
+    };
     let mut dirty = true;
     loop {
         if dirty {
@@ -114,7 +121,13 @@ async fn run() -> Result<Option<String>, String> {
                     let app = &apps[*id];
                     view.draw(&apps,&query,selected,&format!("Downloading {}…",app.name)).map_err(|e|e.to_string())?;
                     dirty = true;
-                    match bundle::download(&apps, app, save).await {
+                    let result = bundle::download(&apps, app, save).await;
+                    // Include downloaded bundle members, even if AppDB import failed.
+                    match fetched::load().await {
+                        Ok(names) => view.set_fetched(names),
+                        Err(error) => error_output(&error),
+                    }
+                    match result {
                         Ok(_) if save => message = format!("Added {} to AppDB; not started.", app.name),
                         Ok(path) => return Ok(Some(path)),
                         Err(error) => message = error,
