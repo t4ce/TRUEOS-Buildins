@@ -68,6 +68,45 @@ fn metadata_source(value: &serde_json::Value, base: &str) -> Option<String> {
     }
     None
 }
+// PeerTube advertises an HTML embed, not a playable OpenGraph media URL.
+// Require its same-origin embed and oEmbed markers before consulting its API.
+fn peertube_api(doc: &Document, base: &str) -> Option<String> {
+    let base = url::Url::parse(base).ok()?;
+    let mut embed = None;
+    let mut oembed = false;
+    for id in 0..doc.nodes.len() {
+        if doc.name(id) == "meta" && attr(doc, id, "property") == Some("og:video:url") {
+            embed = attr(doc, id, "content").and_then(|s| base.join(s).ok());
+        }
+        if doc.name(id) == "link" && attr(doc, id, "type") == Some("application/json+oembed") {
+            oembed |= attr(doc, id, "href").and_then(|s| base.join(s).ok())
+                .is_some_and(|u| u.origin() == base.origin() && u.path() == "/services/oembed");
+        }
+    }
+    let embed = embed?;
+    if !oembed || embed.origin() != base.origin() { return None; }
+    let id = embed.path().strip_prefix("/videos/embed/")?;
+    if !(id.len() == 22 || id.len() == 36) || !id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-') {
+        return None;
+    }
+    address(base.as_str(), &format!("/api/v1/videos/{id}"))
+}
+fn peertube_source(value: &serde_json::Value, base: &str) -> Option<String> {
+    // Standalone video MP4s are directly playable. Resolution zero is audio only.
+    if let Some(files) = value.get("files").and_then(|v| v.as_array()) {
+        for file in files {
+            if file.pointer("/resolution/id").and_then(|v| v.as_u64()).is_some_and(|r| r > 0) {
+                if let Some(url) = file.get("fileUrl").and_then(|v| v.as_str()).and_then(|v| address(base, v)) {
+                    return Some(url);
+                }
+            }
+        }
+    }
+    // Fragmented MP4 entries inside streamingPlaylists need their HLS manifest.
+    value.get("streamingPlaylists")?.as_array()?.iter().find_map(|p| {
+        p.get("playlistUrl")?.as_str().and_then(|v| address(base, v))
+    })
+}
 impl Resolver {
     fn enqueue(&mut self, url: String, depth: usize, referrer: &str) {
         if depth <= 3 && self.seen.len() < 9 && self.seen.insert(url.clone()) {
@@ -130,6 +169,9 @@ impl Resolver {
                 }
             }
         }
+        if let Some(url) = peertube_api(doc, base) {
+            self.enqueue(url, depth + 1, base);
+        }
         false
     }
     pub(super) fn poll(&mut self, loader: &mut Loader, parent: &mut Engine, page: &LocalPage) {
@@ -161,6 +203,14 @@ impl Resolver {
         self.pending.pop_front();
         if bytes.is_empty() || bytes.len() > 256 * 1024 {
             loader.events.push(super::module_loader::Event {url,status:"failed",detail:if bytes.is_empty(){"media inspection: empty HTML response".into()}else{"media inspection: HTML exceeds 256 KiB".into()}});
+            return;
+        }
+        if url::Url::parse(&url).is_ok_and(|u| u.path().starts_with("/api/v1/videos/")) {
+            if let Some(source) = serde_json::from_slice::<serde_json::Value>(&bytes).ok()
+                .and_then(|v| peertube_source(&v, &url)) {
+                page.media.borrow_mut().request(0, source, &referrer);
+                self.pending.clear();
+            }
             return;
         }
         let doc = rp5::parse(&String::from_utf8_lossy(&bytes));

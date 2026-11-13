@@ -478,6 +478,14 @@ cap. Finding a URL stops inspection; subsequent explicit page play requests
 still use the existing latest-request policy. These temporary trees are not
 persistent page DOMs or additional windows/workers.
 
+PeerTube pages advertising both a same-origin `/videos/embed/<id>` OpenGraph
+player and `/services/oembed` metadata also admit a bounded same-origin
+`/api/v1/videos/<id>` JSON lookup. This works across instance hostnames. The
+resolver selects a standalone file with positive video resolution, skipping
+resolution-zero audio files, or falls back to the HLS playlist URL. Fragmented
+MP4 playlist members are not handed off as standalone movies. The lookup shares
+the existing response size, request count, depth and URL policy limits.
+
 Media subdocument fetches carry their actual parent document URL through the
 existing bounded download tickets. The host applies a same-origin full URL or
 cross-origin origin-only Referer, without fragments or credentials, on every

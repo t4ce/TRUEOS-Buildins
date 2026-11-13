@@ -469,3 +469,38 @@ fn videoobject_metadata_rejects_non_media_types_and_unsafe_schemes() {
     let (_doc,reports)=finish(&mut r,1);
     assert!(r.take_video_request().is_none());no_errors(&reports);
 }
+
+#[test]
+fn peertube_instances_resolve_video_files_or_hls_without_audio_only_handoff() {
+    let html = r#"<meta property="og:video:url" content="https://fixture.test/videos/embed/hSXeCku7JLf671Dy8bk5k2"><link type="application/json+oembed" href="/services/oembed?url=watch">"#;
+    let api = "https://fixture.test/api/v1/videos/hSXeCku7JLf671Dy8bk5k2";
+    for (response, expected) in [
+        (r#"{"files":[{"resolution":{"id":0},"fileUrl":"/audio.mp4"}],"streamingPlaylists":[{"playlistUrl":"/master.m3u8?token=keep","files":[{"fileUrl":"/fragmented.mp4"}]}]}"#, "https://fixture.test/master.m3u8?token=keep"),
+        (r#"{"files":[{"resolution":{"id":0},"fileUrl":"/audio.mp4"},{"resolution":{"id":720},"fileUrl":"/video.mp4"}],"streamingPlaylists":[{"playlistUrl":"/master.m3u8"}]}"#, "https://fixture.test/video.mp4"),
+        (r#"{"files":[],"streamingPlaylists":[{"playlistUrl":"/master.m3u8"}]}"#, "https://fixture.test/master.m3u8"),
+    ] {
+        let mut r = runtime(html, vec![(api, response)]);
+        let (_, reports) = finish(&mut r, 1);
+        assert_eq!(r.take_video_request().unwrap().1.url, expected);
+        assert_eq!(netfs::requested(), vec![api]);
+        no_errors(&reports);
+    }
+}
+
+#[test]
+fn peertube_discovery_requires_same_origin_metadata_and_safe_media() {
+    for html in [
+        r#"<meta property="og:video:url" content="https://other.test/videos/embed/hSXeCku7JLf671Dy8bk5k2"><link type="application/json+oembed" href="/services/oembed">"#,
+        r#"<meta property="og:video:url" content="/videos/embed/hSXeCku7JLf671Dy8bk5k2">"#,
+    ] {
+        let mut r = runtime(html, vec![]);
+        let (_, reports) = finish(&mut r, 1);
+        assert!(r.take_video_request().is_none());
+        assert!(netfs::requested().is_empty());
+        no_errors(&reports);
+    }
+    let mut r = runtime(r#"<meta property="og:video:url" content="/videos/embed/hSXeCku7JLf671Dy8bk5k2"><link type="application/json+oembed" href="/services/oembed">"#, vec![("https://fixture.test/api/v1/videos/hSXeCku7JLf671Dy8bk5k2", r#"{"files":[{"resolution":{"id":720},"fileUrl":"javascript:bad"}],"streamingPlaylists":[]}"#)]);
+    let (_, reports) = finish(&mut r, 1);
+    assert!(r.take_video_request().is_none());
+    no_errors(&reports);
+}
