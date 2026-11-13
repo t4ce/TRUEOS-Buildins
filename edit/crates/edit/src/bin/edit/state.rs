@@ -194,7 +194,7 @@ impl State {
             #[cfg(target_os = "trueos")]
             font_size: Default::default(),
             #[cfg(target_os = "trueos")]
-            shader_enabled: true,
+            shader_enabled: false,
             menubar_color_bg: StraightRgba::zero(),
             menubar_color_fg: StraightRgba::zero(),
 
