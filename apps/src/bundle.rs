@@ -3,7 +3,7 @@ use super::catalog::{self, OnlineApp};
 use alloc::{format, string::String, vec::Vec};
 
 /// Resolve the entire request before downloading, then publish it atomically.
-/// The returned pathname always belongs to the requested app, never a helper.
+/// Returns a disk pathname or RAM AppDB archive name for the requested app.
 pub async fn download(
     catalog: &[OnlineApp],
     app: &OnlineApp,
@@ -22,6 +22,20 @@ pub async fn download(
         })
         .collect::<Result<Vec<_>, _>>()?;
 
+    let mounts = trueos::async_fs::list_mounts().await
+        .map_err(|error| format!("Read filesystem availability: {error}"))?;
+    if mounts.is_empty() {
+        let mut payload = Vec::new();
+        for member in &members {
+            let bytes = super::download::verified_bytes(member).await.map_err(|error| {
+                format!("{}: {} unavailable: {error}", app.name, member.archive_name)
+            })?;
+            trueos_appbundle::append_ram_install(&mut payload, &member.archive_name, &bytes)?;
+        }
+        trueos::async_fs::write_file(trueos_appbundle::RAM_INSTALL_VFILE, &payload).await
+            .map_err(|error| format!("{}: AppDB bundle import failed ({error}); not started", app.name))?;
+        return Ok(app.archive_name.clone());
+    }
     let mut paths = Vec::new();
     for member in &members {
         let path = super::download::download(member).await.map_err(|error| {

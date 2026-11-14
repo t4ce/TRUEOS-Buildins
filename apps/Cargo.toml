@@ -4,12 +4,14 @@ version = "0.1.0"
 edition = "2024"
 [package.metadata.trueos-blueprint]
 fs-scope = "trueosfs"
+filesystem-independent = true
 entry-abi = "argv-v1"
 [[bin]]
 name = "apps"
 path = "src/main.rs"
 [workspace]
 [dependencies]
+serde_json = { version = "1", default-features = false, features = ["alloc"] }
 trueos = { path = "../vendor/trueos", features = ["native-runtime"] }
 crossterm = { path = "../vendor/crossterm-0.29.0-trueos", default-features = false, features = ["events", "native-core"] }
 sha2 = { version = "=0.10.9", default-features = false }

@@ -3,8 +3,18 @@
 Apps uses the kernel's native HTTP/TLS fetch service. Each request is bounded
 to 90 seconds, with a 1 MiB catalog limit and a 128 MiB archive limit before
 body accumulation. Apps retains catalog parsing and its SHA-256 verification
-policy; verified archives are durably published through typed filesystem writes
-before AppDB import or launch. Dropping a download cancels its native operation.
+policy. When TRUEOSFS is mounted, verified archives are durably published through
+typed filesystem writes before AppDB import or launch. Without any mounted
+filesystem (including a RAM disk), Apps still opens its network catalog and TUI.
+It verifies downloads in memory and imports the complete bundle directly into
+RAM AppDB, then launches by archive name. Space/install imports without launching.
+The TUI reads fetched state from RAM AppDB in this mode; nothing is persisted.
+Dropping a download cancels its native operation.
+
+AppDB itself is already RAM-only, seeded with the configured builtins at boot;
+downloaded entries disappear on reboot. This does not change the filesystem or
+other readiness requirements of downloaded apps: every child uses the normal
+launcher and its own Blueprint capabilities.
 Diagnostics report endpoint categories, elapsed time, native status codes and
 completed byte counts; transport details belong to the kernel service.
 
@@ -80,7 +90,8 @@ metadata file to fetch from the app server.
 
 Interactive launch, Space-to-install, and pullbot `pull`, `launch` and `install`
 all resolve every member before downloading anything. Every member must be
-available, downloaded, verified and saved before the bundle is imported in one
+available, downloaded and verified (and saved when a filesystem is mounted)
+before the bundle is imported in one
 AppDB transaction. A failed request preserves previous AppDB entries and never
 starts the requested app. Staged files may remain on disk for a failed request.
 The bottom TUI status line names the unavailable member and reason, for example:
@@ -91,3 +102,10 @@ Pullbot reports the same message through its normal error output.
 64 paths. The kernel resolves and authorizes each path, checks every Blueprint,
 and commits the apps, hashes and update dates together. Missing bundle
 requirements reject the transaction. Importing a bundle does not start helpers.
+
+`vFile:appdb-install-ram` accepts a bounded `ADR1` binary batch encoded by
+`trueos-appbundle`: repeated little-endian name length (u16), body length (u32),
+UTF-8 archive name and Blueprint bytes. The limit is 64 members and 512 MiB
+including framing. The kernel validates every Blueprint before committing the
+same AppDB transaction used for pathname imports; it does not bypass child
+launch readiness or start any VM during import.

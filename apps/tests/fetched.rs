@@ -12,6 +12,13 @@ pub mod content_identity {
 }
 pub mod async_fs {
     use super::content_identity::ContentTypeId;
+    pub async fn list_mounts() -> Result<Vec<()>, i32> {
+        Ok(super::NO_FS.with_borrow(|no_fs| if *no_fs { vec![] } else { vec![()] }))
+    }
+    pub async fn read_file(path: &[u8]) -> Result<Vec<u8>, i32> {
+        assert_eq!(path, b"vFile:appdb");
+        Ok(br#"{"version":1,"apps":[{"archive":"xerj.bp"}]}"#.to_vec())
+    }
     pub const ERR_NOT_FOUND: i32 = -8;
     #[derive(Clone, Copy, PartialEq, Eq)]
     pub enum NodeKind { File, Directory }
@@ -24,7 +31,7 @@ pub mod async_fs {
         super::STATE.with_borrow(|result| result.clone())
     }
 }
-thread_local! { static STATE: RefCell<Result<async_fs::Listing,i32>> = RefCell::new(Ok(async_fs::Listing::default())); }
+thread_local! { static NO_FS: RefCell<bool> = const { RefCell::new(false) }; static STATE: RefCell<Result<async_fs::Listing,i32>> = RefCell::new(Ok(async_fs::Listing::default())); }
 mod download { pub const DIRECTORY: &str = "common/dl/apps"; }
 #[path = "../src/fetched.rs"]
 mod fetched;
@@ -62,4 +69,12 @@ fn missing_directory_is_empty_but_read_failures_and_truncation_are_reported() {
     assert!(run(fetched::load()).is_err());
     STATE.set(Ok(async_fs::Listing { truncated:true,..Default::default() }));
     assert!(run(fetched::load()).is_err());
+}
+
+#[test]
+fn no_filesystem_restores_fetched_from_ram_appdb() {
+    NO_FS.set(true);
+    STATE.set(Err(-2));
+    assert_eq!(run(fetched::load()).unwrap(), ["xerj.bp".into()].into_iter().collect());
+    NO_FS.set(false);
 }

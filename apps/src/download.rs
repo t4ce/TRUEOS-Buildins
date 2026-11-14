@@ -1,9 +1,9 @@
 //! A download becomes visible only after verification and durable publication.
-use alloc::{format, string::String};
+use alloc::{format, string::String, vec::Vec};
 
 pub const DIRECTORY: &str = "common/dl/apps";
 
-pub async fn download(app: &super::catalog::OnlineApp) -> Result<String, String> {
+pub async fn verified_bytes(app: &super::catalog::OnlineApp) -> Result<Vec<u8>, String> {
     let bytes = super::fetch::bytes(super::catalog::url(app), super::fetch::ARCHIVE_LIMIT).await?;
     let verify_started = trueos::time::Instant::now();
     if !super::catalog::verify(app, &bytes) {
@@ -14,6 +14,11 @@ pub async fn download(app: &super::catalog::OnlineApp) -> Result<String, String>
         verify_started.elapsed().as_millis(),
         bytes.len()
     ));
+    Ok(bytes)
+}
+
+pub async fn download(app: &super::catalog::OnlineApp) -> Result<String, String> {
+    let bytes = verified_bytes(app).await?;
     let save_started = trueos::time::Instant::now();
     let dir = DIRECTORY;
     trueos::async_fs::create_dir_all(dir.as_bytes())

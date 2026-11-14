@@ -11,6 +11,7 @@ const CATALOG: &str = "https://trueos.eu/apps";
 
 #[derive(Default)]
 struct State {
+    no_fs: bool,
     catalog: String,
     fail_fetch: Option<String>,
     fail_catalog: bool,
@@ -79,6 +80,9 @@ pub mod content_identity {
     }
 }
 pub mod async_fs {
+    pub async fn list_mounts() -> Result<Vec<()>, i32> {
+        Ok(super::state(|s| if s.no_fs { vec![] } else { vec![()] }))
+    }
     pub async fn read_file(path: &[u8]) -> Result<Vec<u8>, i32> {
         assert_eq!(path, trueos_appbundle::VFILE);
         Ok(include_bytes!("../../../TRUEOS-Blueprints/appbundle.json").to_vec())
@@ -97,6 +101,14 @@ pub mod async_fs {
         Ok(())
     }
     pub async fn write_file(path: &[u8], bytes: &[u8]) -> Result<(), i32> {
+        if path == trueos_appbundle::RAM_INSTALL_VFILE {
+            let downloads = trueos_appbundle::decode_ram_install(bytes).unwrap();
+            return super::state(|s| {
+                if s.fail_import { return Err(-2); }
+                s.imports.push(downloads.into_iter().map(|(name, _)| name).collect::<Vec<_>>().join("\n"));
+                Ok(())
+            });
+        }
         assert_eq!(path, b"vFile:appdb-install");
         super::state(|s| {
             if s.fail_import {
@@ -354,4 +366,33 @@ fn failed_verification_and_failed_import_do_not_launch() {
         assert!(s.errors[0].contains("AppDB bundle import failed"));
         assert!(s.imports.is_empty() && s.launches.is_empty());
     });
+}
+
+#[test]
+fn no_filesystem_installs_bundle_in_ram_and_launches_by_archive() {
+    reset(&["xerj", "xerj-service"]);
+    state(|s| s.no_fs = true);
+    run(pullbot::drain(b"pull xerj-service -- hello\n"));
+    state(|s| {
+        assert!(s.errors.is_empty(), "{:?}", s.errors);
+        assert!(s.published.is_empty());
+        assert_eq!(s.imports, ["xerj.bp\nxerj-service.bp"]);
+        assert_eq!(s.launches, [("xerj-service.bp".into(), "hello\n".into())]);
+    });
+}
+
+#[test]
+fn no_filesystem_install_only_and_failure_never_launch() {
+    reset(&["xerj"]);
+    state(|s| s.no_fs = true);
+    run(pullbot::drain(b"install xerj\n"));
+    state(|s| { assert_eq!(s.imports, ["xerj.bp"]); assert!(s.published.is_empty() && s.launches.is_empty()); });
+    for fail_fetch in [false, true] {
+        reset(&["xerj", "xerj-service"]);
+        state(|s| { s.no_fs = true; s.fail_import = !fail_fetch;
+            if fail_fetch { s.fail_fetch = Some("xerj-service.bp".into()); }
+        });
+        run(pullbot::drain(b"pull xerj-service\n"));
+        state(|s| { assert!(!s.errors.is_empty()); assert!(s.imports.is_empty() && s.launches.is_empty() && s.published.is_empty()); });
+    }
 }
