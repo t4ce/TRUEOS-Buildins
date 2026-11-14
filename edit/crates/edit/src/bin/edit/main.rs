@@ -17,6 +17,8 @@ mod draw_statusbar;
 #[cfg(any(target_os = "trueos", test))]
 mod font_size;
 mod localization;
+#[cfg(any(target_os = "trueos", test))]
+mod printing;
 mod settings;
 #[cfg(feature = "ide")]
 mod ide;
@@ -198,6 +200,12 @@ fn run() -> apperr::Result<()> {
         {
             let scratch = scratch_arena(None);
             let read_timeout = vt_parser.read_timeout().min(tui.read_timeout());
+            #[cfg(target_os = "trueos")]
+            let read_timeout = state.printing.read_timeout(read_timeout);
+            #[cfg(target_os = "trueos")]
+            if state.printing.poll() {
+                tui.invalidate_terminal();
+            }
             #[cfg(all(feature = "ide", target_os = "trueos"))]
             let read_timeout = if state.ide.is_some() { read_timeout.min(Duration::from_millis(100)) } else { read_timeout };
             #[cfg(all(feature = "ide", target_os = "trueos"))]
@@ -482,6 +490,8 @@ fn draw(ctx: &mut Context, state: &mut State) {
     if state.wants_save {
         draw_handle_save(ctx, state);
     }
+    #[cfg(target_os = "trueos")]
+    printing::draw(ctx, state);
     #[cfg(feature = "ide")]
     draw_projectpicker::draw_project_picker(ctx, state);
     #[cfg(feature = "ide")]
@@ -536,6 +546,9 @@ fn draw(ctx: &mut Context, state: &mut State) {
             state.wants_file_picker = StateFilePicker::SaveAs;
         } else if key == kbmod::CTRL | vk::W {
             state.wants_close = true;
+        } else if cfg!(target_os = "trueos") && key == kbmod::CTRL_SHIFT | vk::P {
+            #[cfg(target_os = "trueos")]
+            state.printing.request();
         } else if key == kbmod::CTRL | vk::P {
             state.wants_go_to_file = true;
         } else if key == kbmod::CTRL | vk::Q {

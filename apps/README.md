@@ -59,14 +59,17 @@ their compiler is missing from AppDB and then retry the original build.
 {
   "version": 1,
   "bundles": {
-    "codex.bp": { "requires": ["sqlite.bp"] }
+    "codex.bp": { "requires": ["sqlite.bp", "xerj-service.bp", "lily2vec.bp"] },
+    "xerj-service.bp": { "requires": ["xerj.bp"] }
   }
 }
 ```
 
 Keys and requirements are Blueprint archive names. The key is the app to start;
 requirements are installed, and the app starts its services when needed.
-Requesting SQLite alone does not request Codex. Requirements may have their own
+Requesting SQLite or lily2Vec alone does not request Codex. Lily bundle
+membership installs its standalone CLI without starting it; Codex response
+presentation uses the warm in-process classifier. Requirements may have their own
 requirements; shared members are fetched once, and cycles are rejected.
 
 The host AppDB seed builder validates and stores this JSON in the database's

@@ -22,6 +22,14 @@ to the Edit icon. UI4 also provides its collapse/restore context menu. Click
 the compact icon to restore the editor; open documents remain in memory.
 The menu item is available when a local UI4 terminal lease supports it.
 
+Choose **File → Print A4** or press **Ctrl+Shift+P** to print the current
+document, including unsaved edits. Text wraps and continues onto DIN A4 pages;
+terminal zoom and editor scroll position do not change the printed document.
+The print dialog reports the job ID and distinguishes queueing, printer
+acceptance, and completion. Closing the dialog keeps the job running; choosing
+Print A4 again while it is active reopens its status. **Ctrl+P** retains Go To
+File.
+
 `assets/edit.png` is a transparent 128×128 raster of `assets/edit.svg`. The
 build decodes the PNG on the host and embeds its RGBA bytes, so the editor
 needs no image decoder at runtime.

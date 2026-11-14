@@ -104,6 +104,10 @@ fn draw_menu_file(ctx: &mut Context, state: &mut State) {
         if ctx.menubar_menu_button(loc(LocId::FileSaveAs), 'A', vk::NULL) {
             state.wants_file_picker = StateFilePicker::SaveAs;
         }
+        #[cfg(target_os = "trueos")]
+        if ctx.menubar_menu_button("Print A4", 'R', kbmod::CTRL_SHIFT | vk::P) {
+            state.printing.request();
+        }
     }
     if let Some(path) = &Settings::borrow().path
         && ctx.menubar_menu_button(loc(LocId::FilePreferences), 'P', vk::NULL)

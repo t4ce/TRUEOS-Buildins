@@ -5,6 +5,15 @@ DIN A4 remains the default; compact sheets use whole 5 mm units.
 The Blueprint owns its UI4 immutable frame through `trueos::ui4_scene`.
 It does not use the Paperr service or its snapshot/font API.
 
+Right-click the sheet and choose **Print A4**, or press **Ctrl+P**, to submit
+its current in-memory document to the default network printer. All three modes
+print on portrait 210 × 297 mm A4 at 300 dpi. Grid spacing keeps its physical
+5 mm steps; linepaper prints horizontal ruling, and whitepaper omits ruling.
+Compact sheets retain their physical size centered on A4, clipping any area
+beyond the sheet. Window resizing and the editing cursor do not enter the
+printed document. The frame title and its terminal report the job state;
+queued and printer-accepted jobs are distinguished from completed jobs.
+
 The page is 210 × 297 mm. As in Paperr, the centered grid has 39 × 55
 cells (195 × 275 mm), leaving 7.5 mm side margins and 11 mm top/bottom
 margins. UI4's physical-extent query uses the active output's EDID metrics;

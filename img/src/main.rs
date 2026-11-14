@@ -5,6 +5,7 @@ extern crate alloc;
 
 mod convert;
 mod gallery;
+mod printing;
 mod view;
 use gallery::{Gallery, next_index};
 use view::{Alignment, View, contained_extent};
@@ -36,6 +37,8 @@ struct OpenFrame {
     alignment: Alignment,
     hit_testable: bool,
     gallery: Option<Gallery>,
+    print_job: Option<(trueos::print2d::JobId, Option<trueos::print2d::JobState>)>,
+    print_poll: trueos::clock::Instant,
 }
 
 /// Everything valuable about an open image, without any old-kernel UI4
@@ -395,6 +398,7 @@ fn open_default_frame(frames: &mut Vec<OpenFrame>) {
         open.image = image;
         open.source = source;
         open.gallery = Some(gallery);
+        let _ = open.frame.register_context_menu(&print_menu(true));
     }
 }
 
@@ -475,6 +479,9 @@ fn open_decoded_image(
     if let Err(error) = frame.set_hit_testable(hit_testable) {
         return Err(suspended(view, image, format!("hit-test error={error:?}")));
     }
+    if let Err(error) = frame.register_context_menu(&print_menu(source != "<empty>")) {
+        return Err(suspended(view, image, format!("print menu error={error:?}")));
+    }
     if let Err(error) = present(&mut frame, view, &image) {
         return Err(suspended(view, image, format!("present error={error:?}")));
     }
@@ -486,6 +493,8 @@ fn open_decoded_image(
         alignment,
         hit_testable,
         gallery: None,
+        print_job: None,
+        print_poll: trueos::clock::Instant::now(),
     })
 }
 
@@ -689,6 +698,69 @@ fn paint_letterboxed(viewport: &mut [u8], view: View, image: &Image) {
     }
 }
 
+fn request_print(requested: &mut bool) { *requested = true; }
+
+fn print_menu(enabled: bool) -> [trueos::ui4_scene::MenuEntry<'static, bool>; 1] {
+    [if enabled { trueos::ui4_scene::MenuEntry::new("Print A4", request_print) }
+     else { trueos::ui4_scene::MenuEntry::disabled("Print A4") }]
+}
+
+fn print_shortcut(event: &input::TrueosKeyboardOutputEvent) -> bool {
+    event.kind == input::KEYBOARD_OUTPUT_KIND_TEXT
+        && event.modifiers & 0x11 != 0
+        && matches!(event.codepoint, 16 | 80 | 112)
+}
+
+fn print_image(open: &mut OpenFrame) {
+    let _ = open.frame.set_title("img · Preparing A4 print");
+    match printing::render_page(&open.image).and_then(|page| page.submit()) {
+        Ok(job) => {
+            open.print_job = Some((job, Some(trueos::print2d::JobState::Queued)));
+            open.print_poll = trueos::clock::Instant::now();
+            print_status(open, job, "queued");
+        }
+        Err(error) => print_error(open, format!("{error:?}")),
+    }
+}
+
+fn poll_print(open: &mut OpenFrame) {
+    if open.print_poll.elapsed().as_millis() < 250 { return; }
+    open.print_poll = trueos::clock::Instant::now();
+    let Some((job, last)) = open.print_job else { return; };
+    match job.status() {
+        Ok(state) => {
+            if last != Some(state) { print_status(open, job, print_state(state)); }
+            open.print_job = (!state.is_terminal()).then_some((job, Some(state)));
+        }
+        Err(error) => {
+            print_error(open, format!("status: {error:?}"));
+            open.print_job = None;
+        }
+    }
+}
+
+fn print_status(open: &mut OpenFrame, job: trueos::print2d::JobId, state: &str) {
+    let _ = open.frame.set_title(&format!("img · Print {}: {state}", job.get()));
+    terminal_line(&format!("img: A4 print job={} source={} {state}", job.get(), open.source));
+    logl::log(level::INFO, format_args!("img: A4 print job={} source={} {state}", job.get(), open.source));
+}
+
+fn print_error(open: &mut OpenFrame, error: String) {
+    let _ = open.frame.set_title("img · A4 print failed");
+    terminal_line(&format!("img: A4 print failed: {error}"));
+    logl::log(level::ERROR, format_args!("img: A4 print failed: {error}"));
+}
+
+fn print_state(state: trueos::print2d::JobState) -> &'static str {
+    use trueos::print2d::JobState::*;
+    match state {
+        Queued => "queued", WaitingForPrinter => "waiting for printer", Rendering => "rendering",
+        Connecting => "connecting", Sending => "sending", Submitted => "accepted by printer",
+        Printing => "printing", Completed => "completed", Failed => "failed", Canceled => "canceled",
+        OutcomeUnknown => "outcome unknown",
+    }
+}
+
 fn service_frames(frames: &mut Vec<OpenFrame>) {
     let mut index = 0;
     while index < frames.len() {
@@ -696,8 +768,17 @@ fn service_frames(frames: &mut Vec<OpenFrame>) {
         let mut repaint = false;
         {
             let open = &mut frames[index];
+            let mut print_requested = false;
+            if let Err(error) = open.frame.pump_context_menu(
+                &print_menu(open.source != "<empty>"), &mut print_requested,
+            ) {
+                logl::log(level::WARN, format_args!("img: print menu error={error:?}"));
+            }
             loop {
                 match open.frame.take_keyboard_event() {
+                    Ok(Some(event)) if print_shortcut(&event) => {
+                        print_requested = true;
+                    }
                     Ok(Some(event))
                         if event.kind == input::KEYBOARD_OUTPUT_KIND_KEY
                             && event.key_code == input::KEYBOARD_KEY_ESCAPE
@@ -732,6 +813,10 @@ fn service_frames(frames: &mut Vec<OpenFrame>) {
                     }
                 }
             }
+            if print_requested && open.source != "<empty>" && open.print_job.is_none() {
+                print_image(open);
+            }
+            poll_print(open);
             loop {
                 match open.frame.take_pan_event() {
                     Ok(Some(event)) => {

@@ -13,12 +13,14 @@ const CATALOG: &str = "https://trueos.eu/apps";
 struct State {
     catalog: String,
     fail_fetch: Option<String>,
+    fail_catalog: bool,
     fail_import: bool,
     fetched: Vec<String>,
     published: Vec<String>,
     imports: Vec<String>,
     launches: Vec<(String, String)>,
     errors: Vec<String>,
+    logs: Vec<(u8, String)>,
 }
 thread_local! { static STATE: RefCell<State> = RefCell::new(State::default()); }
 fn state<T>(f: impl FnOnce(&mut State) -> T) -> T {
@@ -51,8 +53,10 @@ fn error_output(error: &str) {
 pub mod logl {
     pub mod level {
         pub const IMPORTANT: u8 = 1;
+        pub const INFO: u8 = 3;
     }
-    pub fn log_record(_: u8, _: &str, _: core::fmt::Arguments<'_>) -> Result<(), i32> {
+    pub fn log_record(level: u8, _: &str, message: core::fmt::Arguments<'_>) -> Result<(), i32> {
+        super::state(|s| s.logs.push((level, message.to_string())));
         Ok(())
     }
 }
@@ -124,6 +128,7 @@ mod fetch {
     pub async fn bytes(url: &str, _: usize) -> Result<Vec<u8>, String> {
         super::state(|s| {
             if url == super::CATALOG {
+                if s.fail_catalog { return Err("Download HTTP failed (-12)".into()); }
                 return Ok(s.catalog.as_bytes().to_vec());
             }
             let name = url.rsplit('/').next().unwrap().to_string();
@@ -145,6 +150,31 @@ mod download;
 mod pullbot;
 #[path = "../src/script.rs"]
 mod script;
+
+#[test]
+fn unavailable_catalog_returns_one_info_notice_without_fetching_or_launching_apps() {
+    reset(&["paper"]);
+    state(|s| s.fail_catalog = true);
+    let reason = run(pullbot::drain(b"pull paper\npull codex\n"));
+    let message = reason.strip_prefix("apps:info:").expect("completion notice");
+    assert!(message.contains("https://trueos.eu/apps"));
+    assert!(message.contains("maintenance") && message.contains("50% of the day"));
+    state(|s| {
+        assert_eq!(s.logs.iter().filter(|(level,_)| *level == logl::level::INFO).collect::<Vec<_>>(),
+            vec![&(logl::level::INFO,message.into())]);
+        assert!(s.fetched.is_empty() && s.published.is_empty() && s.imports.is_empty() && s.launches.is_empty());
+    });
+}
+
+#[test]
+fn successful_pull_does_not_issue_a_maintenance_notice() {
+    reset(&["paper"]);
+    assert_eq!(run(pullbot::drain(b"pull paper\n")),"apps pullbot drained");
+    state(|s| {
+        assert_eq!(s.launches.len(),1);
+        assert!(s.logs.iter().all(|(level,_)| *level != logl::level::INFO));
+    });
+}
 
 #[test]
 fn missing_sqlite_fails_before_downloading_or_launching_codex() {
@@ -186,9 +216,30 @@ fn missing_xerj_service_fails_before_downloading_or_launching_codex() {
 }
 
 #[test]
+fn missing_lily_fails_before_downloading_or_launching_codex() {
+    reset(&["codex", "sqlite", "xerj", "xerj-service"]);
+    run(pullbot::drain(b"pull codex\n"));
+    state(|s| {
+        assert_eq!(s.errors, ["codex: required lily2vec.bp unavailable in app catalog"]);
+        assert!(s.fetched.is_empty() && s.imports.is_empty() && s.launches.is_empty());
+    });
+}
+
+#[test]
+fn lily_on_its_own_does_not_request_codex() {
+    reset(&["lily2vec"]);
+    run(pullbot::drain(b"install lily2vec\n"));
+    state(|s| {
+        assert_eq!(s.fetched, ["lily2vec.bp"]);
+        assert_eq!(s.imports, ["common/dl/apps/lily2vec.bp"]);
+        assert!(s.errors.is_empty() && s.launches.is_empty());
+    });
+}
+
+#[test]
 fn any_unavailable_member_reports_the_member_and_prevents_install_and_launch() {
-    for member in ["sqlite.bp", "xerj.bp", "xerj-service.bp", "codex.bp"] {
-        reset(&["codex", "sqlite", "xerj", "xerj-service"]);
+    for member in ["sqlite.bp", "xerj.bp", "xerj-service.bp", "lily2vec.bp", "codex.bp"] {
+        reset(&["codex", "sqlite", "xerj", "xerj-service", "lily2vec"]);
         state(|s| s.fail_fetch = Some(member.into()));
         run(pullbot::drain(b"pull codex\n"));
         state(|s| {
@@ -205,18 +256,18 @@ fn any_unavailable_member_reports_the_member_and_prevents_install_and_launch() {
 
 #[test]
 fn bundle_installs_all_before_launching_only_codex_with_original_script() {
-    reset(&["codex", "sqlite", "xerj", "xerj-service"]);
+    reset(&["codex", "sqlite", "xerj", "xerj-service", "lily2vec"]);
     run(pullbot::drain(b"launch --sh3 codex -- ide-endpoint 42\n"));
     state(|s| {
         assert!(s.errors.is_empty());
         assert_eq!(
             s.fetched,
-            ["sqlite.bp", "xerj.bp", "xerj-service.bp", "codex.bp"]
+            ["sqlite.bp", "xerj.bp", "xerj-service.bp", "lily2vec.bp", "codex.bp"]
         );
         assert_eq!(
             s.imports,
             [
-                "common/dl/apps/sqlite.bp\ncommon/dl/apps/xerj.bp\ncommon/dl/apps/xerj-service.bp\ncommon/dl/apps/codex.bp"
+                "common/dl/apps/sqlite.bp\ncommon/dl/apps/xerj.bp\ncommon/dl/apps/xerj-service.bp\ncommon/dl/apps/lily2vec.bp\ncommon/dl/apps/codex.bp"
             ]
         );
         assert_eq!(
@@ -228,7 +279,7 @@ fn bundle_installs_all_before_launching_only_codex_with_original_script() {
 
 #[test]
 fn install_only_imports_the_complete_bundle_without_launching() {
-    reset(&["codex", "sqlite", "xerj", "xerj-service"]);
+    reset(&["codex", "sqlite", "xerj", "xerj-service", "lily2vec"]);
     run(pullbot::drain(b"install codex\n"));
     state(|s| {
         assert_eq!(s.imports.len(), 1);
@@ -284,7 +335,7 @@ fn interactive_fetch_returns_the_same_missing_member_status() {
 
 #[test]
 fn failed_verification_and_failed_import_do_not_launch() {
-    reset(&["codex", "sqlite", "xerj", "xerj-service"]);
+    reset(&["codex", "sqlite", "xerj", "xerj-service", "lily2vec"]);
     let hash = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
     state(|s| {
         s.catalog = s
@@ -296,7 +347,7 @@ fn failed_verification_and_failed_import_do_not_launch() {
         assert!(s.errors[0].contains("codex.bp unavailable: Blueprint SHA-256 mismatch"));
         assert!(s.imports.is_empty() && s.launches.is_empty());
     });
-    reset(&["codex", "sqlite", "xerj", "xerj-service"]);
+    reset(&["codex", "sqlite", "xerj", "xerj-service", "lily2vec"]);
     state(|s| s.fail_import = true);
     run(pullbot::drain(b"pull codex\n"));
     state(|s| {

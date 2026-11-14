@@ -127,6 +127,8 @@ pub struct OscTitleFileStatus {
 
 pub struct State {
     #[cfg(target_os = "trueos")]
+    pub printing: crate::printing::PrintState,
+    #[cfg(target_os = "trueos")]
     pub font_size: crate::font_size::FontSize,
     #[cfg(target_os = "trueos")]
     pub shader_enabled: bool,
@@ -191,6 +193,8 @@ pub struct State {
 impl State {
     pub fn new() -> apperr::Result<Self> {
         Ok(Self {
+            #[cfg(target_os = "trueos")]
+            printing: Default::default(),
             #[cfg(target_os = "trueos")]
             font_size: Default::default(),
             #[cfg(target_os = "trueos")]

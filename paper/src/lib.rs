@@ -414,6 +414,22 @@ impl Editor {
             _ => {} // Enter deliberately has no action.
         }
     }
+    /// Physical document cell bounds, independent of display resolution.
+    pub fn bounds_mm(&self, index: usize, scale: u32) -> (f32, f32, f32, f32) {
+        let layout = Layout::new(Settings {
+            scale,
+            mode: self.mode,
+            sheet: self.sheet,
+            wrap: self.wrap,
+        });
+        (
+            layout.left + (index % self.columns) as f32 * layout.column_step,
+            layout.top + (index / self.columns) as f32 * layout.row_step,
+            layout.column_step,
+            layout.row_step,
+        )
+    }
+
     /// Pixel cell bounds aligned with the independently rendered grid lines.
     pub fn bounds(&self, index: usize, page: (u32, u32), scale: u32) -> (u32, u32, u32, u32) {
         let layout = Layout::new(Settings {

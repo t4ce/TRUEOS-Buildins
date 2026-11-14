@@ -1,6 +1,7 @@
 #![no_std]
 #![no_main]
 extern crate alloc;
+mod printing;
 use alloc::{format, vec, vec::Vec};
 use paper::Editor;
 use trueos::ui4_scene::{SpriteCorner, SpriteQuad};
@@ -65,6 +66,8 @@ fn run() -> Result<(), i32> {
     )
     .map_err(ui)?;
     frame.set_title("Paper").map_err(ui)?;
+    let print_menu = [ui4_scene::MenuEntry::new("Print A4", request_print)];
+    frame.register_context_menu(&print_menu).map_err(ui)?;
     let device = Device::open(Capabilities::DEFAULT.union(Capabilities::PRESENT))?;
     let result = (|| {
         let queue = device.create_queue(QueueClass::Render)?;
@@ -79,7 +82,11 @@ fn run() -> Result<(), i32> {
         let mut dirty = true;
         let mut visible = true;
         let mut blink = trueos::clock::Instant::now();
+        let mut print_requested = false;
+        let mut print_job = None;
+        let mut print_poll = trueos::clock::Instant::now();
         loop {
+            frame.pump_context_menu(&print_menu, &mut print_requested).map_err(ui)?;
             match frame.take_resize_event() {
                 Ok(Some(event)) => {
                     frame.resize(event.width, event.height).map_err(ui)?;
@@ -92,7 +99,9 @@ fn run() -> Result<(), i32> {
             let mut input = false;
             while let Some(event) = frame.take_keyboard_event().map_err(ui)? {
                 use trueos::input::*;
-                if event.kind == KEYBOARD_OUTPUT_KIND_TEXT {
+                if print_shortcut(&event) {
+                    print_requested = true;
+                } else if event.kind == KEYBOARD_OUTPUT_KIND_TEXT {
                     if let Some(ch) = char::from_u32(event.codepoint) {
                         editor.type_char(ch);
                         text_events += 1;
@@ -108,6 +117,41 @@ fn run() -> Result<(), i32> {
                             backspaces += 1;
                         }
                         input = true;
+                    }
+                }
+            }
+            if print_requested {
+                print_requested = false;
+                if print_job.is_none() {
+                    let _ = frame.set_title("Paper · Preparing A4 print");
+                    match printing::render_page(&editor, scale, glyph_pixels) {
+                        Ok(page) => match page.submit() {
+                            Ok(job) => {
+                                print_job = Some((job, Some(trueos::print2d::JobState::Queued)));
+                                print_poll = trueos::clock::Instant::now();
+                                print_status(&mut frame, job, "queued");
+                            }
+                            Err(error) => print_error(&mut frame, format!("submission: {error:?}")),
+                        },
+                        Err(error) => print_error(&mut frame, format!("page: {error:?}")),
+                    }
+                }
+            }
+            if print_poll.elapsed().as_millis() >= 250 {
+                print_poll = trueos::clock::Instant::now();
+                if let Some((job, last)) = print_job.as_mut() {
+                    match job.status() {
+                        Ok(state) => {
+                            if *last != Some(state) {
+                                print_status(&mut frame, *job, print_state(state));
+                                *last = Some(state);
+                            }
+                            if state.is_terminal() { print_job = None; }
+                        }
+                        Err(error) => {
+                            print_error(&mut frame, format!("status: {error:?}"));
+                            print_job = None;
+                        }
                     }
                 }
             }
@@ -165,6 +209,37 @@ fn run() -> Result<(), i32> {
     })();
     let close = device.close();
     result.and(close)
+}
+
+fn request_print(requested: &mut bool) { *requested = true; }
+
+fn print_shortcut(event: &trueos::input::TrueosKeyboardOutputEvent) -> bool {
+    event.kind == trueos::input::KEYBOARD_OUTPUT_KIND_TEXT
+        && event.modifiers & 0x11 != 0
+        && matches!(event.codepoint, 16 | 80 | 112)
+}
+
+fn print_status(frame: &mut Frame, job: trueos::print2d::JobId, state: &str) {
+    let _ = frame.set_title(&format!("Paper · Print {}: {state}", job.get()));
+    let _ = trueos::vshell::line(&format!("Paper: A4 print job={} {state}", job.get()));
+    trueos::logl::log(trueos::logl::level::INFO,
+        format_args!("Paper: A4 print job={} {state}", job.get()));
+}
+
+fn print_error(frame: &mut Frame, error: alloc::string::String) {
+    let _ = frame.set_title("Paper · A4 print failed");
+    let _ = trueos::vshell::line(&format!("Paper: A4 print failed: {error}"));
+    trueos::logl::log(trueos::logl::level::ERROR, format_args!("Paper: A4 print failed: {error}"));
+}
+
+fn print_state(state: trueos::print2d::JobState) -> &'static str {
+    use trueos::print2d::JobState::*;
+    match state {
+        Queued => "queued", WaitingForPrinter => "waiting for printer", Rendering => "rendering",
+        Connecting => "connecting", Sending => "sending", Submitted => "accepted by printer",
+        Printing => "printing", Completed => "completed", Failed => "failed", Canceled => "canceled",
+        OutcomeUnknown => "outcome unknown",
+    }
 }
 
 fn draw(

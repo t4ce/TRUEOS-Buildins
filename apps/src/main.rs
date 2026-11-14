@@ -141,14 +141,18 @@ async fn run() -> Result<Option<String>, String> {
 fn main() {
     // Consume the one-shot launch stream before any terminal/UI initialization.
     if let Ok(script) = trueos::async_fs::block_on(trueos::async_fs::read_file(b"vFile:launch")) {
-        match runtime::current_thread().build() {
+        let reason = match runtime::current_thread().build() {
             Ok(runtime) => {
-                LocalSet::new().block_on(&runtime, pullbot::drain(&script));
+                let reason = LocalSet::new().block_on(&runtime, pullbot::drain(&script));
                 runtime.shutdown_background();
+                reason
             }
-            Err(error) => pullbot::report(&format!("runtime failed: {error}")),
-        }
-        let _ = trueos::vshell::shutdown_current_blueprint("apps pullbot drained");
+            Err(error) => {
+                pullbot::report(&format!("runtime failed: {error}"));
+                "apps pullbot drained"
+            }
+        };
+        let _ = trueos::vshell::shutdown_current_blueprint(reason);
         return;
     }
     let terminal = match Terminal::enter() { Ok(t) => t, Err(e) => { error_output(&format!("{e}")); return; } };

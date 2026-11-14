@@ -1,5 +1,13 @@
 # UI4 image viewer
 
+Right-click an image frame and choose **Print A4**, or press **Ctrl+P**, to
+print that image on portrait DIN A4 at 300 dpi. The complete decoded source
+fits within 10 mm margins, preserves its aspect ratio, and is centered on
+white. Transparent pixels composite onto white. Screen zoom, pan, window
+size, and gallery neighbors do not affect the printed page. The frame title
+and terminal report queued, printer-accepted, completed, and failed outcomes.
+The empty gray placeholder cannot be printed.
+
 Launch `img` in Shell3, then enter `apps/common/images` or
 `show apps/common/images` on the selected img Matrix slot's prompt row. A native
 launchscript can supply the same image source rows. Bare path rows preserve
