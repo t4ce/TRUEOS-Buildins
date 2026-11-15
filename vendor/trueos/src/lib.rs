@@ -25,7 +25,6 @@ pub mod content_identity {
 pub use v::collections;
 pub use v::env;
 pub use v::varchive as archive;
-pub use v::vaudio as audio;
 pub use v::vclock as clock;
 pub use v::vfs_async as async_fs;
 pub use v::vgpu;
