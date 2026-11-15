@@ -202,26 +202,34 @@ fn missing_sqlite_fails_before_downloading_or_launching_codex() {
 }
 
 #[test]
-fn missing_xerj_fails_before_downloading_or_launching_codex() {
-    reset(&["codex", "sqlite", "xerj-service"]);
-    run(pullbot::drain(b"pull codex\n"));
-    state(|s| {
-        assert_eq!(
-            s.errors,
-            ["codex: required xerj.bp unavailable in app catalog"]
-        );
-        assert!(s.fetched.is_empty() && s.imports.is_empty() && s.launches.is_empty());
-    });
+fn codex_pull_succeeds_without_xerj_and_installs_neither_xerj_archive() {
+    for no_fs in [false, true] {
+        reset(&["codex", "sqlite", "lily2vec"]);
+        state(|s| s.no_fs = no_fs);
+        run(pullbot::drain(b"pull codex\n"));
+        state(|s| {
+            assert!(s.errors.is_empty(), "{:?}", s.errors);
+            assert_eq!(s.fetched, ["sqlite.bp", "lily2vec.bp", "codex.bp"]);
+            assert_eq!(s.imports, [if no_fs {
+                "sqlite.bp\nlily2vec.bp\ncodex.bp"
+            } else {
+                "common/dl/apps/sqlite.bp\ncommon/dl/apps/lily2vec.bp\ncommon/dl/apps/codex.bp"
+            }]);
+            assert_eq!(s.launches, [(if no_fs { "codex.bp" } else {
+                "common/dl/apps/codex.bp"
+            }.into(), String::new())]);
+        });
+    }
 }
 
 #[test]
-fn missing_xerj_service_fails_before_downloading_or_launching_codex() {
-    reset(&["codex", "sqlite", "xerj"]);
-    run(pullbot::drain(b"pull codex\n"));
+fn xerj_service_still_requires_its_engine_before_downloading_or_launching() {
+    reset(&["xerj-service"]);
+    run(pullbot::drain(b"pull xerj-service\n"));
     state(|s| {
         assert_eq!(
             s.errors,
-            ["codex: required xerj-service.bp unavailable in app catalog"]
+            ["xerj-service: required xerj.bp unavailable in app catalog"]
         );
         assert!(s.fetched.is_empty() && s.imports.is_empty() && s.launches.is_empty());
     });
@@ -229,7 +237,7 @@ fn missing_xerj_service_fails_before_downloading_or_launching_codex() {
 
 #[test]
 fn missing_lily_fails_before_downloading_or_launching_codex() {
-    reset(&["codex", "sqlite", "xerj", "xerj-service"]);
+    reset(&["codex", "sqlite"]);
     run(pullbot::drain(b"pull codex\n"));
     state(|s| {
         assert_eq!(s.errors, ["codex: required lily2vec.bp unavailable in app catalog"]);
@@ -250,8 +258,8 @@ fn lily_on_its_own_does_not_request_codex() {
 
 #[test]
 fn any_unavailable_member_reports_the_member_and_prevents_install_and_launch() {
-    for member in ["sqlite.bp", "xerj.bp", "xerj-service.bp", "lily2vec.bp", "codex.bp"] {
-        reset(&["codex", "sqlite", "xerj", "xerj-service", "lily2vec"]);
+    for member in ["sqlite.bp", "lily2vec.bp", "codex.bp"] {
+        reset(&["codex", "sqlite", "lily2vec"]);
         state(|s| s.fail_fetch = Some(member.into()));
         run(pullbot::drain(b"pull codex\n"));
         state(|s| {
@@ -274,12 +282,12 @@ fn bundle_installs_all_before_launching_only_codex_with_original_script() {
         assert!(s.errors.is_empty());
         assert_eq!(
             s.fetched,
-            ["sqlite.bp", "xerj.bp", "xerj-service.bp", "lily2vec.bp", "codex.bp"]
+            ["sqlite.bp", "lily2vec.bp", "codex.bp"]
         );
         assert_eq!(
             s.imports,
             [
-                "common/dl/apps/sqlite.bp\ncommon/dl/apps/xerj.bp\ncommon/dl/apps/xerj-service.bp\ncommon/dl/apps/lily2vec.bp\ncommon/dl/apps/codex.bp"
+                "common/dl/apps/sqlite.bp\ncommon/dl/apps/lily2vec.bp\ncommon/dl/apps/codex.bp"
             ]
         );
         assert_eq!(
@@ -291,10 +299,11 @@ fn bundle_installs_all_before_launching_only_codex_with_original_script() {
 
 #[test]
 fn install_only_imports_the_complete_bundle_without_launching() {
-    reset(&["codex", "sqlite", "xerj", "xerj-service", "lily2vec"]);
+    reset(&["codex", "sqlite", "lily2vec"]);
     run(pullbot::drain(b"install codex\n"));
     state(|s| {
-        assert_eq!(s.imports.len(), 1);
+        assert_eq!(s.fetched, ["sqlite.bp", "lily2vec.bp", "codex.bp"]);
+        assert_eq!(s.imports, ["common/dl/apps/sqlite.bp\ncommon/dl/apps/lily2vec.bp\ncommon/dl/apps/codex.bp"]);
         assert!(s.errors.is_empty() && s.launches.is_empty());
     });
 }
