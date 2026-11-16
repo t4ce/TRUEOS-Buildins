@@ -112,3 +112,13 @@ Button feedback:
   The dash timer sleeps when there is no hovered effect; a pressed-only effect
   has no animation wakeups. Kernel host checks live in
   TRUEOS/tools/testpy/test_ui4_button_outline.py and test_mouse_visual_cursors.py.
+
+Build-page layout bridge:
+- Explicit grid tracks accept lengths, percentages, fr, minmax, and bounded
+  numeric repeat counts. Named lines, automatic repeats, fit-content tracks,
+  and explicit item placement remain unsupported.
+- Geometry accepts calc arithmetic and min/max/clamp with percentages resolved
+  against the containing block, including nested containers. Font math is not
+  part of this patch; the existing 2x text policy and synthetic metrics remain.
+- Gap, align-items, justify-content and horizontal LTR margin-inline are mapped
+  to Taffy. Collapsible whitespace between Flex/Grid elements creates no item.

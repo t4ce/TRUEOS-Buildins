@@ -22,7 +22,7 @@ static-self = "0.1.2"
 hashbrown = { version = "0.17", default-features = false, features = ["default-hasher"] }
 num-traits = { version = "0.2.19", default-features = false, features = ["libm"] }
 trueos-runtime = { path = "../../TRUEOS/crates/trueos-runtime" }
-taffy = { version = "=0.15.0", path = "../vendor/taffy-0.15.0-trueos", default-features = false, features = ["alloc", "taffy_tree", "block_layout", "flexbox", "grid"] }
+taffy = { version = "=0.15.0", path = "../vendor/taffy-0.15.0-trueos", default-features = false, features = ["alloc", "taffy_tree", "block_layout", "flexbox", "grid", "calc"] }
 parcel_selectors = "0.28.3"
 cssparser = "0.37"
 serde_json = { version = "1", default-features = false, features = ["alloc"] }

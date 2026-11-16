@@ -229,6 +229,37 @@ mod tests {
         (doc, output)
     }
     #[test]
+    fn build_page_columns_and_math_use_the_containing_block() {
+        let (doc, json) = run(
+            r#"<main id="shell"><section id="hero">
+              <div></div>
+              <div id="diagram"></div>
+            </section>
+            <div id="builder">
+              <div id="form"><div id="cards"><div id="card"></div><div></div></div>
+            <div id="nested"></div></div>
+              <aside id="summary"></aside>
+            </div></main>"#,
+            "*{box-sizing:border-box}body{margin:0}
+             #shell{width:min(1240px,calc(100% - 88px));margin-inline:auto}
+             #hero{display:grid;grid-template-columns:1fr 370px;gap:80px}
+             #builder{display:grid;grid-template-columns:minmax(0,1fr) 350px;gap:40px}
+             #cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+             #nested{width:calc(100% - 20px);height:10px}",
+        );
+        let rect = |id| node(&doc, &json, id)["rect"].clone();
+        assert_eq!(rect("shell")["left"], 44.0);
+        assert_eq!(rect("shell")["width"], 1192.0);
+        assert_eq!(rect("diagram")["width"], 370.0);
+        assert_eq!(rect("diagram")["left"], 866.0);
+        assert_eq!(rect("form")["width"], 802.0);
+        assert_eq!(rect("summary")["width"], 350.0);
+        assert_eq!(rect("summary")["left"], 886.0);
+        assert_eq!(rect("card")["width"], 396.0);
+        assert_eq!(rect("nested")["width"], 782.0);
+    }
+
+    #[test]
     fn backgrounds_resolve_cascade_shorthand_currentcolor_and_do_not_inherit() {
         let (_, output) = export(
             r#"<div id="parent"><div id="child"></div></div>

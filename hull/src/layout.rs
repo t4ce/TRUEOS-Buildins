@@ -20,7 +20,7 @@ use lightningcss::values::length::{
 };
 use rp5::{Document, NodeId as HtmlId, NodeKind};
 use hashbrown::HashMap;
-use core::fmt::Write;
+use core::{fmt::Write, cell::RefCell};
 use taffy::prelude::*;
 
 #[derive(Debug)]
@@ -165,11 +165,13 @@ fn export(
         );
         phase_started = now;
     };
+    let calculations = RefCell::new(Vec::new());
     let match_dom = MatchDom::new(document);
     let cascade = CascadeIndex::new(
         css,
         ResolveContext {
             viewport,
+            calculations: Some(&calculations),
             font_size: INITIAL_FONT_SIZE,
             root_font_size: INITIAL_FONT_SIZE,
         },
@@ -251,6 +253,7 @@ fn export(
                 }
                 let context = ResolveContext {
                     viewport,
+                    calculations: Some(&calculations),
                     font_size: inherited.font_size,
                     root_font_size,
                 };
@@ -359,6 +362,15 @@ fn export(
                     style.justify_content = text_metrics[id].align.justify();
                 }
                 for &child in &node.children {
+                    // Flex/Grid do not create anonymous items for collapsible
+                    // whitespace between elements (e.g. pretty-printed HTML).
+                    if matches!(style.display, Display::Flex | Display::Grid)
+                        && !is_line_container
+                        && matches!(text_metrics[id].whitespace, WhiteSpaceMetric::Normal | WhiteSpaceMetric::NoWrap)
+                        && matches!(&document.nodes[child].kind, NodeKind::Text(text) if text.chars().all(|c| matches!(c, ' ' | '\n' | '\r' | '\t' | '\u{000c}')))
+                    {
+                        continue;
+                    }
                     if contents[id] || is_line_container {
                         children.extend(ids[child].iter().copied());
                     } else if style.display != Display::Block {
@@ -407,7 +419,12 @@ fn export(
     }
     phase("tree");
     let root = ids[document.root][0];
-    tree.compute_layout_with_measure(
+    let resolve_calc = |handle: *const (), basis: f32| {
+        let values = calculations.borrow();
+        let Some((value, viewport, font_size, root_font_size)) = (handle as usize / 8).checked_sub(1).and_then(|index| values.get(index)) else { return 0.0; };
+        math_length(value, ResolveContext { viewport: *viewport, font_size: *font_size, root_font_size: *root_font_size, calculations: None }, basis).unwrap_or(0.0)
+    };
+    tree.compute_layout_with_measure_and_calc(
         root,
         Size {
             width: AvailableSpace::Definite(viewport.0 as f32),
@@ -417,7 +434,7 @@ fn export(
             taffy::compute_leaf_layout(
                 inputs,
                 style,
-                |_, _| 0.0,
+                &resolve_calc,
                 |known_dimensions, available_space| {
                     let fallback = TextMetrics::default();
                     let (text, metrics) = context
@@ -456,6 +473,7 @@ fn export(
                 },
             )
         },
+        &resolve_calc,
     )?;
     phase("taffy");
     let mut fragments: Vec<Vec<BoxRect>> = vec![vec![]; document.nodes.len()];
@@ -693,7 +711,7 @@ fn export(
             }
         }
         serde_json::to_string_pretty(
-        &serde_json::json!({"engine":"taffy","engine_version":"0.15.0","viewport":{"width":viewport.0,"height":viewport.1},"units":"layout units; non-text CSS lengths map 1:1 for compatibility; SVG uses the same numeric coordinates","page_text_scale":PAGE_TEXT_SCALE,"default_font_size":DEFAULT_FONT_SIZE,"coordinates":"absolute layout units; right/bottom are rectangle edges, not CSS insets","text_metrics":"synthetic monospace cell metrics: advance is font-size * 6/11; normal line height equals font size; default font size is 22 layout units after page text scaling; no font shaping","limitations":["opacity:0 suppresses subtree paint and visibility is inherited; partial-opacity groups and compositing are not implemented","text widths and wrapping use synthetic monospace metrics; no font shaping","dynamic pseudo-classes, pseudo-elements, :has and namespace selectors are not implemented","media conditions cover viewport sizes and orientation; device preference queries, calc, grid tracks, cascade layers and supports conditions are not implemented","inline flow uses approximate flex line boxes; nested inline boxes may wrap as a single item; no complete browser default stylesheet"],"unsupported_rule_count":unsupported_rules,"properties_not_used_for_layout":unused,"nodes":rows}),
+        &serde_json::json!({"engine":"taffy","engine_version":"0.15.0","viewport":{"width":viewport.0,"height":viewport.1},"units":"layout units; non-text CSS lengths map 1:1 for compatibility; SVG uses the same numeric coordinates","page_text_scale":PAGE_TEXT_SCALE,"default_font_size":DEFAULT_FONT_SIZE,"coordinates":"absolute layout units; right/bottom are rectangle edges, not CSS insets","text_metrics":"synthetic monospace cell metrics: advance is font-size * 6/11; normal line height equals font size; default font size is 22 layout units after page text scaling; no font shaping","limitations":["opacity:0 suppresses subtree paint and visibility is inherited; partial-opacity groups and compositing are not implemented","text widths and wrapping use synthetic monospace metrics; no font shaping","dynamic pseudo-classes, pseudo-elements, :has and namespace selectors are not implemented","media conditions cover viewport sizes and orientation; device preference queries, named grid lines, automatic grid repetition, cascade layers and supports conditions are not implemented","inline flow uses approximate flex line boxes; nested inline boxes may wrap as a single item; no complete browser default stylesheet"],"unsupported_rule_count":unsupported_rules,"properties_not_used_for_layout":unused,"nodes":rows}),
     )?
     } else {
         String::new()
@@ -1266,7 +1284,8 @@ fn line_height(
 }
 
 #[derive(Clone, Copy)]
-struct ResolveContext {
+struct ResolveContext<'a> {
+    calculations: Option<&'a RefCell<Vec<(CssLengthPercentage, (u32, u32), f32, f32)>>>,
     viewport: (u32, u32),
     font_size: f32,
     root_font_size: f32,
@@ -1294,6 +1313,82 @@ fn scalar(value: &LengthValue, context: ResolveContext) -> Option<f32> {
         .is_finite()
         .then_some(result.clamp(-MAX_LAYOUT_LENGTH, MAX_LAYOUT_LENGTH))
 }
+// Resolve supported math against the containing block supplied by Taffy, not
+// the viewport. Integer handles index this layout's owned registry; no pointers
+// to CSS values escape and no handle is dereferenced.
+fn math_length(value: &CssLengthPercentage, context: ResolveContext, basis: f32) -> Option<f32> {
+    use lightningcss::values::calc::{Calc, MathFunction};
+    fn calc(value: &Calc<CssLengthPercentage>, context: ResolveContext, basis: f32) -> Option<f32> {
+        Some(match value {
+            Calc::Value(value) => math_length(value, context, basis)?,
+            Calc::Number(value) => *value,
+            Calc::Sum(a, b) => calc(a, context, basis)? + calc(b, context, basis)?,
+            Calc::Product(n, value) => n * calc(value, context, basis)?,
+            Calc::Function(value) => match &**value {
+                MathFunction::Calc(value) => calc(value, context, basis)?,
+                MathFunction::Min(values) => values.iter().try_fold(f32::INFINITY, |a, b| Some(a.min(calc(b, context, basis)?)))?,
+                MathFunction::Max(values) => values.iter().try_fold(f32::NEG_INFINITY, |a, b| Some(a.max(calc(b, context, basis)?)))?,
+                MathFunction::Clamp(a, b, c) => calc(a, context, basis)?.max(calc(b, context, basis)?.min(calc(c, context, basis)?)),
+                _ => return None,
+            },
+        })
+    }
+    let result = match value {
+        CssLengthPercentage::Dimension(value) => scalar(value, context)?,
+        CssLengthPercentage::Percentage(value) => basis * value.0,
+        CssLengthPercentage::Calc(value) => calc(value, context, basis)?,
+    };
+    result.is_finite().then_some(result.clamp(-MAX_LAYOUT_LENGTH, MAX_LAYOUT_LENGTH))
+}
+
+fn grid_tracks(value: &lightningcss::properties::grid::TrackSizing<'_>, context: ResolveContext) -> Option<Vec<taffy::style::GridTemplateComponent<String>>> {
+    use lightningcss::properties::grid::{TrackSizing, TrackListItem, TrackSize, TrackBreadth, RepeatCount};
+    use taffy::style_helpers::{minmax, repeat};
+    fn minimum(value: &TrackBreadth, context: ResolveContext) -> Option<MinTrackSizingFunction> {
+        Some(match value {
+            TrackBreadth::Length(value) => raw_length(value, context)?.into(),
+            TrackBreadth::Auto => MinTrackSizingFunction::AUTO,
+            TrackBreadth::MinContent => MinTrackSizingFunction::MIN_CONTENT,
+            TrackBreadth::MaxContent => MinTrackSizingFunction::MAX_CONTENT,
+            _ => return None,
+        })
+    }
+    fn maximum(value: &TrackBreadth, context: ResolveContext) -> Option<MaxTrackSizingFunction> {
+        Some(match value {
+            TrackBreadth::Length(value) => raw_length(value, context)?.into(),
+            TrackBreadth::Flex(value) => MaxTrackSizingFunction::from_fr(*value),
+            TrackBreadth::Auto => MaxTrackSizingFunction::AUTO,
+            TrackBreadth::MinContent => MaxTrackSizingFunction::MIN_CONTENT,
+            TrackBreadth::MaxContent => MaxTrackSizingFunction::MAX_CONTENT,
+        })
+    }
+    fn track(value: &TrackSize, context: ResolveContext) -> Option<TrackSizingFunction> {
+        Some(match value {
+            TrackSize::TrackBreadth(value) => minmax(if matches!(value, TrackBreadth::Flex(_)) { MinTrackSizingFunction::AUTO } else { minimum(value, context)? }, maximum(value, context)?),
+            TrackSize::MinMax { min, max } => minmax(minimum(min, context)?, maximum(max, context)?),
+            _ => return None,
+        })
+    }
+    let TrackSizing::TrackList(list) = value else { return Some(Vec::new()); };
+    // Named lines and automatic repetition are outside this small bridge.
+    if list.line_names.iter().any(|names| !names.is_empty()) { return None; }
+    list.items.iter().map(|item| Some(match item {
+        TrackListItem::TrackSize(value) => track(value, context)?.into(),
+        TrackListItem::TrackRepeat(value) => {
+            let RepeatCount::Number(count) = value.count else { return None; };
+            if !(1..=64).contains(&count) || value.line_names.iter().any(|names| !names.is_empty()) { return None; }
+            repeat(count as u16, value.track_sizes.iter().map(|value| track(value, context)).collect::<Option<Vec<_>>>()?)
+        }
+    })).collect()
+}
+
+fn gap(value: &lightningcss::properties::align::GapValue, context: ResolveContext) -> Option<taffy::style::LengthPercentage> {
+    match value {
+        lightningcss::properties::align::GapValue::Normal => Some(taffy::style::LengthPercentage::ZERO),
+        lightningcss::properties::align::GapValue::LengthPercentage(value) => raw_length(value, context),
+    }
+}
+
 fn raw_length(
     value: &CssLengthPercentage,
     context: ResolveContext,
@@ -1305,7 +1400,12 @@ fn raw_length(
         CssLengthPercentage::Percentage(value) => Some(
             taffy::style::LengthPercentage::from_percent(value.0.clamp(-16.0, 16.0)),
         ),
-        _ => None,
+        CssLengthPercentage::Calc(_) => {
+            math_length(value, context, 1.0)?;
+            let mut values = context.calculations?.borrow_mut();
+            values.push((value.clone(), context.viewport, context.font_size, context.root_font_size));
+            Some(taffy::style::LengthPercentage::calc((values.len() * 8) as *const ()))
+        }
     }
 }
 fn length(
@@ -1320,24 +1420,13 @@ fn length(
 fn auto(value: &LengthPercentageOrAuto, context: ResolveContext) -> Option<LengthPercentageAuto> {
     match value {
         LengthPercentageOrAuto::Auto => Some(LengthPercentageAuto::AUTO),
-        LengthPercentageOrAuto::LengthPercentage(CssLengthPercentage::Dimension(value)) => {
-            scalar(value, context).map(LengthPercentageAuto::from_length)
-        }
-        LengthPercentageOrAuto::LengthPercentage(CssLengthPercentage::Percentage(value)) => Some(
-            LengthPercentageAuto::from_percent(value.0.clamp(-16.0, 16.0)),
-        ),
-        _ => None,
+        LengthPercentageOrAuto::LengthPercentage(value) => raw_length(value, context).map(Into::into),
     }
 }
 fn dimension(value: &CssSize, context: ResolveContext) -> Option<Dimension> {
     match value {
         CssSize::Auto => Some(Dimension::AUTO),
-        CssSize::LengthPercentage(CssLengthPercentage::Dimension(value)) => {
-            scalar(value, context).map(Dimension::from_length)
-        }
-        CssSize::LengthPercentage(CssLengthPercentage::Percentage(value)) => {
-            Some(Dimension::from_percent(value.0.clamp(0.0, 16.0)))
-        }
+        CssSize::LengthPercentage(value) => raw_length(value, context).map(Into::into),
         _ => None,
     }
 }
@@ -1397,6 +1486,51 @@ fn apply_property(style: &mut Style, property: &Property<'_>, context: ResolveCo
         };
     }
     match property {
+        Property::AlignItems(value, _) => {
+            use lightningcss::properties::align::{AlignItems as A, SelfPosition as P};
+            style.align_items = match value {
+                A::Normal | A::Stretch => AlignItems::STRETCH,
+                A::SelfPosition { value, .. } => match value {
+                    P::Center => AlignItems::CENTER,
+                    P::Start | P::SelfStart => AlignItems::START,
+                    P::End | P::SelfEnd => AlignItems::END,
+                    P::FlexStart => AlignItems::FLEX_START,
+                    P::FlexEnd => AlignItems::FLEX_END,
+                },
+                _ => style.align_items,
+            };
+        },
+        Property::JustifyContent(value, _) => {
+            use lightningcss::properties::align::{JustifyContent as J, ContentPosition as P, ContentDistribution as D};
+            style.justify_content = match value {
+                J::ContentPosition { value, .. } => match value {
+                    P::Center => JustifyContent::CENTER,
+                    P::Start => JustifyContent::START,
+                    P::End => JustifyContent::END,
+                    P::FlexStart => JustifyContent::FLEX_START,
+                    P::FlexEnd => JustifyContent::FLEX_END,
+                },
+                J::ContentDistribution(D::SpaceBetween) => JustifyContent::SPACE_BETWEEN,
+                J::ContentDistribution(D::SpaceAround) => JustifyContent::SPACE_AROUND,
+                J::ContentDistribution(D::SpaceEvenly) => JustifyContent::SPACE_EVENLY,
+                _ => style.justify_content,
+            };
+        },
+        Property::GridTemplateColumns(value) => { if let Some(tracks) = grid_tracks(value, context) { style.grid_template_columns = tracks; } },
+        Property::GridTemplateRows(value) => { if let Some(tracks) = grid_tracks(value, context) { style.grid_template_rows = tracks; } },
+        Property::Gap(value) => {
+            set!(style.gap.width, &value.column, gap);
+            set!(style.gap.height, &value.row, gap);
+        },
+        Property::ColumnGap(value) => set!(style.gap.width, value, gap),
+        Property::RowGap(value) => set!(style.gap.height, value, gap),
+        // The page uses horizontal writing mode.
+        Property::MarginInline(value) => {
+            set!(style.margin.left, &value.inline_start, auto);
+            set!(style.margin.right, &value.inline_end, auto);
+        },
+        Property::MarginInlineStart(value) => set!(style.margin.left, value, auto),
+        Property::MarginInlineEnd(value) => set!(style.margin.right, value, auto),
         Property::AspectRatio(value) => {
             style.aspect_ratio = value
                 .ratio
@@ -2068,6 +2202,16 @@ fn used_for_layout(name: &str) -> bool {
             | "margin-right"
             | "margin-bottom"
             | "margin-left"
+            | "margin-inline"
+            | "margin-inline-start"
+            | "margin-inline-end"
+            | "grid-template-columns"
+            | "grid-template-rows"
+            | "gap"
+            | "row-gap"
+            | "column-gap"
+            | "align-items"
+            | "justify-content"
             | "padding"
             | "padding-top"
             | "padding-right"
@@ -2181,6 +2325,7 @@ mod cascade_index_tests {
         let index = CascadeIndex::new(
             &css,
             ResolveContext {
+                calculations: None,
                 viewport: (1280, 720),
                 font_size: 11.0,
                 root_font_size: 11.0,

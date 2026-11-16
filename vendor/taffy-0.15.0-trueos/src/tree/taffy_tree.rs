@@ -275,6 +275,7 @@ where
     pub(crate) taffy: &'t mut TaffyTree<NodeContext>,
     /// The context provided for passing to measure functions if layout is run over this struct
     pub(crate) measure_function: MeasureFunction,
+    calc_resolver: &'t dyn Fn(*const (), f32) -> f32,
 }
 
 impl<NodeContext, MeasureFunction> TaffyView<'_, NodeContext, MeasureFunction>
@@ -398,8 +399,8 @@ where
     }
 
     #[inline(always)]
-    fn resolve_calc_value(&self, _val: *const (), _basis: f32) -> f32 {
-        0.0
+    fn resolve_calc_value(&self, val: *const (), basis: f32) -> f32 {
+        (self.calc_resolver)(val, basis)
     }
 
     #[inline(always)]
@@ -973,8 +974,23 @@ impl<NodeContext> TaffyTree<NodeContext> {
     where
         MeasureFunction: FnMut(LayoutInput, NodeId, Option<&mut NodeContext>, &Style) -> LayoutOutput,
     {
+        self.compute_layout_with_measure_and_calc(node_id, available_space, measure_function, &|_, _| 0.0)
+    }
+
+    /// Compute layout with a caller-owned resolver for opaque calc handles.
+    /// Handles and resolver data must remain valid for the duration of this call.
+    pub fn compute_layout_with_measure_and_calc<MeasureFunction>(
+        &mut self,
+        node_id: NodeId,
+        available_space: Size<AvailableSpace>,
+        measure_function: MeasureFunction,
+        calc_resolver: &dyn Fn(*const (), f32) -> f32,
+    ) -> Result<(), TaffyError>
+    where
+        MeasureFunction: FnMut(LayoutInput, NodeId, Option<&mut NodeContext>, &Style) -> LayoutOutput,
+    {
         let use_rounding = self.config.use_rounding;
-        let mut taffy_view = TaffyView { taffy: self, measure_function };
+        let mut taffy_view = TaffyView { taffy: self, measure_function, calc_resolver };
         compute_root_layout(&mut taffy_view, node_id, available_space);
         if use_rounding {
             round_layout(&mut taffy_view, node_id);
@@ -1000,6 +1016,7 @@ impl<NodeContext> TaffyTree<NodeContext> {
     pub(crate) fn as_layout_tree(&mut self) -> impl LayoutPartialTree + CacheTree + '_ {
         TaffyView {
             taffy: self,
+            calc_resolver: &|_, _| 0.0,
             measure_function: |inputs, _, _, style| compute_leaf_layout(inputs, style, |_, _| 0.0, |_, _| Size::ZERO),
         }
     }
