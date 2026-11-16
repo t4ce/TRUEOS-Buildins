@@ -209,6 +209,7 @@ fn export(
         let mut metrics = inherited;
         // Background colors belong to the element; they are never inherited.
         metrics.background = [0; 4];
+        metrics.background_specified = false;
         metrics.border_color = [0, 0, 0, 255];
         metrics.border_radii = [[Radius::default(); 2]; 4];
         inline[id] = matches!(&node.kind, NodeKind::Text(_))
@@ -592,22 +593,27 @@ fn export(
     let mut rectangles = Vec::new();
     // HTML's root background paints the canvas. With a transparent root,
     // propagate the body's background instead, without painting it twice.
-    let canvas_node = ["html", "body"].into_iter().find_map(|name| {
+    let canvas_candidate = |name: &str, allow_transparent: bool| {
         (0..document.nodes.len()).find(|&id| {
             document.name(id) == name
                 && !hidden[id]
                 && !contents[id]
                 && text_metrics[id].paints()
-                && text_metrics[id].background[3] != 0
+                && (text_metrics[id].background[3] != 0
+                    || (allow_transparent && text_metrics[id].background_specified))
         })
-    });
-    let [r, g, b, a] = canvas_node
+    };
+    let canvas_node = ["html", "body"].into_iter()
+        .find_map(|name| canvas_candidate(name, false))
+        .or_else(|| ["html", "body"].into_iter()
+            .find_map(|name| canvas_candidate(name, true)));
+    // Keep unstyled pages white, but preserve authored straight-alpha colors.
+    // UI4 clears the leased frame to transparent and composites the canvas;
+    // flattening onto white here would permanently discard desktop transparency.
+    let canvas_color = canvas_node
         .map(|id| text_metrics[id].background)
-        .unwrap_or([0; 4]);
-    let [r, g, b] = [r, g, b].map(|value| {
-        ((u32::from(value) * u32::from(a) + 255 * (255 - u32::from(a)) + 127) / 255) as u8
-    });
-    let canvas_color = [r, g, b, 255];
+        .unwrap_or([255; 4]);
+    let [r, g, b, a] = canvas_color;
     let mut background_quads = Vec::new();
     let mut border_quads = Vec::new();
     let mut button_boxes = Vec::new();
@@ -711,15 +717,15 @@ fn export(
             }
         }
         serde_json::to_string_pretty(
-        &serde_json::json!({"engine":"taffy","engine_version":"0.15.0","viewport":{"width":viewport.0,"height":viewport.1},"units":"layout units; non-text CSS lengths map 1:1 for compatibility; SVG uses the same numeric coordinates","page_text_scale":PAGE_TEXT_SCALE,"default_font_size":DEFAULT_FONT_SIZE,"coordinates":"absolute layout units; right/bottom are rectangle edges, not CSS insets","text_metrics":"synthetic monospace cell metrics: advance is font-size * 6/11; normal line height equals font size; default font size is 22 layout units after page text scaling; no font shaping","limitations":["opacity:0 suppresses subtree paint and visibility is inherited; partial-opacity groups and compositing are not implemented","text widths and wrapping use synthetic monospace metrics; no font shaping","dynamic pseudo-classes, pseudo-elements, :has and namespace selectors are not implemented","media conditions cover viewport sizes and orientation; device preference queries, named grid lines, automatic grid repetition, cascade layers and supports conditions are not implemented","inline flow uses approximate flex line boxes; nested inline boxes may wrap as a single item; no complete browser default stylesheet"],"unsupported_rule_count":unsupported_rules,"properties_not_used_for_layout":unused,"nodes":rows}),
+        &serde_json::json!({"engine":"taffy","engine_version":"0.15.0","viewport":{"width":viewport.0,"height":viewport.1},"units":"layout units; non-text CSS lengths map 1:1 for compatibility; SVG uses the same numeric coordinates","page_text_scale":PAGE_TEXT_SCALE,"canvas_color":canvas_color,"default_font_size":DEFAULT_FONT_SIZE,"coordinates":"absolute layout units; right/bottom are rectangle edges, not CSS insets","text_metrics":"synthetic monospace cell metrics: advance is font-size * 6/11; normal line height equals font size; default font size is 22 layout units after page text scaling; no font shaping","limitations":["opacity:0 suppresses subtree paint and visibility is inherited; partial-opacity groups and compositing are not implemented","text widths and wrapping use synthetic monospace metrics; no font shaping","dynamic pseudo-classes, pseudo-elements, :has and namespace selectors are not implemented","media conditions cover viewport sizes and orientation; device preference queries, named grid lines, automatic grid repetition, cascade layers and supports conditions are not implemented","inline flow uses approximate flex line boxes; nested inline boxes may wrap as a single item; no complete browser default stylesheet"],"unsupported_rule_count":unsupported_rules,"properties_not_used_for_layout":unused,"nodes":rows}),
     )?
     } else {
         String::new()
     };
     let extent = project_extent(tree.layout(root)?.size.height).max(viewport.1 as f32);
     let mut svg = format!(
-        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{}\" height=\"{}\" viewBox=\"0 0 {} {}\"><rect width=\"100%\" height=\"100%\" fill=\"#{r:02x}{g:02x}{b:02x}\"/>",
-        viewport.0, extent, viewport.0, extent
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{}\" height=\"{}\" viewBox=\"0 0 {} {}\"><rect width=\"100%\" height=\"100%\" fill=\"#{r:02x}{g:02x}{b:02x}\" fill-opacity=\"{}\"/>",
+        viewport.0, extent, viewport.0, extent, f32::from(a) / 255.0
     );
     let line_rects = rectangles
         .iter()
@@ -879,6 +885,7 @@ struct TextMetrics {
     whitespace: WhiteSpaceMetric,
     color: [u8; 4],
     background: [u8; 4],
+    background_specified: bool,
     border_color: [u8; 4],
     border_radii: [[Radius; 2]; 4],
     // Zero opacity suppresses the whole subtree. Visibility is inherited but
@@ -918,6 +925,7 @@ impl Default for TextMetrics {
             whitespace: WhiteSpaceMetric::Normal,
             color: [0, 0, 0, 255],
             background: [0; 4],
+            background_specified: false,
             border_color: [0, 0, 0, 255],
             border_radii: [[Radius::default(); 2]; 4],
             opacity_zero: false,
@@ -1097,8 +1105,10 @@ fn apply_css<'a>(
         use lightningcss::values::color::CssColor;
         if matches!(value, CssColor::CurrentColor) {
             text_metrics.background = text_metrics.color;
+            text_metrics.background_specified = true;
         } else if let Ok(CssColor::RGBA(value)) = value.to_rgb() {
             text_metrics.background = [value.red, value.green, value.blue, value.alpha];
+            text_metrics.background_specified = true;
         }
     }
     if let Some(value) = border_color_winner {

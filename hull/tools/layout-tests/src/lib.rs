@@ -443,7 +443,9 @@ mod tests {
             "<body></body>",
             "body {background:red;background:var(--missing)}",
         );
-        assert_eq!(output.canvas_color, [255; 4]);
+        // An invalid winning declaration computes to transparent, without
+        // revealing the earlier red declaration or flattening onto white.
+        assert_eq!(output.canvas_color, [0; 4]);
         let (_, output) = export(
             "<body style='--bg:initial'></body>",
             "html {--bg:red} body {background:var(--bg,blue)}",
@@ -452,9 +454,10 @@ mod tests {
     }
 
     #[test]
-    fn canvas_alpha_is_composited_once_and_root_background_precedes_body() {
+    fn canvas_alpha_survives_and_root_background_precedes_body() {
         let (_, output) = export("<body>short</body>", "body {background:rgba(0,0,0,.5)}");
-        assert_eq!(output.canvas_color, [127, 127, 127, 255]);
+        assert_eq!(output.canvas_color, [0, 0, 0, 128]);
+        assert!(output.svg.contains("fill-opacity=\"0.5019608\""));
         assert!(output.background_quads.is_empty());
         let (_, output) = export(
             "<body>short</body>",
@@ -463,6 +466,25 @@ mod tests {
         assert_eq!(output.canvas_color, [255, 0, 0, 255]);
         assert_eq!(output.background_quads.len(), 1);
         assert_eq!(output.background_quads[0].color, [0, 0, 255, 255]);
+    }
+
+    #[test]
+    fn transparent_canvas_and_opaque_children_keep_independent_alpha() {
+        let (_, output) = export(
+            "<body><div>Readable</div></body>",
+            "body {background:rgba(237,242,240,.5);color:#223c36} div {background:white}",
+        );
+        assert_eq!(output.canvas_color, [237, 242, 240, 128]);
+        assert_eq!(output.background_quads.len(), 1);
+        assert_eq!(output.background_quads[0].color, [255; 4]);
+        assert!(output.text_runs.iter().all(|run| run.color == [34, 60, 54, 255]));
+        let (_, output) = export("<body>Clear</body>", "body {background:transparent}");
+        assert_eq!(output.canvas_color, [0; 4]);
+        let (_, output) = export("<body>Default</body>", "");
+        assert_eq!(output.canvas_color, [255; 4]);
+        let (_, output) = export("<body>Propagated</body>",
+            "html {background:transparent} body {background:rgba(0,0,255,.5)}");
+        assert_eq!(output.canvas_color, [0, 0, 255, 128]);
     }
 
     #[test]
@@ -1421,12 +1443,13 @@ pub mod ui4_winit {
         pub cancel_on_sprite_error: bool,
         pub sprite_calls: usize,
         pub gpu_frame: bool,
+        pub clear_color: Option<u32>,
     }
     impl SceneTarget {
         pub fn render_target(&self) -> u32 {
             1
         }
-        pub fn begin(&mut self, _: u32) -> Result<(), Error> {
+        pub fn begin(&mut self, clear: u32) -> Result<(), Error> {
             if self.quarantined {
                 return Err(Error::Busy);
             }
@@ -1434,6 +1457,7 @@ pub mod ui4_winit {
                 return Err(Error::InvalidState);
             }
             self.lease = true;
+            self.clear_color = Some(clear);
             Ok(())
         }
         pub fn begin_gpu_frame(&mut self) -> Result<(), Error> {

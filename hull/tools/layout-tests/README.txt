@@ -79,7 +79,7 @@ Custom properties and canvas:
   nested fallbacks are supported, and cyclic definitions become invalid.
   Resolution is bounded to 32 dependency/nesting levels and 8192 tokens per value.
 - The html background paints the page canvas. A transparent html background
-  propagates the body background instead. Its alpha composites over white once;
+  propagates the body background instead. Its alpha is preserved for UI4;
   the propagated element does not paint a duplicate background over itself.
 - Live actualBgQuad painting and the SVG canvas use the same resolved color.
 
@@ -122,3 +122,14 @@ Build-page layout bridge:
   part of this patch; the existing 2x text policy and synthetic metrics remain.
 - Gap, align-items, justify-content and horizontal LTR margin-inline are mapped
   to Taffy. Collapsible whitespace between Flex/Grid elements creates no item.
+
+Page background alpha:
+- Authored root/body RGBA backgrounds keep their alpha through layout and the
+  GPU canvas pass. Body backgrounds propagate to the canvas once; they are not
+  blended a second time over the body rectangle.
+- The GPU frame begins with transparent pixels. UI4 composes the resulting
+  per-pixel alpha over the desktop; no window-wide opacity change is needed.
+  Text, icons, and opaque child panels keep their own opacity.
+- Unstyled pages retain the white fallback. Explicit transparent backgrounds
+  produce a transparent canvas. The diagnostic SVG and layout.json canvas_color
+  preserve the same alpha as the native paint commands.

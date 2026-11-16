@@ -119,6 +119,21 @@ mod tests {
     }
 
     #[test]
+    fn translucent_canvas_uses_transparent_lease_clear_and_source_over() {
+        let mut viewport = Viewport::default();
+        viewport.resize(100, 50);
+        let mut target = SceneTarget::default();
+        draw(&[BackgroundQuad { rect: [5.0, 5.0, 20.0, 20.0], color: [255; 4] }],
+            [237, 242, 240, 128], &viewport, &mut target).unwrap();
+        assert_eq!(target.clear_color, Some(0));
+        assert!(target.gpu_frame);
+        assert_eq!(target.draws.len(), 2);
+        assert_eq!(target.draws[0].color_rgba, u32::from_le_bytes([237, 242, 240, 128]));
+        assert!(target.draws[0].source_over);
+        assert_eq!(target.draws[1].color_rgba, u32::MAX);
+    }
+
+    #[test]
     fn clips_backgrounds_and_preserves_alpha_and_paint_order() {
         let mut viewport = Viewport::default();
         viewport.resize(100, 50);

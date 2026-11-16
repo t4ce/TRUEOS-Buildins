@@ -855,6 +855,12 @@ impl ApplicationHandler for Hull {
             }
             WindowEvent::KeyboardInput { event, .. } if event.state == ElementState::Pressed => {
                 let changed = match &event.logical_key {
+                    Key::Named(NamedKey::Escape) => {
+                        // Winit delivers Escape to the app instead of applying
+                        // UI4's default close. Exit through normal Drop cleanup.
+                        event_loop.exit();
+                        return;
+                    }
                     Key::Named(NamedKey::F5) => {
                         if !self.page_url.is_empty() { self.start_page(self.page_url.clone()); }
                         false
