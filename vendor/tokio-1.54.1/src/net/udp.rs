@@ -170,6 +170,15 @@ impl UdpSocket {
         }))
     }
 
+    /// Binds a UDP socket to an already resolved address and registers it with
+    /// the current Tokio I/O driver, without performing address resolution.
+    ///
+    /// A port of zero requests an OS-assigned port; use [`Self::local_addr`] to
+    /// retrieve it. Returns an error if binding or driver registration fails.
+    ///
+    /// # Panics
+    ///
+    /// Panics if called outside a Tokio runtime with I/O enabled.
     pub fn bind_addr(addr: SocketAddr) -> io::Result<UdpSocket> {
         let sys = mio::net::UdpSocket::bind(addr)?;
         UdpSocket::new(sys)

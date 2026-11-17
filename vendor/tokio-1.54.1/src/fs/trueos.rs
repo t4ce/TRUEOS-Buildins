@@ -22,6 +22,7 @@ const UNSUPPORTED: io::ErrorKind = io::ErrorKind::Other;
 #[cfg(not(feature = "native"))]
 const UNSUPPORTED: io::ErrorKind = io::ErrorKind::Unsupported;
 
+/// The kind of a TRUEOSFS entry, such as a file or directory.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct FileType {
     is_file: bool,
@@ -30,14 +31,17 @@ pub struct FileType {
 }
 
 impl FileType {
+    /// Returns whether this entry is a directory.
     pub fn is_dir(&self) -> bool {
         self.is_dir
     }
 
+    /// Returns whether this entry is a regular file.
     pub fn is_file(&self) -> bool {
         self.is_file
     }
 
+    /// Returns `false`: TRUEOSFS does not support symbolic links.
     pub fn is_symlink(&self) -> bool {
         self.is_symlink
     }
@@ -58,15 +62,18 @@ pub struct Permissions {
 
 #[cfg(any(feature = "native", not(target_os = "trueos")))]
 impl Permissions {
+    /// Returns the read-only compatibility hint, not the entry's access authority.
     pub fn readonly(&self) -> bool {
         self.readonly
     }
 
+    /// Sets the read-only compatibility hint without changing TRUEOSFS access keys.
     pub fn set_readonly(&mut self, readonly: bool) {
         self.readonly = readonly;
     }
 }
 
+/// A snapshot of a TRUEOSFS entry's identity, revision, type, and size.
 #[derive(Clone, Debug)]
 pub struct Metadata {
     revision: u64,
@@ -129,37 +136,50 @@ impl Metadata {
 
     /// Stable within its root across writes and renames; None for uncommitted files.
     pub fn file_id(&self) -> Option<u64> { (self.file_id != 0).then_some(self.file_id) }
+    /// Returns the entry's TRUEOSFS root identifier, or zero when unavailable.
     pub fn root_id(&self) -> u32 { self.root_id }
     /// Committed record revision; this is not wall-clock time.
     pub fn revision(&self) -> Option<u64> { (self.revision != 0).then_some(self.revision) }
+    /// Returns the root identifier as a Unix-compatible device identifier.
     pub fn dev(&self) -> u64 { u64::from(self.root_id) }
+    /// Returns the file identifier as a Unix-compatible inode number, or zero when unavailable.
     pub fn ino(&self) -> u64 { self.file_id }
     /// Logical revision encoded in Unix time slots; not calendar time.
     pub fn ctime(&self) -> i64 { (self.revision / 1_000_000_000) as i64 }
+    /// Returns the logical revision modulo one billion for the Unix nanosecond slot.
+    /// This value does not represent calendar time.
     pub fn ctime_nsec(&self) -> i64 { (self.revision % 1_000_000_000) as i64 }
+    /// Returns an error because TRUEOSFS does not record creation time.
     pub fn created(&self) -> io::Result<FileTimestamp> {
         Err(io::Error::new(UNSUPPORTED, "TRUEOSFS creation time is not recorded"))
     }
+    /// Returns the entry's file type.
     pub fn file_type(&self) -> FileType {
         self.file_type
     }
 
+    /// Returns whether this entry is a directory.
     pub fn is_dir(&self) -> bool {
         self.file_type.is_dir()
     }
 
+    /// Returns whether this entry is a regular file.
     pub fn is_file(&self) -> bool {
         self.file_type.is_file()
     }
 
+    /// Returns `false`: TRUEOSFS does not support symbolic links.
     pub fn is_symlink(&self) -> bool {
         self.file_type.is_symlink()
     }
 
+    /// Returns the entry's length in bytes.
     pub fn len(&self) -> u64 {
         self.len
     }
 
+    /// Returns a copy of the entry's compatibility permissions.
+    /// TRUEOSFS access keys determine whether I/O is authorized.
     pub fn permissions(&self) -> Permissions {
         self.permissions.clone()
     }
