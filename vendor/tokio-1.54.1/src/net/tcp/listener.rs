@@ -2,6 +2,7 @@
 use crate::alloc_prelude::*;
 use crate::io::{Interest, PollEvented};
 use crate::net::tcp::TcpStream;
+#[cfg(not(any(feature = "native", all(any(target_os = "trueos", target_os = "zkvm"), feature = "native-net"))))]
 use crate::util::check_socket_for_blocking;
 
 cfg_not_wasip1! {

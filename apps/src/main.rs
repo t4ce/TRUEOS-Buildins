@@ -11,7 +11,7 @@ mod bundle;
 mod view;
 mod fetched;
 use view::{View, visible};
-use crossterm::io::{self, Write};
+use crossterm::io;
 use core::time::Duration;
 use crossterm::{execute, cursor::{Hide, Show}, style::{Color, ResetColor}, terminal::{self, EnterAlternateScreen, LeaveAlternateScreen, DisableLineWrap, EnableLineWrap}, event::{self, Event, KeyCode, KeyEventKind, KeyModifiers, EnableMouseCapture, DisableMouseCapture, MouseButton, MouseEventKind}};
 use trueos::{runtime, task::LocalSet};

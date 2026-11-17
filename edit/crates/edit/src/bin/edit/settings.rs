@@ -5,9 +5,14 @@ use stdext::platform::path::PathBuf;
 
 use edit::buffer::TextBuffer;
 use edit::cell::{Ref, SemiRefCell};
+#[cfg(not(target_os = "trueos"))]
 use edit::json;
-use edit::lsh::{LANGUAGES, Language};
+use edit::lsh::Language;
+#[cfg(not(target_os = "trueos"))]
+use edit::lsh::LANGUAGES;
+#[cfg(not(target_os = "trueos"))]
 use stdext::arena::{read_to_string, scratch_arena};
+#[cfg(not(target_os = "trueos"))]
 use stdext::arena_format;
 
 use crate::apperr;

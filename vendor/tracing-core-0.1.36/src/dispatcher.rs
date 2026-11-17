@@ -125,9 +125,14 @@
 
 use core::ptr::addr_of;
 
+#[cfg(not(any(target_os = "trueos", trueos_tracing_test)))]
+use crate::callsite;
+#[cfg(any(test, not(any(target_os = "trueos", trueos_tracing_test))))]
+use crate::subscriber::NoSubscriber;
+
 use crate::{
-    callsite, span,
-    subscriber::{self, NoSubscriber, Subscriber},
+    span,
+    subscriber::{self, Subscriber},
     Event, LevelFilter, Metadata,
 };
 

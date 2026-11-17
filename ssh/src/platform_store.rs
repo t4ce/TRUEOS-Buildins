@@ -1,5 +1,7 @@
 use crate::storage::{Snapshot, Store, StoreError};
-use alloc::{format, string::ToString};
+use alloc::format;
+#[cfg(not(target_os = "trueos"))]
+use alloc::string::ToString;
 use zeroize::Zeroizing;
 pub struct NativeStore;
 const MAX_CONFIG_BYTES: u64 = 16 * 1024 * 1024;

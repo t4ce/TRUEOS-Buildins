@@ -13,7 +13,9 @@ use stdext::platform::ops::Range;
 use stdext::platform::ptr::{null, null_mut};
 #[cfg(not(target_os = "trueos"))]
 use stdext::platform::sync::OnceLock;
-use stdext::platform::{fmt, mem};
+use stdext::platform::fmt;
+#[cfg(not(target_os = "trueos"))]
+use stdext::platform::mem;
 
 use stdext::arena::{Arena, scratch_arena};
 use stdext::arena_format;
@@ -21,6 +23,7 @@ use stdext::collections::{BString, BVec};
 use stdext::unicode::Utf8Chars;
 
 use crate::buffer::TextBuffer;
+#[cfg(not(target_os = "trueos"))]
 use crate::sys;
 
 pub(crate) const ILLEGAL_ARGUMENT_ERROR: Error = Error(1); // U_ILLEGAL_ARGUMENT_ERROR

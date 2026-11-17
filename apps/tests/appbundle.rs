@@ -204,7 +204,7 @@ fn missing_sqlite_fails_before_downloading_or_launching_codex() {
 #[test]
 fn codex_pull_succeeds_without_xerj_and_installs_neither_xerj_archive() {
     for no_fs in [false, true] {
-        reset(&["codex", "sqlite", "lily2vec", "ptts", "ttstt"]);
+        reset(&["codex", "sqlite", "lily2vec", "ptts"]);
         state(|s| s.no_fs = no_fs);
         run(pullbot::drain(b"pull codex\n"));
         state(|s| {
@@ -247,7 +247,7 @@ fn missing_lily_fails_before_downloading_or_launching_codex() {
 
 #[test]
 fn missing_ptts_fails_before_downloading_or_launching_codex() {
-    reset(&["codex", "sqlite", "lily2vec", "ttstt"]);
+    reset(&["codex", "sqlite", "lily2vec"]);
     run(pullbot::drain(b"pull codex\n"));
     state(|s| {
         assert_eq!(s.errors, ["codex: required ptts.bp unavailable in app catalog"]);
@@ -256,16 +256,14 @@ fn missing_ptts_fails_before_downloading_or_launching_codex() {
 }
 
 #[test]
-fn speech_sidekicks_on_their_own_do_not_request_codex_or_xerj() {
-    for name in ["ptts", "ttstt"] {
-        reset(&[name]);
-        run(pullbot::drain(format!("install {name}\n").as_bytes()));
-        state(|s| {
-            assert_eq!(s.fetched, [format!("{name}.bp")]);
-            assert_eq!(s.imports, [format!("common/dl/apps/{name}.bp")]);
-            assert!(s.errors.is_empty() && s.launches.is_empty());
-        });
-    }
+fn ptts_on_its_own_does_not_request_codex_or_xerj() {
+    reset(&["ptts"]);
+    run(pullbot::drain(b"install ptts\n"));
+    state(|s| {
+        assert_eq!(s.fetched, ["ptts.bp"]);
+        assert_eq!(s.imports, ["common/dl/apps/ptts.bp"]);
+        assert!(s.errors.is_empty() && s.launches.is_empty());
+    });
 }
 
 #[test]

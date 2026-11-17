@@ -2,6 +2,7 @@
 use crate::alloc_prelude::*;
 use crate::io::{Interest, PollEvented, ReadBuf, Ready};
 use crate::net::{to_socket_addrs, ToSocketAddrs};
+#[cfg(not(any(feature = "native", all(any(target_os = "trueos", target_os = "zkvm"), feature = "native-net"))))]
 use crate::util::check_socket_for_blocking;
 
 use ::core::fmt;
@@ -2244,7 +2245,7 @@ impl UdpSocket {
         #[cfg(not(any(feature="native", all(any(target_os = "trueos", target_os = "zkvm"), feature = "native-net"))))]
         {self.as_socket().set_tos_v4(tos)}
         #[cfg(any(feature="native", all(any(target_os = "trueos", target_os = "zkvm"), feature = "native-net")))]
-        {Err(io::Error::new(io::ErrorKind::Other,"native transport does not support IPv4 TOS"))}
+        {let _ = tos; Err(io::Error::new(io::ErrorKind::Other,"native transport does not support IPv4 TOS"))}
     }
 
     /// Deprecated. Use [`set_tos_v4()`] instead.

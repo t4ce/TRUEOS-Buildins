@@ -12,6 +12,7 @@ use crate::io::{AsyncRead, AsyncSeek, AsyncWrite, ReadBuf};
 use crate::sync::Mutex;
 
 use alloc::sync::Arc;
+#[cfg(not(any(feature = "native", target_os = "trueos", target_os = "zkvm")))]
 use ::core::cmp;
 use ::core::fmt;
 use ::core::future::Future;
@@ -23,6 +24,7 @@ use crate::fs::trueos::{Metadata, Permissions};
 use std::fs::{Metadata, Permissions};
 use crate::io::{self, SeekFrom};
 use crate::path::Path;
+#[cfg(not(any(feature = "native", target_os = "trueos", target_os = "zkvm")))]
 use crate::platform::io::Seek;
 
 #[cfg(not(test))]

@@ -11,7 +11,9 @@
 use crate::error::PrinterErrorKind;
 use crate::properties::css_modules::{Composes, Specifier};
 use crate::selector::SelectorList;
-use data_encoding::{Encoding, Specification};
+use data_encoding::Specification;
+#[cfg(not(all(feature = "trueos-native", target_os = "trueos")))]
+use data_encoding::Encoding;
 #[cfg(not(all(feature = "trueos-native", target_os = "trueos")))]
 use lazy_static::lazy_static;
 #[cfg(not(all(feature = "trueos-native", target_os = "trueos")))]

@@ -6,6 +6,7 @@
 #[allow(unused_imports)]
 use stdext::platform::prelude::*;
 
+#[cfg(not(target_os = "trueos"))]
 use stdext::platform::ffi::OsString;
 use stdext::platform::mem;
 use stdext::platform::ops::Range;

@@ -1,5 +1,7 @@
 //! Download storage adapters with explicit durable-prefix accounting.
+#[cfg(not(target_os = "trueos"))]
 use crate::path::Path;
+#[cfg(not(target_os = "trueos"))]
 use alloc::{
     string::{String, ToString},
     vec::Vec,

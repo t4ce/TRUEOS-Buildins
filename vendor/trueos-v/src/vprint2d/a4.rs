@@ -5,7 +5,7 @@
 
 extern crate alloc;
 use super::{Error, JobId};
-use alloc::{format, vec, vec::Vec};
+use alloc::{format, vec::Vec};
 
 pub const DPI: u32 = 300;
 pub const WIDTH: u32 = 2480;

@@ -1,6 +1,6 @@
 //! Native filesystem identity and launch preferences; no descriptor or loader ABI.
 
-use stdext::platform::{fs::{self, File}, io, path::Path, prelude::*};
+use stdext::platform::{fs::{self, File}, io, path::Path};
 use stdext::{arena::Arena, collections::{BString, BVec}};
 
 #[derive(Clone, PartialEq, Eq)]

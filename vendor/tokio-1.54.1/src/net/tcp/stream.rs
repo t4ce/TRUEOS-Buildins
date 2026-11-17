@@ -12,6 +12,7 @@ cfg_not_wasip1! {
 use crate::io::{AsyncRead, AsyncWrite, Interest, PollEvented, ReadBuf, Ready};
 use crate::net::tcp::split::{split, ReadHalf, WriteHalf};
 use crate::net::tcp::split_owned::{split_owned, OwnedReadHalf, OwnedWriteHalf};
+#[cfg(not(any(feature = "native", all(any(target_os = "trueos", target_os = "zkvm"), feature = "native-net"))))]
 use crate::util::check_socket_for_blocking;
 
 use ::core::fmt;
@@ -753,6 +754,7 @@ impl TcpStream {
     /// }
     /// ```
     pub fn try_read_vectored(&self, bufs: &mut [io::IoSliceMut<'_>]) -> io::Result<usize> {
+        #[cfg(not(any(feature = "native", all(any(target_os = "trueos", target_os = "zkvm"), feature = "native-net"))))]
         use crate::platform::io::Read;
 
         self.io
@@ -1034,6 +1036,7 @@ impl TcpStream {
     /// }
     /// ```
     pub fn try_write_vectored(&self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize> {
+        #[cfg(not(any(feature = "native", all(any(target_os = "trueos", target_os = "zkvm"), feature = "native-net"))))]
         use crate::platform::io::Write;
 
         self.io

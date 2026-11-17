@@ -2,6 +2,7 @@
 use crate::alloc_prelude::*;
 #[cfg(not(any(feature = "native", target_os = "trueos", target_os = "zkvm")))]
 use crate::{fs::asyncify, util::as_ref::OwnedBuf};
+#[cfg(not(any(feature = "native", target_os = "trueos", target_os = "zkvm")))]
 use alloc::borrow::ToOwned;
 
 use crate::io;

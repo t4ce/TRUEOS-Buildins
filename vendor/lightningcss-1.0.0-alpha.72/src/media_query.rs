@@ -20,7 +20,7 @@ use crate::vendor_prefix::VendorPrefix;
 use crate::visitor::Visit;
 use bitflags::bitflags;
 use cssparser::*;
-#[cfg(feature = "into_owned")]
+#[cfg(feature = "serde")]
 use static_self::IntoOwned;
 use alloc::borrow::Cow;
 use crate::collections::{HashMap, HashSet};

@@ -15,6 +15,8 @@ pub async fn read_link(path: impl AsRef<Path>) -> io::Result<PathBuf> {
     #[cfg(not(any(feature = "native", target_os = "trueos", target_os = "zkvm")))]
     let path = path.as_ref().to_owned();
     #[cfg(any(feature = "native", target_os = "trueos", target_os = "zkvm"))]
+    let _ = &path;
+    #[cfg(any(feature = "native", target_os = "trueos", target_os = "zkvm"))]
     return Err(io::Error::new(
         io::ErrorKind::Other,
         "TRUEOS fs read_link is not exposed through CABI yet",

@@ -48,6 +48,8 @@ pub async fn hard_link(original: impl AsRef<Path>, link: impl AsRef<Path>) -> io
     let link = link.as_ref().to_owned();
 
     #[cfg(any(feature = "native", target_os = "trueos", target_os = "zkvm"))]
+    let _ = (&original, &link);
+    #[cfg(any(feature = "native", target_os = "trueos", target_os = "zkvm"))]
     return Err(io::Error::new(
         io::ErrorKind::Other,
         "TRUEOS fs hard_link is not exposed through CABI yet",

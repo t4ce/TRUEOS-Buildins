@@ -1,7 +1,7 @@
 //! Native single-hop requests with app-owned redirects and request retries.
 use alloc::{
     format,
-    string::{String, ToString},
+    string::String,
     vec::Vec,
 };
 use core::time::Duration;
