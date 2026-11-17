@@ -7,5 +7,8 @@ license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
 
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("trueos"))'] }
+
 [dependencies]
 stdext.workspace = true

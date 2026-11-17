@@ -211,7 +211,6 @@ fn run_commander(lease: &vshell::TerminalLease) -> CommanderResult<()> {
                 remote.release_all_buttons()?;
             }
             Event::FocusGained => {}
-            _ => {}
         }
     }
 

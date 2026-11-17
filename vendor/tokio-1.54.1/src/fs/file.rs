@@ -823,7 +823,7 @@ impl AsyncRead for File {
 }
 
 impl AsyncSeek for File {
-    fn start_seek(self: Pin<&mut Self>, mut pos: SeekFrom) -> io::Result<()> {
+    fn start_seek(self: Pin<&mut Self>, pos: SeekFrom) -> io::Result<()> {
         let me = self.get_mut();
 
         #[cfg(any(feature = "native", target_os = "trueos", target_os = "zkvm"))]
@@ -834,6 +834,7 @@ impl AsyncSeek for File {
 
         #[cfg(not(any(feature = "native", target_os = "trueos", target_os = "zkvm")))]
         {
+        let mut pos = pos;
         let inner = me.inner.get_mut();
 
         match inner.state {
@@ -878,7 +879,7 @@ impl AsyncSeek for File {
         }
     }
 
-    fn poll_complete(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<u64>> {
+    fn poll_complete(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<u64>> {
         ready!(crate::trace::trace_leaf(cx));
 
         #[cfg(any(feature = "native", target_os = "trueos", target_os = "zkvm"))]
@@ -886,7 +887,7 @@ impl AsyncSeek for File {
 
         #[cfg(not(any(feature = "native", target_os = "trueos", target_os = "zkvm")))]
         {
-        let inner = self.inner.get_mut();
+        let inner = self.get_mut().inner.get_mut();
 
         loop {
             match inner.state {
@@ -1110,7 +1111,7 @@ impl AsyncWrite for File {
         true
     }
 
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         ready!(crate::trace::trace_leaf(cx));
 
         #[cfg(any(feature = "native", target_os = "trueos", target_os = "zkvm"))]
@@ -1118,7 +1119,7 @@ impl AsyncWrite for File {
 
         #[cfg(not(any(feature = "native", target_os = "trueos", target_os = "zkvm")))]
         {
-        let inner = self.inner.get_mut();
+        let inner = self.get_mut().inner.get_mut();
         inner.poll_flush(cx)
         }
     }

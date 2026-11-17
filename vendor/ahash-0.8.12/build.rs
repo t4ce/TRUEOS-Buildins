@@ -4,6 +4,9 @@ use std::env;
 
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
+    println!("cargo:rustc-check-cfg=cfg(fuzzing)");
+    // Retain the upstream fallback for experimental 128-bit pointer targets.
+    println!("cargo:rustc-check-cfg=cfg(target_pointer_width, values(\"128\"))");
     println!("cargo:rustc-check-cfg=cfg(specialize)");
     if let Some(true) = version_check::supports_feature("specialize") {
         println!("cargo:rustc-cfg=specialize");

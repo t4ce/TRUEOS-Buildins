@@ -375,7 +375,7 @@ pub mod rng {
 
         let mut offset = 0usize;
         while offset < bytes.len() {
-            let mut word = u32();
+            let word = u32();
             let chunk = core::cmp::min(core::mem::size_of::<u32>(), bytes.len() - offset);
             bytes[offset..offset + chunk].copy_from_slice(&word.to_ne_bytes()[..chunk]);
             offset += chunk;
