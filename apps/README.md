@@ -1,7 +1,7 @@
 # Apps start scripts
 
 Apps uses the kernel's native HTTP/TLS fetch service. Each request is bounded
-to 90 seconds, with a 1 MiB catalog limit and a 128 MiB archive limit before
+to 90 seconds, with a 1 MiB catalog limit and a 256 MiB archive limit before
 body accumulation. Apps retains catalog parsing and its SHA-256 verification
 policy. When TRUEOSFS is mounted, verified archives are durably published through
 typed filesystem writes before AppDB import or launch. Without any mounted
