@@ -149,10 +149,10 @@ fn main() {
             }
             Err(error) => {
                 pullbot::report(&format!("runtime failed: {error}"));
-                "apps pullbot drained"
+                "apps pullbot drained".into()
             }
         };
-        let _ = trueos::vshell::shutdown_current_blueprint(reason);
+        let _ = trueos::vshell::shutdown_current_blueprint(&reason);
         return;
     }
     let terminal = match Terminal::enter() { Ok(t) => t, Err(e) => { error_output(&format!("{e}")); return; } };

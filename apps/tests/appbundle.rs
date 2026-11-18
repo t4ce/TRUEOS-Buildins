@@ -140,7 +140,7 @@ mod fetch {
     pub async fn bytes(url: &str, _: usize) -> Result<Vec<u8>, String> {
         super::state(|s| {
             if url == super::CATALOG {
-                if s.fail_catalog { return Err("Download HTTP failed (-12)".into()); }
+                if s.fail_catalog { return Err("Download DNS lookup failed (-111)".into()); }
                 return Ok(s.catalog.as_bytes().to_vec());
             }
             let name = url.rsplit('/').next().unwrap().to_string();
@@ -164,22 +164,21 @@ mod pullbot;
 mod script;
 
 #[test]
-fn unavailable_catalog_returns_one_info_notice_without_fetching_or_launching_apps() {
+fn catalog_failure_reports_the_fetch_error_without_fetching_or_launching_apps() {
     reset(&["paper"]);
     state(|s| s.fail_catalog = true);
     let reason = run(pullbot::drain(b"pull paper\npull codex\n"));
     let message = reason.strip_prefix("apps:info:").expect("completion notice");
-    assert!(message.contains("https://trueos.eu/apps"));
-    assert!(message.contains("maintenance") && message.contains("50% of the day"));
+    assert_eq!(message, "Could not fetch app catalog (https://trueos.eu/apps). Download DNS lookup failed (-111)");
     state(|s| {
-        assert_eq!(s.logs.iter().filter(|(level,_)| *level == logl::level::INFO).collect::<Vec<_>>(),
-            vec![&(logl::level::INFO,message.into())]);
+        assert_eq!(s.errors, [message]);
+        assert!(s.logs.iter().all(|(level,_)| *level != logl::level::INFO));
         assert!(s.fetched.is_empty() && s.published.is_empty() && s.imports.is_empty() && s.launches.is_empty());
     });
 }
 
 #[test]
-fn successful_pull_does_not_issue_a_maintenance_notice() {
+fn successful_pull_does_not_issue_a_catalog_failure_notice() {
     reset(&["paper"]);
     assert_eq!(run(pullbot::drain(b"pull paper\n")),"apps pullbot drained");
     state(|s| {

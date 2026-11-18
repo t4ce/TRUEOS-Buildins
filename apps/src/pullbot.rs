@@ -3,7 +3,6 @@ use super::script::{Request, requests};
 use alloc::{format, string::String};
 
 const DRAINED: &str = "apps pullbot drained";
-const CATALOG_UNAVAILABLE: &str = "apps:info:App CDN (https://trueos.eu/apps) is currently under maintenance; expected uptime is 50% of the day.";
 
 pub fn report(message: &str) {
     let _ = trueos::logl::log_record(
@@ -12,18 +11,18 @@ pub fn report(message: &str) {
         format_args!("apps pullbot: {message}"),
     );
 }
-pub async fn drain(bytes: &[u8]) -> &'static str {
+pub async fn drain(bytes: &[u8]) -> String {
     let script = match core::str::from_utf8(bytes) {
         Ok(script) => script,
         Err(_) => {
             report("startscript is not UTF-8");
-            return DRAINED;
+            return DRAINED.into();
         }
     };
     let requests = requests(script);
     if requests.is_empty() {
         report("drained: 0 requests");
-        return DRAINED;
+        return DRAINED.into();
     }
     let catalog = match super::fetch::bytes(super::CATALOG, super::fetch::CATALOG_LIMIT).await {
         Ok(bytes) => match core::str::from_utf8(&bytes) {
@@ -31,18 +30,13 @@ pub async fn drain(bytes: &[u8]) -> &'static str {
             Err(_) => {
                 super::error_output("catalog is not UTF-8");
                 report("catalog is not UTF-8");
-                return DRAINED;
+                return DRAINED.into();
             }
         },
         Err(error) => {
-            super::error_output(&format!("catalog: {error}"));
-            report(&format!("catalog: {error}"));
-            let _ = trueos::logl::log_record(
-                trueos::logl::level::INFO,
-                "apps",
-                format_args!("{}", CATALOG_UNAVAILABLE.strip_prefix("apps:info:").unwrap()),
-            );
-            return CATALOG_UNAVAILABLE;
+            let message = format!("Could not fetch app catalog ({}). {error}", super::CATALOG);
+            super::error_output(&message);
+            return format!("apps:info:{message}");
         }
     };
     let mut queued = 0;
@@ -96,5 +90,5 @@ pub async fn drain(bytes: &[u8]) -> &'static str {
         }
     }
     report(&format!("drained: queued={queued} failed={failed}"));
-    DRAINED
+    DRAINED.into()
 }

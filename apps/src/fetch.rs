@@ -22,11 +22,14 @@ fn endpoint(url: &str) -> &'static str {
 
 fn failure(code: i32) -> String {
     let category = match code {
+        -4 => "could not start",
         -11 => "timed out",
         -10 => "invalid URL",
         -7 => "exceeds size limit",
         -13 => "TLS failed",
-        -12 => "HTTP failed",
+        -12 => "request failed",
+        -111 => "DNS lookup failed",
+        -115 => "exceeds response framing limit",
         _ => "native transport failed",
     };
     format!("Download {category} ({code})")
