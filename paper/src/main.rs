@@ -320,6 +320,7 @@ fn draw(
             u32::from_le_bytes([190, 190, 190, 255])
         },
         topology: PRIMITIVE_TOPOLOGY_LINE_LIST,
+        reserved: INDEXED_BATCH_V2_LINE_WIDTH_1PX,
         ..Default::default()
     };
     loop {

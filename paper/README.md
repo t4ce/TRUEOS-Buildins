@@ -60,7 +60,8 @@ This first object workflow covers Paper's `no_std` dependency graph; apps using
 `std` still need their TRUEOS standard-library setup.
 
 Requires a kernel built with the additive
-`trueos_cabi_ui4_scene_physical_extent_v1` API and BCS0 native-line clear path.
+`trueos_cabi_ui4_scene_physical_extent_v1` API, BCS0 native-line clear path,
+and `INDEXED_BATCH_V2_LINE_WIDTH_1PX` draw flag.
 
 Paper is registered in `buildins.json` and embedded in the kernel AppDB by
 normal builds with built-ins enabled; it does not need an online catalog entry.

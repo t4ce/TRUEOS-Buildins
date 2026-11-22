@@ -179,14 +179,13 @@ pub fn geometry_for_settings(
     let (width_mm, height_mm) = settings.sheet.dimensions();
     let mut vertices = Vec::with_capacity(INDEX_COUNT as usize * 12);
     let mut indices = Vec::with_capacity(INDEX_COUNT as usize * 4);
-    let mut vertex = |x_mm: f32, y_mm: f32| {
-        // Snap to pixel centers for crisp single-sample one-pixel lines.
+    let mut vertex = |x_mm: f32, y_mm: f32, offset_px: (f32, f32)| {
         let x = ((x_mm * page.0 as f32 / width_mm as f32) as u32).min(page.0.saturating_sub(1))
             as f32
-            + 0.5;
+            + offset_px.0;
         let y = ((y_mm * page.1 as f32 / height_mm as f32) as u32).min(page.1.saturating_sub(1))
             as f32
-            + 0.5;
+            + offset_px.1;
         for value in [
             2.0 * x / viewport.0 as f32 - 1.0,
             1.0 - 2.0 * y / viewport.1 as f32,
@@ -196,17 +195,19 @@ pub fn geometry_for_settings(
         }
         indices.extend_from_slice(&((indices.len() / 4) as u32).to_le_bytes());
     };
+    // Center each stroke across its width and span both endpoint pixels
+    // from their outer edges so the corner samples fall inside the strokes.
     if settings.mode == Mode::Gridpaper {
         for column in 0..=columns {
             let x = left + column as f32 * step;
-            vertex(x, top);
-            vertex(x, bottom);
+            vertex(x, top, (0.5, 0.0));
+            vertex(x, bottom, (0.5, 1.0));
         }
     }
     for row in 0..=rows {
         let y = top + row as f32 * step;
-        vertex(left, y);
-        vertex(right, y);
+        vertex(left, y, (0.0, 0.5));
+        vertex(right, y, (1.0, 0.5));
     }
     (vertices, indices)
 }
@@ -282,8 +283,22 @@ mod tests {
                 (1.0 - clip) * 594.0
             }
         };
-        assert!((pixel(0, 0) - 30.5).abs() < 0.001);
-        assert!((pixel(0, 1) - 44.5).abs() < 0.001);
+        let last_column = COLUMNS as usize * 2;
+        let first_row = last_column + 2;
+        let last_row = first_row + ROWS as usize * 2;
+        for (n, x, y) in [
+            (0, 30.5, 44.0),
+            (1, 30.5, 1145.0),
+            (last_column, 810.5, 44.0),
+            (last_column + 1, 810.5, 1145.0),
+            (first_row, 30.0, 44.5),
+            (first_row + 1, 811.0, 44.5),
+            (last_row, 30.0, 1144.5),
+            (last_row + 1, 811.0, 1144.5),
+        ] {
+            assert!((pixel(n, 0) - x).abs() < 0.001);
+            assert!((pixel(n, 1) - y).abs() < 0.001);
+        }
         for column in 0..39 {
             assert!((pixel((column + 1) * 2, 0) - pixel(column * 2, 0) - 20.0).abs() < 0.001);
         }
