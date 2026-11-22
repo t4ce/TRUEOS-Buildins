@@ -388,45 +388,53 @@ impl Editor {
         }
     }
     pub fn advance(&mut self) {
-        self.cursor = (self.cursor + 1).min(self.cells.len() - 1);
+        self.cursor = self.next_cell(self.cursor);
     }
     pub fn type_char(&mut self, ch: char) {
+        self.cursor = self.type_char_at(self.cursor, ch);
+    }
+    pub fn type_char_at(&mut self, cell: usize, ch: char) -> usize {
         if ch == ' ' {
-            self.advance_typing();
+            self.next_typing_cell(cell)
         } else if !ch.is_control() {
-            self.cells[self.cursor].character = Some(ch);
-            self.advance_typing();
+            self.cells[cell].character = Some(ch);
+            self.next_typing_cell(cell)
+        } else {
+            cell
         }
     }
-    fn advance_typing(&mut self) {
-        if self.wrap || (self.cursor + 1) % self.columns != 0 {
-            self.advance();
+    fn next_cell(&self, cell: usize) -> usize {
+        (cell + 1).min(self.cells.len() - 1)
+    }
+    fn next_typing_cell(&self, cell: usize) -> usize {
+        if self.wrap || (cell + 1) % self.columns != 0 {
+            self.next_cell(cell)
+        } else {
+            cell
         }
     }
     pub fn key(&mut self, key: u16) {
+        self.cursor = self.key_at(self.cursor, key);
+    }
+    pub fn key_at(&mut self, cell: usize, key: u16) -> usize {
         use trueos::input::*;
         match key {
-            KEYBOARD_KEY_BACKSPACE => {
-                if self.cursor > 0 {
-                    self.cursor -= 1;
-                    self.cells[self.cursor].character = None;
-                }
+            KEYBOARD_KEY_BACKSPACE if cell > 0 => {
+                self.cells[cell - 1].character = None;
+                cell - 1
             }
-            KEYBOARD_KEY_DELETE => self.cells[self.cursor].character = None,
-            KEYBOARD_KEY_SPACE => self.advance_typing(),
-            KEYBOARD_KEY_ARROW_LEFT => self.cursor = self.cursor.saturating_sub(1),
-            KEYBOARD_KEY_ARROW_RIGHT => self.advance(),
-            KEYBOARD_KEY_ARROW_UP => {
-                if self.cursor >= self.columns {
-                    self.cursor -= self.columns;
-                }
+            KEYBOARD_KEY_DELETE => {
+                self.cells[cell].character = None;
+                cell
             }
-            KEYBOARD_KEY_ARROW_DOWN => {
-                if self.cursor + self.columns < self.cells.len() {
-                    self.cursor += self.columns;
-                }
+            KEYBOARD_KEY_SPACE => self.next_typing_cell(cell),
+            KEYBOARD_KEY_ARROW_LEFT => cell.saturating_sub(1),
+            KEYBOARD_KEY_ARROW_RIGHT => self.next_cell(cell),
+            KEYBOARD_KEY_ARROW_UP if cell >= self.columns => cell - self.columns,
+            KEYBOARD_KEY_ARROW_DOWN if cell + self.columns < self.cells.len() => {
+                cell + self.columns
             }
-            _ => {} // Enter deliberately has no action.
+            _ => cell, // Enter deliberately has no action.
         }
     }
     /// Physical document cell bounds, independent of display resolution.
@@ -473,18 +481,21 @@ impl Editor {
         )
     }
     pub fn click(&mut self, x: i32, y: i32, page: (u32, u32), scale: u32) -> bool {
-        if x < 0 || y < 0 {
-            return false;
+        if let Some(cell) = self.cell_at(x, y, page, scale) {
+            self.cursor = cell;
+            true
+        } else {
+            false
         }
-        for index in 0..self.cells.len() {
+    }
+    pub fn cell_at(&self, x: i32, y: i32, page: (u32, u32), scale: u32) -> Option<usize> {
+        let (Ok(x), Ok(y)) = (u32::try_from(x), u32::try_from(y)) else {
+            return None;
+        };
+        (0..self.cells.len()).find(|&index| {
             let (left, top, w, h) = self.bounds(index, page, scale);
-            if x as u32 >= left && (x as u32) < left + w && y as u32 >= top && (y as u32) < top + h
-            {
-                self.cursor = index;
-                return true;
-            }
-        }
-        false
+            (left..left + w).contains(&x) && (top..top + h).contains(&y)
+        })
     }
 }
 
@@ -492,6 +503,23 @@ impl Editor {
 mod editor_tests {
     use super::*;
     use trueos::input::*;
+    #[test]
+    fn independent_edit_positions_share_only_the_document() {
+        let mut editor = Editor::new(1);
+        let (left, top, _, _) = editor.bounds(1, (840, 1188), 1);
+        let human = editor.cell_at(left as i32, top as i32, (840, 1188), 1).unwrap();
+        let ai = human;
+        let human = editor.type_char_at(human, 'a');
+        assert_eq!((human, ai), (2, 1));
+        let ai = editor.type_char_at(ai, 'b');
+        let ai = editor.key_at(ai, KEYBOARD_KEY_ARROW_DOWN);
+        let human = editor.key_at(human, KEYBOARD_KEY_BACKSPACE);
+        assert_eq!((human, ai), (1, 2 + editor.columns));
+        assert_eq!(editor.cells[1].character, None);
+        assert_eq!(editor.type_char_at(ai, 'c'), ai + 1);
+        assert_eq!(editor.cells[ai].character, Some('c'));
+    }
+
     #[test]
     fn fixed_budget_and_editing() {
         for scale in 1..=8 {

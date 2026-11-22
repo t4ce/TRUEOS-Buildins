@@ -1,10 +1,11 @@
 #![no_std]
 #![no_main]
 extern crate alloc;
+mod outline;
 mod printing;
 use alloc::{format, vec, vec::Vec};
 use paper::Editor;
-use trueos::ui4_scene::{SpriteCorner, SpriteQuad};
+use trueos::ui4_scene::{CursorSource, InputRoute, SpriteCorner, SpriteQuad};
 use trueos::ui4_winit::{SpriteBackend, SpriteCommand};
 use trueos::{
     ui4_scene::{self, Damage, Error, Frame},
@@ -66,6 +67,7 @@ fn run() -> Result<(), i32> {
     )
     .map_err(ui)?;
     frame.set_title("Paper").map_err(ui)?;
+    frame.set_primary_activation(true).map_err(ui)?;
     let print_menu = [ui4_scene::MenuEntry::new("Print A4", request_print)];
     frame.register_context_menu(&print_menu).map_err(ui)?;
     let device = Device::open(Capabilities::DEFAULT.union(Capabilities::PRESENT))?;
@@ -75,13 +77,12 @@ fn run() -> Result<(), i32> {
             device.create_shader_module(SHADER_PACKAGE_CLIP_POSITION3_IMMEDIATE_RGBA_FNV1A64)?;
         let pipeline = device.create_render_pipeline(shader, 12, 0)?;
         let mut editor = Editor::with_settings(settings);
+        let mut selections = Vec::new();
         let mut sprites = vec![GlyphSlot::default(); editor.cells.len()];
         let mut text_events = 0u64;
         let mut backspaces = 0u64;
         let mut cell_clicks = 0u64;
         let mut dirty = true;
-        let mut visible = true;
-        let mut blink = trueos::clock::Instant::now();
         let mut print_requested = false;
         let mut print_job = None;
         let mut print_poll = trueos::clock::Instant::now();
@@ -96,27 +97,38 @@ fn run() -> Result<(), i32> {
                 Err(Error::NotFound) => return Ok(()),
                 Err(error) => return Err(ui(error)),
             }
-            let mut input = false;
-            while let Some(event) = frame.take_keyboard_event().map_err(ui)? {
+            let mut input_cell = None;
+            while let Some(event) = frame.take_pointer_event().map_err(ui)? {
+                if event.buttons_pressed & ui4_scene::POINTER_BUTTON_PRIMARY != 0
+                    && let Some(cell) = editor.cell_at(event.local_x, event.local_y, page, scale)
+                {
+                    selection_for(&mut selections, event.source).cell = cell;
+                    cell_clicks += 1;
+                    input_cell = Some(cell);
+                }
+            }
+            while let Some((source, event)) = frame.take_cursor_keyboard_event().map_err(ui)? {
                 use trueos::input::*;
                 if print_shortcut(&event) {
                     print_requested = true;
                 } else if event.kind == KEYBOARD_OUTPUT_KIND_TEXT {
                     if let Some(ch) = char::from_u32(event.codepoint) {
-                        editor.type_char(ch);
+                        let selection = selection_for(&mut selections, source);
+                        selection.cell = editor.type_char_at(selection.cell, ch);
                         text_events += 1;
-                        input = true;
+                        input_cell = Some(selection.cell);
                     }
                 } else if event.kind == KEYBOARD_OUTPUT_KIND_KEY
                     && event.flags & KEYBOARD_OUTPUT_FLAG_PRESS != 0
                 {
                     // Space is delivered as text by the keyboard translator.
                     if event.key_code != KEYBOARD_KEY_SPACE {
-                        editor.key(event.key_code);
+                        let selection = selection_for(&mut selections, source);
+                        selection.cell = editor.key_at(selection.cell, event.key_code);
                         if event.key_code == KEYBOARD_KEY_BACKSPACE {
                             backspaces += 1;
                         }
-                        input = true;
+                        input_cell = Some(selection.cell);
                     }
                 }
             }
@@ -155,24 +167,19 @@ fn run() -> Result<(), i32> {
                     }
                 }
             }
-            while let Some(event) = frame.take_pointer_event().map_err(ui)? {
-                if event.buttons_pressed & ui4_scene::POINTER_BUTTON_PRIMARY != 0 {
-                    let hit = editor.click(event.local_x, event.local_y, page, scale);
-                    cell_clicks += u64::from(hit);
-                    input |= hit;
-                }
-            }
-            if input {
-                visible = true;
-                blink = trueos::clock::Instant::now();
-                dirty = true;
-            }
-            if blink.elapsed().as_millis() >= 500 {
-                visible = !visible;
-                blink = trueos::clock::Instant::now();
-                dirty = true;
-            }
+            dirty |= refresh_selections(&mut selections, &frame.input_routes().map_err(ui)?);
+            dirty |= input_cell.is_some();
             if dirty {
+                selections.sort_unstable_by_key(|selection| {
+                    let source = selection.source;
+                    (
+                        selection.cell,
+                        source.controller_id,
+                        source.slot_id,
+                        source.ep_target,
+                        source.hid_kind,
+                    )
+                });
                 draw(
                     &mut frame,
                     page,
@@ -182,9 +189,9 @@ fn run() -> Result<(), i32> {
                     pipeline,
                     &editor,
                     &mut sprites,
-                    visible,
+                    &selections,
                 )?;
-                if input {
+                if let Some(cell) = input_cell {
                     let _ = trueos::logl::log_record(
                         trueos::logl::level::INFO,
                         "paper",
@@ -193,7 +200,7 @@ fn run() -> Result<(), i32> {
                             text_events,
                             backspaces,
                             cell_clicks,
-                            editor.cursor,
+                            cell,
                             editor
                                 .cells
                                 .iter()
@@ -209,6 +216,45 @@ fn run() -> Result<(), i32> {
     })();
     let close = device.close();
     result.and(close)
+}
+
+struct Selection {
+    source: CursorSource,
+    cell: usize,
+    color_rgba: u32,
+}
+
+fn selection_for(selections: &mut Vec<Selection>, source: CursorSource) -> &mut Selection {
+    let index = selections
+        .iter()
+        .position(|selection| selection.source == source);
+    if let Some(index) = index {
+        return &mut selections[index];
+    }
+    selections.push(Selection {
+        source,
+        cell: 0,
+        color_rgba: 0,
+    });
+    selections.last_mut().unwrap()
+}
+
+fn refresh_selections(selections: &mut Vec<Selection>, routes: &[InputRoute]) -> bool {
+    let previous_count = selections.len();
+    selections.retain(|selection| {
+        routes
+            .iter()
+            .any(|route| route.selected_for_window && route.cursor == selection.source)
+    });
+    let mut changed = previous_count != selections.len();
+    for route in routes.iter().filter(|route| route.selected_for_window) {
+        let selection = selection_for(selections, route.cursor);
+        // Paper is opaque. Use the cursor's RGB for a solid border fill.
+        let color_rgba = route.color_rgba | 0xff00_0000;
+        changed |= selection.color_rgba != color_rgba;
+        selection.color_rgba = color_rgba;
+    }
+    changed
 }
 
 fn request_print(requested: &mut bool) { *requested = true; }
@@ -251,7 +297,7 @@ fn draw(
     pipeline: RenderPipeline,
     editor: &Editor,
     sprites: &mut [GlyphSlot],
-    cursor_visible: bool,
+    selections: &[Selection],
 ) -> Result<(), i32> {
     for (index, cell) in editor.cells.iter().enumerate() {
         if let Some(ch) = cell.character
@@ -334,7 +380,7 @@ fn draw(
             Err(error) => return Err(error),
         }
     }
-    let mut commands = Vec::with_capacity(editor.cells.len() + 1);
+    let mut commands = Vec::with_capacity(editor.cells.len());
     for (index, cell) in editor.cells.iter().enumerate() {
         if cell.character.is_none() {
             continue;
@@ -362,23 +408,16 @@ fn draw(
             });
         }
     }
-    if cursor_visible {
-        let (x, y, w, h) = editor.bounds(editor.cursor, page, scale);
-        if let Some(quad) = clipped_quad(
-            0,
-            x + w / 2,
-            y + 2,
-            1,
-            h.saturating_sub(4),
-            0,
-            frame.width(),
-            frame.height(),
-            u32::from_le_bytes([0, 0, 0, 255]),
-        ) {
-            commands.push(SpriteCommand {
-                quad,
-                backend: SpriteBackend::Bcs0,
-            });
+    let viewport = (frame.width(), frame.height());
+    for group in selections.chunk_by(|a, b| a.cell == b.cell) {
+        let bounds = editor.bounds(group[0].cell, page, scale);
+        for (share, rect) in outline::segments(bounds, page, group.len()) {
+            if let Some(quad) = outline_quad(rect, viewport, group[share].color_rgba) {
+                commands.push(SpriteCommand {
+                    quad,
+                    backend: SpriteBackend::Bcs0,
+                });
+            }
         }
     }
     if !commands.is_empty() {
@@ -415,6 +454,28 @@ fn glyph_pixels(scale: u32, ch: char) -> Result<Vec<u8>, i32> {
     let path = format!("vFile:microfont-grid/{scale}/{:x}", ch as u32);
     trueos::async_fs::block_on(trueos::async_fs::read_file(path.as_bytes()))
 }
+
+fn outline_quad(rect: outline::Rect, viewport: (u32, u32), color: u32) -> Option<SpriteQuad> {
+    let left = rect.x.max(0);
+    let top = rect.y.max(0);
+    let right = (rect.x + rect.width).min(i64::from(viewport.0));
+    let bottom = (rect.y + rect.height).min(i64::from(viewport.1));
+    if right <= left || bottom <= top {
+        return None;
+    }
+    clipped_quad(
+        0,
+        left as u32,
+        top as u32,
+        (right - left) as u32,
+        (bottom - top) as u32,
+        0,
+        viewport.0,
+        viewport.1,
+        color,
+    )
+}
+
 fn clipped_quad(
     id: u32,
     x: u32,
