@@ -489,7 +489,9 @@ the existing response size, request count, depth and URL policy limits.
 Media subdocument fetches carry their actual parent document URL through the
 existing bounded download tickets. The host applies a same-origin full URL or
 cross-origin origin-only Referer, without fragments or credentials, on every
-redirect. This does not expose arbitrary request headers to JavaScript.
+redirect. Hull uses the final response URL to resolve relative addresses in the
+subdocument and determine the playback Referer. It queues media inspection
+ahead of pending page scripts without exposing request headers to JavaScript.
 Offline replay still needs the corresponding captured HTML responses imported
 into capture.json; replay itself never contacts a server.
 

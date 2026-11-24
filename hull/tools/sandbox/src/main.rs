@@ -94,14 +94,19 @@ pub mod logl {
     }
 }
 
-// The CSS collector sees completed local tickets only. This module never opens
-// a socket: absent/failed captures are errors, not live-network fallbacks.
+#[derive(Clone)]
+struct CapturedResource {
+    bytes: Vec<u8>,
+    final_url: Option<String>,
+}
+
+// Tickets use captured files. A missing or failed capture returns an error.
 pub mod netfs {
     use super::*;
     use std::cell::RefCell;
     #[derive(Default)]
     struct Network {
-        resources: HashMap<String, Vec<u8>>,
+        resources: HashMap<String, CapturedResource>,
         tickets: HashMap<u32, String>,
         requested: Vec<String>,
         next: u32,
@@ -118,7 +123,7 @@ pub mod netfs {
         let shared = NETWORK.with(|slot| slot.borrow().clone());
         move || NETWORK.with(|slot| *slot.borrow_mut() = shared)
     }
-    pub fn install(resources: HashMap<String, Vec<u8>>) {
+    pub(super) fn install(resources: HashMap<String, CapturedResource>) {
         NETWORK.with(|slot| {
             *slot.borrow_mut() = std::sync::Arc::new(std::sync::Mutex::new(Network {
                 resources,
@@ -150,8 +155,16 @@ pub mod netfs {
             net.tickets
                 .get(&id)
                 .and_then(|url| net.resources.get(url))
-                .map(Vec::len)
+                .map(|resource| resource.bytes.len())
                 .ok_or(-2)
+        })
+    }
+    pub fn fetch_bytes_final_url(id: u32) -> Result<String, i32> {
+        NET.with(|net| {
+            let net = net.lock().unwrap();
+            let url = net.tickets.get(&id).ok_or(-2)?;
+            let resource = net.resources.get(url).ok_or(-2)?;
+            Ok(resource.final_url.as_ref().unwrap_or(url).clone())
         })
     }
     pub fn fetch_bytes_read(id: u32) -> Result<Vec<u8>, i32> {
@@ -160,7 +173,7 @@ pub mod netfs {
             net.tickets
                 .get(&id)
                 .and_then(|url| net.resources.get(url))
-                .cloned()
+                .map(|resource| resource.bytes.clone())
                 .ok_or(-2)
         })
     }
@@ -282,7 +295,10 @@ fn read_bounded(path: &Path, limit: u64) -> Result<Vec<u8>, String> {
 fn write_json(path: &Path, value: &Value) -> Result<(), String> {
     fs::write(path, serde_json::to_vec_pretty(value).unwrap()).map_err(|e| e.to_string())
 }
-fn captured_resources(input: &Path, manifest: &Value) -> Result<HashMap<String, Vec<u8>>, String> {
+fn captured_resources(
+    input: &Path,
+    manifest: &Value,
+) -> Result<HashMap<String, CapturedResource>, String> {
     let mut resources = HashMap::new();
     let root = input.canonicalize().map_err(|e| e.to_string())?;
     if let Some(entries) = manifest.get("resources").and_then(Value::as_object) {
@@ -307,7 +323,11 @@ fn captured_resources(input: &Path, manifest: &Value) -> Result<HashMap<String, 
             if total > 16 * 1024 * 1024 {
                 return Err("captured resources exceed 16 MiB".into());
             }
-            resources.insert(url.clone(), bytes);
+            let final_url = entry
+                .get("final_url")
+                .and_then(Value::as_str)
+                .map(str::to_owned);
+            resources.insert(url.clone(), CapturedResource { bytes, final_url });
         }
     }
     Ok(resources)
@@ -369,7 +389,7 @@ fn record(report: javascript::Report) -> Value {
 fn script_sources(
     options: &Options,
     sources: &[scripts::ScriptSource],
-    resources: &HashMap<String, Vec<u8>>,
+    resources: &HashMap<String, CapturedResource>,
 ) -> Result<(Vec<scripts::ScriptSource>, Vec<String>), String> {
     let mut selected = Vec::new();
     let mut experiments = Vec::new();
@@ -413,7 +433,9 @@ fn script_sources(
                 file.display()
             ));
         } else if source.bytes.is_none() && options.external {
-            source.bytes = resources.get(&source.origin).cloned();
+            source.bytes = resources
+                .get(&source.origin)
+                .map(|resource| resource.bytes.clone());
         }
         selected.push(source);
     }

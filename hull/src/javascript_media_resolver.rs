@@ -25,6 +25,9 @@ fn attr<'a>(doc: &'a Document, id: usize, name: &str) -> Option<&'a str> {
         .map(|a| a.value.as_str())
 }
 fn address(base: &str, text: &str) -> Option<String> {
+    if text.trim().is_empty() {
+        return None;
+    }
     let u = url::Url::parse(base).ok()?.join(text).ok()?;
     (crate::resource_url::allowed(&u) && u.scheme() == "https").then(|| u.to_string())
 }
@@ -141,14 +144,17 @@ impl Resolver {
                 }
             }
             if name == "video" {
-                let source = attr(doc, id, "src").or_else(|| {
-                    doc.nodes[id].children.iter().find_map(|&n| {
-                        (doc.name(n) == "source")
-                            .then(|| attr(doc, n, "src"))
-                            .flatten()
-                    })
-                });
-                if let Some(url) = source.and_then(|s| address(base, s)) {
+                let source = attr(doc, id, "src")
+                    .and_then(|src| address(base, src))
+                    .or_else(|| {
+                        doc.nodes[id].children.iter().find_map(|&n| {
+                            (doc.name(n) == "source")
+                                .then(|| attr(doc, n, "src"))
+                                .flatten()
+                                .and_then(|src| address(base, src))
+                        })
+                    });
+                if let Some(url) = source {
                     page.media.borrow_mut().request(id, url, base);
                     return true;
                 }
@@ -192,7 +198,7 @@ impl Resolver {
         let Some((url, depth, referrer)) = self.pending.front().cloned() else {
             return;
         };
-        let bytes = match loader.source_with_referrer(&url, &referrer) {
+        let (response_url, bytes) = match loader.document_source(&url, &referrer) {
             Prepared::Pending => return,
             Prepared::Failed(_) => {
                 self.pending.pop_front();
@@ -207,14 +213,14 @@ impl Resolver {
         }
         if url::Url::parse(&url).is_ok_and(|u| u.path().starts_with("/api/v1/videos/")) {
             if let Some(source) = serde_json::from_slice::<serde_json::Value>(&bytes).ok()
-                .and_then(|v| peertube_source(&v, &url)) {
+                .and_then(|v| peertube_source(&v, &response_url)) {
                 page.media.borrow_mut().request(0, source, &referrer);
                 self.pending.clear();
             }
             return;
         }
         let doc = rp5::parse(&String::from_utf8_lossy(&bytes));
-        if self.discover(&doc, &url, depth, page) {
+        if self.discover(&doc, &response_url, depth, page) {
             self.pending.clear();
             return;
         }
@@ -230,7 +236,7 @@ impl Resolver {
         let start = Instant::now();
         let _ = self.inspect(
             doc,
-            &url,
+            &response_url,
             depth,
             page,
             remaining.min(Duration::from_millis(25)),
@@ -300,16 +306,22 @@ impl Resolver {
             .filter(|b| b.len() <= 64 * 1024)
             .take(8)
         {
-            if engine.execution_budget_exhausted() {
+            if engine.execution_budget_exhausted() || page.media.borrow().has_request() {
                 break;
             }
             let _ = engine.eval(source, url, false);
         }
-        if let Some(click) = click {
+        if let Some(click) = click.filter(|_| {
+            !engine.execution_budget_exhausted() && !page.media.borrow().has_request()
+        }) {
             let _ = engine.eval(click.as_bytes(), "hull:media-play-control", false);
         }
-        let base = url::Url::parse(url).map_err(|e| e.to_string())?;
         let navigations = core::mem::take(&mut page.media.borrow_mut().inspection_navigation);
+        if page.media.borrow().has_request() {
+            self.pending.clear();
+            return Ok(());
+        }
+        let base = url::Url::parse(url).map_err(|e| e.to_string())?;
         for target in navigations {
             if let Some(target) = address(url, &target)
                 .filter(|s| url::Url::parse(s).is_ok_and(|u| u.origin() == base.origin()))

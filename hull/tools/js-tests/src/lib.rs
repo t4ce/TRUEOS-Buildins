@@ -8,6 +8,11 @@ mod ide_preview;
 
 extern crate self as trueos;
 extern crate self as winit;
+#[cfg(test)]
+extern crate self as v;
+#[cfg(test)]
+#[path = "../../../../vendor/trueos-v/src/worker_abi.rs"]
+mod worker_abi;
 
 pub mod platform {
     pub use winit_trueos as trueos;

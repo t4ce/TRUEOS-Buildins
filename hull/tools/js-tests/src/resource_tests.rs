@@ -17,9 +17,13 @@ pub(super) fn runtime(html: &str, resources: Vec<(&str, &str)>) -> Runtime {
             .into_iter()
             .map(|(url, code)| (url.into(), code.as_bytes().to_vec())),
     );
+    let mut runtime = resource_runtime();
+    begin(&mut runtime, 1, html);
+    runtime
+}
+fn resource_runtime() -> Runtime {
     let mut runtime = Runtime::start().unwrap();
     runtime.enable_resource_loading();
-    begin(&mut runtime, 1, html);
     runtime
 }
 pub(super) fn finish(runtime: &mut Runtime, generation: u64) -> (rp5::Document, Vec<Report>) {
@@ -429,13 +433,83 @@ fn video_subdocument_play_control_is_neutralized_into_media_inspection_not_navig
 }
 
 #[test]
+fn redirected_player_frame_uses_the_response_url_for_navigation_media_and_referrers() {
+    let requested = "https://player.test/embed";
+    let redirected = "https://player-cdn.test/new/location/embed?session=keep";
+    let next = "https://player-cdn.test/new/location/play.html?ticket=keep";
+    let page_script = "https://fixture.test/path/app.js";
+    netfs::install([
+        (
+            requested.into(),
+            b"<button onclick=\"location.href='./play.html?ticket=keep'\">Play</button>".to_vec(),
+        ),
+        (
+            next.into(),
+            b"<video><source src='../movie.mp4?signature=keep'></video>".to_vec(),
+        ),
+        (page_script.into(), b"void 0;".to_vec()),
+    ]);
+    netfs::redirect(requested, redirected);
+    let mut r = resource_runtime();
+    r.update_viewport(1280, 720);
+    begin(
+        &mut r,
+        1,
+        r#"<p>page stays</p><script src='./app.js'></script>
+           <iframe title='Video' src='https://player.test/embed'></iframe>"#,
+    );
+    let (doc, mut reports) = finish(&mut r, 1);
+    assert_eq!(text(&doc), "page stays");
+    let deadline = Instant::now() + Duration::from_secs(2);
+    let request = loop {
+        if let Some((_, request)) = r.take_video_request() {
+            break request;
+        }
+        reports.extend(r.poll());
+        assert!(Instant::now() < deadline, "stalled: {reports:?}");
+        std::thread::sleep(Duration::from_millis(1));
+    };
+    assert_eq!(
+        request.url,
+        "https://player-cdn.test/new/movie.mp4?signature=keep"
+    );
+    assert_eq!(request.referrer.as_deref(), Some(next));
+    assert_eq!(netfs::requested(), vec![requested, page_script, next]);
+    assert_eq!(
+        netfs::requested_referrers(),
+        vec![(requested.into(), PAGE.into()), (next.into(), redirected.into())]
+    );
+    no_errors(&reports);
+}
+
+#[test]
+fn passive_video_discovery_uses_the_first_valid_source() {
+    let mut r = runtime(
+        r#"<video src=" ">
+               <source src="data:video/mp4,invalid">
+               <source src="./movie.mp4?signature=keep">
+           </video>"#,
+        vec![],
+    );
+    let (_, reports) = finish(&mut r, 1);
+    let request = r.take_video_request().unwrap().1;
+    assert_eq!(request.url, "https://fixture.test/path/movie.mp4?signature=keep");
+    assert_eq!(request.referrer.as_deref(), Some(PAGE));
+    assert!(netfs::requested().is_empty());
+    no_errors(&reports);
+}
+
+#[test]
 fn class_labeled_player_frame_hands_off_evaluated_mdcore_source_without_player_libraries() {
     let mut r=runtime(r#"<p>page stays</p><iframe class='ab-rounded video-frame' src='https://player.test/embed'></iframe>"#,vec![
         ("https://player.test/embed",r#"<video id=videojs></video>
-        <script src='/player/full-ui.js'></script><script>
+        <button onclick="MDCore.wurl='/wrong-handler.mp4'">Play</button>
+        <script src='/player/full-ui.js'></script>
+        <script>UnsupportedPlayerUI.initialize()</script>
+        <script>
           MDCore.ref='fixture';
           eval("MDCore.wurl='//cdn.test/movie.mp4?signature=keep';MDCore.poster='/poster.jpg'");
-        </script>"#),
+        </script><script>MDCore.wurl='/wrong-inline.mp4'</script>"#),
     ]);
     r.update_viewport(1280,720);
     let (doc,reports)=finish(&mut r,1);

@@ -3,6 +3,7 @@ use std::{cell::RefCell, collections::HashMap};
 #[derive(Default)]
 struct Network {
     resources: HashMap<String, Vec<u8>>,
+    response_urls: HashMap<String, String>,
     delays: HashMap<String, usize>,
     tickets: HashMap<u32, String>,
     requested: Vec<String>,
@@ -33,6 +34,14 @@ pub fn install(resources: impl IntoIterator<Item = (String, Vec<u8>)>) {
 pub fn delay(url: &str, polls: usize) {
     NET.with(|n| {
         n.lock().unwrap().delays.insert(url.into(), polls);
+    });
+}
+pub fn redirect(url: &str, response_url: &str) {
+    NET.with(|n| {
+        n.lock()
+            .unwrap()
+            .response_urls
+            .insert(url.into(), response_url.into());
     });
 }
 pub fn requested() -> Vec<String> {
@@ -79,14 +88,23 @@ pub fn fetch_bytes_result_len(id: u32) -> Result<usize, i32> {
         n.resources.get(&url).map(Vec::len).ok_or(-404)
     })
 }
-pub fn fetch_bytes_read(id: u32) -> Result<Vec<u8>, i32> {
+pub fn fetch_bytes_final_url(id: u32) -> Result<String, i32> {
     NET.with(|n| {
         let n = n.lock().unwrap();
-        n.tickets
+        let url = n.tickets.get(&id).ok_or(-1)?;
+        Ok(n.response_urls.get(url).unwrap_or(url).clone())
+    })
+}
+pub fn fetch_bytes_read(id: u32) -> Result<Vec<u8>, i32> {
+    NET.with(|n| {
+        let mut n = n.lock().unwrap();
+        let bytes = n.tickets
             .get(&id)
             .and_then(|u| n.resources.get(u))
             .cloned()
-            .ok_or(-404)
+            .ok_or(-404)?;
+        n.tickets.remove(&id);
+        Ok(bytes)
     })
 }
 pub fn fetch_bytes_discard(id: u32) -> i32 {

@@ -709,6 +709,11 @@ async fn worker(
                                 let document = page.document.as_ref().map(|d| d.borrow());
                                 match Loader::new(&mut value, &page.url, document.as_deref()) {
                                     Ok(mut loader) => {
+                                        page.media_resolver.borrow_mut().poll(
+                                            &mut loader,
+                                            &mut value,
+                                            page,
+                                        );
                                         for source in page
                                             .sources
                                             .iter()

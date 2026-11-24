@@ -238,6 +238,7 @@ enum State {
     Ready {
         bytes: Arc<[u8]>,
         dependencies: Option<Vec<String>>,
+        response_url: Option<String>,
     },
     Failed(String),
 }
@@ -369,13 +370,25 @@ impl Loader {
                     {
                         Err("Resource byte budget exceeded".into())
                     }
-                    Ok(_) => netfs::fetch_bytes_read(id)
-                        .map_err(|code| format!("Resource read failed: {code}")),
+                    Ok(_) => {
+                        // Reading the body consumes the ticket. Read document
+                        // metadata first so relative URLs use the final origin.
+                        let response_url = self.referrers.contains_key(&url).then(|| {
+                            netfs::fetch_bytes_final_url(id)
+                                .and_then(|url| crate::resource_url::document_response_url(&url))
+                                .map_err(|code| format!("Document response URL unavailable: {code}"))
+                        });
+                        response_url.transpose().and_then(|response_url| {
+                            netfs::fetch_bytes_read(id)
+                                .map(|bytes| (bytes, response_url))
+                                .map_err(|code| format!("Resource read failed: {code}"))
+                        })
+                    }
                 }
             };
             let _ = netfs::fetch_bytes_discard(id);
             match result {
-                Ok(bytes) => {
+                Ok((bytes, response_url)) => {
                     if bytes.len() > MAX_FILE || self.bytes.saturating_add(bytes.len()) > MAX_TOTAL
                     {
                         self.fail(url, "Resource byte budget exceeded".into());
@@ -392,6 +405,7 @@ impl Loader {
                         State::Ready {
                             bytes: bytes.into(),
                             dependencies: None,
+                            response_url,
                         },
                     );
                 }
@@ -487,13 +501,14 @@ impl Loader {
         if let Err(e) = self.request(&url) {
             return Prepared::Failed(e);
         }
-        let (bytes, deps) = match self.entries.get(&url).unwrap() {
+        let (bytes, deps, response_url) = match self.entries.get(&url).unwrap() {
             State::Queued | State::Fetching(..) => return Prepared::Pending,
             State::Failed(e) => return Prepared::Failed(format!("{url}: {e}")),
             State::Ready {
                 bytes,
                 dependencies,
-            } => (bytes.clone(), dependencies.clone()),
+                response_url,
+            } => (bytes.clone(), dependencies.clone(), response_url.clone()),
         };
         let deps = if let Some(deps) = deps {
             deps
@@ -524,6 +539,7 @@ impl Loader {
                 State::Ready {
                     bytes,
                     dependencies: Some(deps.clone()),
+                    response_url,
                 },
             );
             deps
@@ -618,7 +634,11 @@ impl Loader {
     /// Subdocuments retain their embedding document's request context. The
     /// host applies the referrer policy at every redirect; this exposes no
     /// network operation to JavaScript and shares the existing resource limits.
-    pub(crate) fn source_with_referrer(&mut self, url: &str, referrer: &str) -> Prepared<Arc<[u8]>> {
+    pub(crate) fn document_source(
+        &mut self,
+        url: &str,
+        referrer: &str,
+    ) -> Prepared<(String, Arc<[u8]>)> {
         let url = match checked_url(url) {
             Ok(url) => url,
             Err(error) => return Prepared::Failed(error),
@@ -630,10 +650,21 @@ impl Loader {
         if let Err(error) = self.request(&url) {
             return Prepared::Failed(error);
         }
-        if matches!(self.entries.get(&url), Some(State::Queued)) {
-            self.referrers.entry(url.clone()).or_insert(referrer);
+        if matches!(self.entries.get(&url), Some(State::Queued)) && !self.referrers.contains_key(&url) {
+            self.referrers.insert(url.clone(), referrer);
+            self.queue.retain(|queued| queued != &url);
+            self.queue.push_front(url.clone());
         }
-        self.source(&url)
+        match self.entries.get(&url).unwrap() {
+            State::Ready {
+                bytes,
+                response_url: Some(response_url),
+                ..
+            } => Prepared::Ready((response_url.clone(), bytes.clone())),
+            State::Ready { .. } => Prepared::Failed("Document response URL unavailable".into()),
+            State::Failed(error) => Prepared::Failed(error.clone()),
+            _ => Prepared::Pending,
+        }
     }
     pub(crate) fn prefetch(&mut self, url: &str, module: bool) {
         let resolved = if module {

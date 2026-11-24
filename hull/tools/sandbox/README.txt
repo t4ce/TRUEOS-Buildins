@@ -39,10 +39,14 @@ For a browser-saved HTML file (preserves the exact bytes being investigated):
 
 Resources can be imported manually in capture.json:
   {"version":1,"url":"https://original/page/","resources":{
-    "https://original/page/style.css":{"status":"ok","kind":"css","path":"style.css"}
+    "https://original/page/style.css":{"status":"ok","kind":"css","path":"style.css"},
+    "https://original/player":{"status":"ok","path":"player.html","final_url":"https://embed.example/frame/"}
   }}
-Resource paths must resolve inside the capture directory. Use --refresh to
-replace an existing capture; ordinary replay never refreshes it.
+Resource paths must resolve inside the capture directory. For media iframe
+inspection with --modules, use the requested iframe URL as the resource key
+and optional final_url for the URL that served its HTML after redirects. If
+final_url is omitted, the requested URL is used. Use --refresh to replace an
+existing capture. Ordinary replay never refreshes it.
 
 The replay output defaults to CAPTURE/run:
 
