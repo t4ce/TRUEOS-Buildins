@@ -2,16 +2,24 @@
 use crate::alloc_prelude::*;
 // Input-boundary handling adapted from Codex's pinned Crossterm fork.
 use crate::event::{sys::unix::parse::parse_event, InputDiscardStatus, InternalEvent};
+#[cfg(any(target_os = "trueos", all(test, not(feature = "event-stream"))))]
+use crate::platform::Instant;
 use alloc::collections::VecDeque;
+#[cfg(any(target_os = "trueos", all(test, not(feature = "event-stream"))))]
+use core::time::Duration;
 
 const BRACKETED_PASTE_START: &[u8] = b"\x1b[200~";
 const BRACKETED_PASTE_END: &[u8] = b"\x1b[201~";
+#[cfg(any(target_os = "trueos", all(test, not(feature = "event-stream"))))]
+const BUFFERED_ESCAPE_TIMEOUT: Duration = Duration::from_millis(20);
 
 #[derive(Debug)]
 pub(super) struct Parser {
     buffer: Vec<u8>,
     internal_events: VecDeque<InternalEvent>,
     discarded_sequence: Option<DiscardedSequence>,
+    #[cfg(any(target_os = "trueos", all(test, not(feature = "event-stream"))))]
+    pending_escape_deadline: Option<Instant>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -46,6 +54,8 @@ impl Default for Parser {
             // is processed -> events pushed.
             internal_events: VecDeque::with_capacity(128),
             discarded_sequence: None,
+            #[cfg(any(target_os = "trueos", all(test, not(feature = "event-stream"))))]
+            pending_escape_deadline: None,
         }
     }
 }
@@ -85,6 +95,10 @@ impl Parser {
         }
         self.buffer.clear();
         self.internal_events.clear();
+        #[cfg(any(target_os = "trueos", all(test, not(feature = "event-stream"))))]
+        {
+            self.pending_escape_deadline = None;
+        }
         match self.discarded_sequence {
             Some(DiscardedSequence::PasteStart(_) | DiscardedSequence::PasteBody(_)) => {
                 InputDiscardStatus::BracketedPasteInProgress
@@ -94,7 +108,40 @@ impl Parser {
         }
     }
 
+    /// A live read can end at the first byte of a mouse or key report.
+    #[cfg(any(target_os = "trueos", all(test, not(feature = "event-stream"))))]
+    pub(super) fn buffer_external_input(&mut self, buffer: &[u8]) {
+        self.advance(buffer, true);
+        if self.buffer.as_slice() == b"\x1b" {
+            self.pending_escape_deadline = Some(Instant::now() + BUFFERED_ESCAPE_TIMEOUT);
+        }
+    }
+
+    #[cfg(any(target_os = "trueos", all(test, not(feature = "event-stream"))))]
+    pub(super) fn poll_timeout(&self, timeout: Option<Duration>) -> Option<Duration> {
+        let Some(deadline) = self.pending_escape_deadline else {
+            return timeout;
+        };
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        Some(timeout.map_or(remaining, |timeout| timeout.min(remaining)))
+    }
+
+    #[cfg(any(target_os = "trueos", all(test, not(feature = "event-stream"))))]
+    pub(super) fn finish_pending_escape(&mut self) -> Option<InternalEvent> {
+        if Instant::now() < self.pending_escape_deadline? {
+            return None;
+        }
+        self.pending_escape_deadline = None;
+        let event = parse_event(&self.buffer, false).ok().flatten()?;
+        self.buffer.clear();
+        Some(event)
+    }
+
     pub(super) fn advance(&mut self, buffer: &[u8], more: bool) {
+        #[cfg(any(target_os = "trueos", all(test, not(feature = "event-stream"))))]
+        {
+            self.pending_escape_deadline = None;
+        }
         for (idx, byte) in buffer.iter().enumerate() {
             if let Some(discarded_sequence) = self.discarded_sequence {
                 self.discarded_sequence = match discarded_sequence {
@@ -174,6 +221,13 @@ impl Parser {
             }
             let more = idx + 1 < buffer.len() || more;
 
+            if self.buffer.as_slice() == b"\x1b" && *byte == b'\x1b' {
+                self.internal_events
+                    .push_back(InternalEvent::Event(crate::event::Event::Key(
+                        crate::event::KeyCode::Esc.into(),
+                    )));
+                self.buffer.clear();
+            }
             self.buffer.push(*byte);
 
             match parse_event(&self.buffer, more) {

@@ -181,13 +181,19 @@ impl<T: TerminalTransport> EventSource for TerminalEventSource<T> {
                 return Err(io::Error::new(io::ErrorKind::InvalidData, "invalid terminal read count"));
             }
             if count != 0 {
-                self.parser.advance(&self.buffer[..count], count == self.buffer.len());
+                self.parser.buffer_external_input(&self.buffer[..count]);
                 if let Some(event) = self.parser.next() { return Ok(self.emit(event)); }
                 if timeout.elapsed() { return Ok(None); }
                 continue;
             }
+            if let Some(event) = self.parser.finish_pending_escape() {
+                return Ok(self.emit(event));
+            }
             if timeout.elapsed() { return Ok(None); }
-            self.transport.wait_after(observed, timeout_ms(timeout.leftover()))?;
+            self.transport.wait_after(
+                observed,
+                timeout_ms(self.parser.poll_timeout(timeout.leftover())),
+            )?;
         }
     }
 
@@ -204,7 +210,7 @@ mod tests {
     #[allow(unused_imports)]
     use crate::alloc_prelude::*;
     use super::*;
-    use crate::event::KeyCode;
+    use crate::event::{KeyCode, KeyModifiers, MouseEvent, MouseEventKind};
     use std::{collections::VecDeque, sync::{Arc, Mutex}};
 
     #[derive(Default)]
@@ -277,6 +283,38 @@ mod tests {
         assert_eq!(source.try_read(Some(Duration::ZERO)).unwrap(), key('b'));
         assert_eq!(source.try_read(Some(Duration::ZERO)).unwrap(), None);
         assert!(transport.0.lock().unwrap().waits.is_empty());
+    }
+
+    #[test]
+    fn fragmented_mouse_report_stays_a_scroll_event() {
+        let report = b"\x1b[<64;125;28M";
+        for split in 1..report.len() {
+            let (mut source, transport) = source();
+            transport.0.lock().unwrap().bytes.extend(&report[..split]);
+            assert_eq!(source.try_read(Some(Duration::ZERO)).unwrap(), None);
+            transport.0.lock().unwrap().bytes.extend(&report[split..]);
+            assert_eq!(
+                source.try_read(Some(Duration::ZERO)).unwrap(),
+                Some(InternalEvent::Event(Event::Mouse(MouseEvent {
+                    kind: MouseEventKind::ScrollUp,
+                    column: 124,
+                    row: 27,
+                    modifiers: KeyModifiers::NONE,
+                })))
+            );
+        }
+    }
+
+    #[test]
+    fn lone_escape_is_emitted_after_the_report_timeout() {
+        let (mut source, transport) = source();
+        transport.0.lock().unwrap().bytes.push_back(b'\x1b');
+        assert_eq!(source.try_read(Some(Duration::ZERO)).unwrap(), None);
+        std::thread::sleep(Duration::from_millis(25));
+        assert_eq!(
+            source.try_read(Some(Duration::ZERO)).unwrap(),
+            Some(InternalEvent::Event(Event::Key(KeyCode::Esc.into())))
+        );
     }
 
     #[test]
